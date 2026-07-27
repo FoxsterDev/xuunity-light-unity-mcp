@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 from xml.etree import ElementTree
 
+from server_artifact_registry import register_artifact
 from server_core import ToolInvocationError, hidden_window_subprocess_kwargs, read_json, write_json
 
 
@@ -245,6 +246,37 @@ def run_sdk_generated_diff_guard(
     output_path = _resolve_report_path(root, report_file)
     write_json(output_path, result)
     result["report_path"] = str(output_path)
+    artifact = register_artifact(
+        project_root=root,
+        artifact_path=str(output_path),
+        destination=_report_artifact_destination(root, output_path),
+        kind="sdk_generated_diff_report",
+        producer="unity_sdk_generated_diff_guard",
+        artifact_schema_version=SDK_GENERATED_DIFF_GUARD_SCHEMA_VERSION,
+        language="json",
+        retention_policy="project",
+        metadata={
+            "verdict": verdict,
+            "scope": result["scope"],
+            "baseline_source": result["baseline_source"],
+            "baseline_ref": baseline_ref,
+            "tracked_path_count": len(rows),
+            "changed_path_count": len(changed_paths),
+            "required_marker_missing_count": len(required_marker_missing),
+            "missing_current_file_count": len(missing_current_files),
+            "invalid_generated_file_count": len(invalid_generated_files),
+            "stale_version_count": len(stale_versions),
+            "unexpected_changed_file_count": len(unexpected_changed_files),
+        },
+    )
+    result["artifact_registered"] = True
+    result["artifact_registry"] = {
+        "kind": artifact["kind"],
+        "hash_sha256": artifact["hash_sha256"],
+        "size_bytes": artifact["size_bytes"],
+        "registry_path": artifact["registry_path"],
+        "registry_repo_relative_path": artifact["registry_repo_relative_path"],
+    }
     return result
 
 
@@ -934,6 +966,13 @@ def _resolve_report_path(project_root: Path, report_file: str) -> Path:
     except ValueError as exc:
         raise ToolInvocationError("sdk_generated_diff_guard_report_path_invalid", "reportFile must stay under projectRoot.") from exc
     return candidate
+
+
+def _report_artifact_destination(project_root: Path, report_path: Path) -> str:
+    relative_path = report_path.relative_to(project_root)
+    if relative_path.parts and relative_path.parts[0].lower() == "library":
+        return "library"
+    return "external"
 
 
 def _recommended_next_action(

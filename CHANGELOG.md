@@ -15,6 +15,10 @@
   untracked outputs; comparison fails closed when the project path, Unity
   version, package-lock hash, configured SDK versions, or snapshot integrity
   no longer matches the captured provenance.
+- SDK generated-diff guard reports are now registered automatically as
+  `sdk_generated_diff_report` artifacts after the JSON evidence is published.
+  Passing and failed verdicts return the report hash plus the artifact-registry
+  path, so rollout evidence stays durable and directly discoverable.
 
 ### Fixed
 
@@ -26,6 +30,10 @@
 
 ### Validation
 
+- SDK artifact-registration coverage passes focused guard/protocol/parity tests
+  `80/80` and the full host suite `476/476` with 13 expected platform skips.
+  A live Unity `6000.0` consumer guard passes across five Git-tracked Android
+  outputs with zero changes and returns a registered report hash/pointer.
 - Focused mutation-delta/protocol/parity tests pass, and the full host suite
   passes all `475` tests with `13` expected platform skips.
 - A Unity `2022.3` development-system consumer passes package EditMode `14/14`

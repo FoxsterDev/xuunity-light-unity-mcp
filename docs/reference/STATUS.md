@@ -1,6 +1,6 @@
 # Status
 
-Date: `2026-07-23`
+Date: `2026-07-25`
 Status: `active public status snapshot`
 
 XUUnity Light Unity MCP is a working same-host Unity Editor automation service
@@ -89,9 +89,10 @@ SDK rollout safety (`v0.3.45` plus current-source hardening):
   fingerprints or tampered snapshots. The host-side compact proof also detects
   missing required markers, stale expected versions, unallowlisted changes,
   invalid structured files, and normalization-only XML/Gradle rewrites without
-  opening Unity. Artifact-registry registration, resolver freshness, package
-  restore, GUI admission control, and portfolio orchestration remain separate
-  open slices.
+  opening Unity. Current source registers every published pass/fail JSON report
+  as an `sdk_generated_diff_report` artifact and returns its hash plus registry
+  pointer. Typed resolver freshness, package restore, GUI admission control, and
+  portfolio orchestration remain separate open slices.
 
 Implemented Unity-side operations:
 

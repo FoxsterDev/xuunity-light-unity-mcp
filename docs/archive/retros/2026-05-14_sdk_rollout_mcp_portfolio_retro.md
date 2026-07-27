@@ -1,8 +1,22 @@
 # SDK Rollout MCP Portfolio Retro
 
 Date: `2026-05-14`
-Status: `public-safe chat retro`
+Status: `active public retro — generated-diff P0.1 complete in current source; typed resolver and orchestration remain open`
 Source prompt: `./CHAT_RETRO_PROMPT.md`
+
+## Re-Evaluation 2026-07-25
+
+The generated-diff P0.1 slice is complete in current source. Git-tracked and
+fingerprint-bound Git-untracked baselines, structure-aware comparison,
+comment-safe required-marker proof, and fail-closed verdicts were already
+implemented; every published pass/fail JSON report is now also registered as an
+`sdk_generated_diff_report` artifact with a content hash and compact registry
+pointer. Typed Android target enforcement plus resolver-output freshness remains
+the highest open false-positive risk. GUI admission control, batch resolve, and
+portfolio summary remain later coherent slices. Fresh proof passes focused
+guard/protocol/parity tests `80/80`, the full host suite `476/476`, Unity
+`2022.3` package self-tests, a Unity `6000.0` post-change regression, and a live
+five-file generated-output registration check.
 
 ## Executive Summary
 

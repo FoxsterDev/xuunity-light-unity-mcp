@@ -83,6 +83,11 @@ class SdkGeneratedDiffGuardTests(unittest.TestCase):
 
             result = run_sdk_generated_diff_guard(project_root=project, config=self._config())
             report_payload = json.loads(Path(result["report_path"]).read_text(encoding="utf-8"))
+            registry_path = Path(result["artifact_registry"]["registry_path"])
+            registry_records = [
+                json.loads(line)
+                for line in registry_path.read_text(encoding="utf-8").splitlines()
+            ]
 
         self.assertEqual("passed", result["verdict"])
         self.assertEqual("xuunity.sdk-generated-diff-guard.v2", result["schema_version"])
@@ -91,6 +96,15 @@ class SdkGeneratedDiffGuardTests(unittest.TestCase):
         self.assertTrue(result["paths"][0]["semantic_changed"])
         self.assertEqual("none", result["recommended_next_action"])
         self.assertEqual("passed", report_payload["verdict"])
+        self.assertTrue(result["artifact_registered"])
+        self.assertEqual("sdk_generated_diff_report", result["artifact_registry"]["kind"])
+        self.assertEqual(1, len(registry_records))
+        self.assertEqual(result["report_path"], registry_records[0]["path"])
+        self.assertEqual("library", registry_records[0]["destination"])
+        self.assertEqual("unity_sdk_generated_diff_guard", registry_records[0]["producer"])
+        self.assertEqual("xuunity.sdk-generated-diff-guard.v2", registry_records[0]["artifact_schema_version"])
+        self.assertEqual("passed", registry_records[0]["metadata"]["verdict"])
+        self.assertEqual(result["artifact_registry"]["hash_sha256"], registry_records[0]["hash_sha256"])
 
     def test_gradle_reformat_and_block_reorder_is_normalization_noise_without_allowlist(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -421,10 +435,33 @@ class SdkGeneratedDiffGuardTests(unittest.TestCase):
                 },
                 {"initialized": True, "protocolVersion": server.PROTOCOL_VERSION},
             )
+            structured = response["result"]["structuredContent"]
+            registry_records = [
+                json.loads(line)
+                for line in Path(structured["artifact_registry"]["registry_path"]).read_text(encoding="utf-8").splitlines()
+            ]
 
         self.assertTrue(response["result"]["isError"])
-        self.assertEqual("failed", response["result"]["structuredContent"]["verdict"])
-        self.assertIn("signingConfig", response["result"]["structuredContent"]["required_marker_missing"])
+        self.assertEqual("failed", structured["verdict"])
+        self.assertIn("signingConfig", structured["required_marker_missing"])
+        self.assertTrue(structured["artifact_registered"])
+        self.assertEqual("failed", registry_records[0]["metadata"]["verdict"])
+
+    def test_custom_project_report_path_is_registered_without_claiming_library_storage(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = self._project(Path(tmp))
+            result = run_sdk_generated_diff_guard(
+                project_root=project,
+                config=self._config(expectedVersionChanges=[]),
+                report_file="Artifacts/sdk_guard.json",
+            )
+            registry_record = json.loads(
+                Path(result["artifact_registry"]["registry_path"]).read_text(encoding="utf-8").splitlines()[0]
+            )
+
+        self.assertEqual("passed", result["verdict"])
+        self.assertEqual("external", registry_record["destination"])
+        self.assertEqual("Artifacts/sdk_guard.json", registry_record["project_relative_path"].replace("\\", "/"))
 
     def test_parser_registers_sdk_guard_command(self) -> None:
         parser = server.build_parser()

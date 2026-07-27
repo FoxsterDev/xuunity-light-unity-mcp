@@ -1,7 +1,7 @@
 # XUUnity MCP SDK Rollout Gate — Implementation Plan
 
 Date: `2026-07-12`
-Status: `P0.1 Git-tracked guard released in v0.3.45; structure-aware and Git-untracked fingerprint-bound baseline hardening implemented in current source; artifact registration remains; broader plan remains open; hardened after adversarial review (§14)`
+Status: `P0.1 complete in current source: Git-tracked guard released in v0.3.45; structure-aware, Git-untracked fingerprint-bound baseline, and artifact registration implemented after release; broader plan remains open; hardened after adversarial review (§14)`
 Baseline: released source line `v0.3.47`
 Elaborates: `XUUNITY_MCP_SDK_ROLLOUT_VALIDATION_DESIGN_2026-05-14.md` (direction) —
 this document turns that direction into a build-ready plan with exact
@@ -527,6 +527,13 @@ changes. Capture rejects tracked/staged dirtiness and unrelated untracked files;
 comparison rejects stale fingerprints and snapshot hash mismatches. Mixed
 Git-tracked and Git-untracked path sets retain per-path baseline provenance.
 
-Remaining P0.1 work is artifact-registry registration. Finish that evidence
-piece before broadening the gate. Typed `android_resolve`, the GUI pool, and
-`batch-edm4u-resolve` follow in that order.
+Current source completes P0.1 artifact registration. Every published pass/fail
+guard report is registered as `sdk_generated_diff_report` with its content hash,
+schema, producer, compact verdict/count metadata, and a returned registry
+pointer. Validation passes focused guard/protocol/parity tests `80/80`, the full
+host suite `476/476` with 13 expected platform skips, Unity `2022.3` package
+self-tests `14/14` EditMode plus `5/5` PlayMode, and a Unity `6000.0` consumer
+post-change route with compile `6/6`, acceptance `10/10`, contract/lifecycle,
+project-action consistency, and a live five-file guard registration proof.
+Typed `android_resolve`, the GUI pool, and `batch-edm4u-resolve` follow in that
+order.

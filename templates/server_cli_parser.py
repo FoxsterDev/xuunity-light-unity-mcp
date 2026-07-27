@@ -682,7 +682,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     sdk_generated_diff_guard_cmd = sub.add_parser(
         "sdk-generated-diff-guard",
-        help="Fail closed when generated SDK files lose provenance, required markers, expected versions, or allowed structure.",
+        help="Fail closed when generated SDK files lose provenance or required structure, then register the pass/fail report.",
     )
     sdk_generated_diff_guard_cmd.add_argument("--project-root", required=True)
     sdk_generated_diff_guard_cmd.add_argument("--config-file", required=True)

@@ -131,10 +131,13 @@ Pass criteria:
   `failOnUnexpectedChangedFile=true`.
 
 The guard writes its JSON evidence under
-`Library/XUUnityLightMcp/sdk/generated_diff_guard.json` by default. A failed
-guard is a validation failure, not a passing resolver request. It does not yet
-prove EDM4U async freshness, perform a package restore, or replace the planned
-portfolio SDK lane.
+`Library/XUUnityLightMcp/sdk/generated_diff_guard.json` by default, then
+registers the published file as an `sdk_generated_diff_report` artifact. Both
+passing and failed verdicts return `artifact_registered=true` plus a compact
+`artifact_registry` pointer containing the report hash and registry location.
+A failed guard is a validation failure, not a passing resolver request. It does
+not yet prove EDM4U async freshness, perform a package restore, or replace the
+planned portfolio SDK lane.
 
 Log-presence checks:
 

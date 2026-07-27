@@ -442,7 +442,7 @@ TOOLS: dict[str, dict[str, Any]] = {
     },
     "unity_sdk_generated_diff_guard": {
         "bridgeOperation": "host.sdk.generated_diff_guard",
-        "description": "Compare generated SDK files to a Git baseline or a fingerprint-bound Library baseline for Git-untracked outputs, with structure-aware XML/Gradle normalization and fail-closed provenance checks.",
+        "description": "Compare generated SDK files to a Git baseline or a fingerprint-bound Library baseline for Git-untracked outputs, fail closed on provenance or structural damage, and register the published pass/fail report as durable artifact evidence.",
         "inputSchema": {
             "type": "object",
             "properties": {
