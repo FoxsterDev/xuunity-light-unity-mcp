@@ -649,7 +649,10 @@ Agent prompt:
 ```text
 Refresh the project, run the whitelisted EDM4U resolver if available, then
 verify generated dependency artifacts against an explicit expectation file. Do
-not print credentials or secret-bearing URLs.
+not print credentials or secret-bearing URLs. Before Android resolve, confirm
+that Unity's active build target is Android; the resolver request fails closed
+otherwise. Treat menu execution and editor-idle settle as request evidence, not
+as resolver-output freshness proof.
 ```
 
 CLI route:
@@ -661,6 +664,11 @@ CLI route:
   --resolve-packages \
   --rerun-health-probe \
   --timeout-ms 60000
+
+"$WRAPPER" request-build-target-switch \
+  --project-root "$PROJECT_ROOT" \
+  --target Android \
+  --timeout-ms 180000
 
 "$WRAPPER" request-edm4u-resolve \
   --project-root "$PROJECT_ROOT" \
@@ -678,11 +686,18 @@ CLI route:
 
 Evidence to report:
 
+- required and active build target
 - EDM4U menu path used or missing capability
-- resolver status
+- resolver request status and `resolver_output_freshness`
 - verified files
 - missing dependencies
 - redacted evidence for sensitive config fields
+
+`resolver_output_freshness: unproven` and `decision_ready: false` are expected
+on this fire-and-report operation. Run `unity_sdk_dependency_verify` and
+`unity_sdk_generated_diff_guard` before accepting the SDK rollout. The planned
+typed Android resolver will add engine-driven stable-hash and new-coordinate
+proof; the current request must not be promoted to that verdict.
 
 ## Workflow 9: Closed-Project Batch Validation
 

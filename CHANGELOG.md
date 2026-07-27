@@ -22,6 +22,11 @@
 
 ### Fixed
 
+- Android `unity_edm4u_resolve` now fails closed with
+  `edm4u_android_target_not_active` unless `BuildTarget.Android` is active, and
+  rejects a missing Android Build Support module. Successful requests report
+  the confirmed target precondition while explicitly keeping resolver-output
+  freshness unproven and the rollout verdict non-decision-ready.
 - `project_defined_hook_poll_until` now treats a passive hook payload with
   `status: not_started` as keep-waiting instead of an immediate unmatched-status
   failure. Explicit `passWhen` and `failWhen` matches retain precedence, all
@@ -30,6 +35,14 @@
 
 ### Validation
 
+- Android-target precondition coverage passes focused host tests `61/61` and
+  the full host suite `476/476` with 13 expected platform skips. Current-source
+  package self-tests pass on Unity `2022.3`: EditMode `20/20` and PlayMode
+  `5/5`. A Unity `6000.0` consumer passes compile matrix `6/6`, acceptance
+  scenario `10/10`, and the refresh/compile contract. Its PlayMode and focused
+  EditMode test requests correctly fail closed on a pre-existing unsaved scene;
+  that unrelated user state was preserved. Both consumer package manifests and
+  locks were restored byte-identically.
 - SDK artifact-registration coverage passes focused guard/protocol/parity tests
   `80/80` and the full host suite `476/476` with 13 expected platform skips.
   A live Unity `6000.0` consumer guard passes across five Git-tracked Android

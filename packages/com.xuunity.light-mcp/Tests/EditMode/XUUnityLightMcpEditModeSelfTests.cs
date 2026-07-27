@@ -128,6 +128,45 @@ namespace XUUnity.LightMcp.Tests.EditMode
         }
 
         [Test]
+        public void Edm4uAndroidResolve_RequiresActiveAndroidBuildTarget()
+        {
+            var valid = XUUnityLightMcpEdm4uResolveOperation.TryValidateBuildTargetPrecondition(
+                "android",
+                BuildTarget.StandaloneOSX,
+                out var errorCode,
+                out var errorMessage);
+
+            Assert.That(valid, Is.False);
+            Assert.That(errorCode, Is.EqualTo("edm4u_android_target_not_active"));
+            Assert.That(errorMessage, Does.Contain("BuildTarget.Android"));
+            Assert.That(errorMessage, Does.Contain("unity_build_target_switch"));
+        }
+
+        [Test]
+        public void Edm4uResolve_TargetPreconditionAllowsAndroidAndVersionHandler()
+        {
+            Assert.That(
+                XUUnityLightMcpEdm4uResolveOperation.TryValidateBuildTargetPrecondition(
+                    "android",
+                    BuildTarget.Android,
+                    out var androidErrorCode,
+                    out var androidErrorMessage),
+                Is.True);
+            Assert.That(androidErrorCode, Is.Empty);
+            Assert.That(androidErrorMessage, Is.Empty);
+
+            Assert.That(
+                XUUnityLightMcpEdm4uResolveOperation.TryValidateBuildTargetPrecondition(
+                    "version_handler",
+                    BuildTarget.StandaloneOSX,
+                    out var versionHandlerErrorCode,
+                    out var versionHandlerErrorMessage),
+                Is.True);
+            Assert.That(versionHandlerErrorCode, Is.Empty);
+            Assert.That(versionHandlerErrorMessage, Is.Empty);
+        }
+
+        [Test]
         [Category("XUUnity.MCP.Scene")]
         public void SceneSnapshotOperation_ReportsRootGameObjectNames()
         {

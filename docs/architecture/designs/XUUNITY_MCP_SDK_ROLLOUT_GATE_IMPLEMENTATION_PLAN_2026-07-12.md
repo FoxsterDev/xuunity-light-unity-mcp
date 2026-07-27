@@ -1,7 +1,7 @@
 # XUUnity MCP SDK Rollout Gate — Implementation Plan
 
 Date: `2026-07-12`
-Status: `P0.1 complete in current source: Git-tracked guard released in v0.3.45; structure-aware, Git-untracked fingerprint-bound baseline, and artifact registration implemented after release; broader plan remains open; hardened after adversarial review (§14)`
+Status: `P0.1 complete; P0.2a Android target fail-closed enforcement complete in current source; engine-driven resolver freshness and broader plan remain open; hardened after adversarial review (§14)`
 Baseline: released source line `v0.3.47`
 Elaborates: `XUUNITY_MCP_SDK_ROLLOUT_VALIDATION_DESIGN_2026-05-14.md` (direction) —
 this document turns that direction into a build-ready plan with exact
@@ -535,5 +535,12 @@ host suite `476/476` with 13 expected platform skips, Unity `2022.3` package
 self-tests `14/14` EditMode plus `5/5` PlayMode, and a Unity `6000.0` consumer
 post-change route with compile `6/6`, acceptance `10/10`, contract/lifecycle,
 project-action consistency, and a live five-file guard registration proof.
-Typed `android_resolve`, the GUI pool, and `batch-edm4u-resolve` follow in that
-order.
+
+Current source also completes the bounded P0.2a target-precondition slice on the
+existing fire-and-report operation. Android `unity.edm4u.resolve` fails closed
+unless `BuildTarget.Android` is active and Android Build Support is loaded.
+Successful payloads report the confirmed target, but deliberately expose
+`resolver_output_freshness=unproven` and `decision_ready=false`; this preserves
+the design distinction between menu-request evidence and a trustworthy resolve
+verdict. The typed `android_resolve` stable-hash/new-coordinate oracle remains
+P0.2b, followed by the GUI pool and `batch-edm4u-resolve`.

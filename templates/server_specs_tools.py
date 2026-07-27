@@ -374,7 +374,7 @@ TOOLS: dict[str, dict[str, Any]] = {
     },
     "unity_edm4u_resolve": {
         "bridgeOperation": "unity.edm4u.resolve",
-        "description": "Run a whitelisted External Dependency Manager for Unity resolver menu item, with Android Force Resolve as the default.",
+        "description": "Request a whitelisted External Dependency Manager for Unity resolver menu item. Android resolve fails closed unless BuildTarget.Android is already active; menu execution and editor-idle settle do not prove resolver-output freshness.",
         "inputSchema": {
             "type": "object",
             "properties": {

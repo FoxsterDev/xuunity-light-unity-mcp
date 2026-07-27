@@ -73,11 +73,15 @@ Use the batch lane for:
 For third-party SDK updates, prefer this validation order:
 1. project refresh with package resolve
 2. compile validation for affected Android/iOS targets
-3. `unity.edm4u.resolve` for Android dependency generation
-4. `unity.sdk.dependency.verify` against generated resolver files
-5. batch export or player build
-6. generated artifact inspection, such as Gradle output, Xcode export, Podfile.lock, manifest, plist, or dependency reports
-7. device/runtime validation through project hooks or manual QA when SDK behavior depends on native runtime services
+3. switch and settle the active build target to Android
+4. `unity.edm4u.resolve` for Android dependency generation; it fails closed
+   when Android is not active, but its successful menu request does not prove
+   resolver-output freshness
+5. `unity.sdk.dependency.verify` against generated resolver files
+6. `unity_sdk_generated_diff_guard` against the approved generated-file baseline
+7. batch export or player build
+8. generated artifact inspection, such as Gradle output, Xcode export, Podfile.lock, manifest, plist, or dependency reports
+9. device/runtime validation through project hooks or manual QA when SDK behavior depends on native runtime services
 
 Minimal dependency verification payload:
 

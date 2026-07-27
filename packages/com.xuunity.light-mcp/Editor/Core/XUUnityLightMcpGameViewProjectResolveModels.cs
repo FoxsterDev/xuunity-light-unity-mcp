@@ -120,6 +120,11 @@ namespace XUUnity.LightMcp.Editor.Core
             public string platform = "";
             public bool force;
             public string outcome = "";
+            public string required_build_target = "";
+            public string active_build_target_before = "";
+            public string active_build_target_after = "";
+            public string build_target_precondition = "";
+            public bool target_support_loaded;
             public string executed_menu_path = "";
             public List<XUUnityLightMcpMenuItemAttempt> attempted_menu_items = new();
             public bool asset_refresh_before_requested;
@@ -130,6 +135,9 @@ namespace XUUnity.LightMcp.Editor.Core
             public string request_completed_at_utc = "";
             public string settle_request_id = "";
             public string settle_phase = "";
+            public string resolver_output_freshness = "unproven";
+            public bool decision_ready;
+            public string recommended_next_action = "verify_resolver_output_freshness_and_generated_diff";
             public string validation_evidence = "unity_mcp";
         }
 

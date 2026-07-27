@@ -1,6 +1,6 @@
 # Status
 
-Date: `2026-07-25`
+Date: `2026-07-27`
 Status: `active public status snapshot`
 
 XUUnity Light Unity MCP is a working same-host Unity Editor automation service
@@ -81,6 +81,11 @@ OpenUPM status:
 
 SDK rollout safety (`v0.3.45` plus current-source hardening):
 
+- Android `unity.edm4u.resolve` now refuses to fire unless
+  `BuildTarget.Android` is active and Android Build Support is loaded. Passing
+  request payloads expose the target precondition while keeping
+  `resolver_output_freshness=unproven` and `decision_ready=false`; the planned
+  typed resolver freshness oracle remains open.
 - `unity_sdk_generated_diff_guard` / `sdk-generated-diff-guard` provides the
   generated-file vertical slice of the SDK rollout gate. Git-tracked paths use
   a named Git ref; Git-untracked paths can use an explicit `Library/` capture
@@ -91,8 +96,8 @@ SDK rollout safety (`v0.3.45` plus current-source hardening):
   invalid structured files, and normalization-only XML/Gradle rewrites without
   opening Unity. Current source registers every published pass/fail JSON report
   as an `sdk_generated_diff_report` artifact and returns its hash plus registry
-  pointer. Typed resolver freshness, package restore, GUI admission control, and
-  portfolio orchestration remain separate open slices.
+  pointer. Engine-driven resolver freshness, package restore, GUI admission
+  control, and portfolio orchestration remain separate open slices.
 
 Implemented Unity-side operations:
 

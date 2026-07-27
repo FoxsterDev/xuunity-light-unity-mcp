@@ -139,6 +139,15 @@ A failed guard is a validation failure, not a passing resolver request. It does
 not yet prove EDM4U async freshness, perform a package restore, or replace the
 planned portfolio SDK lane.
 
+Before an Android EDM4U request, switch the active build target through
+`unity_build_target_switch` / `request-build-target-switch` and wait for settle.
+`unity_edm4u_resolve` now fails with `edm4u_android_target_not_active` when the
+active target is not Android and with `edm4u_android_support_missing` when the
+Android module is unavailable. A successful request reports
+`build_target_precondition=confirmed`, but deliberately keeps
+`resolver_output_freshness=unproven` and `decision_ready=false`; dependency and
+generated-diff proof remain mandatory.
+
 Log-presence checks:
 
 - `unity.console.grep` / `request-console-grep` default to `source=editor_log`

@@ -1,7 +1,20 @@
 # XUUnity MCP SDK Rollout Validation Design
 
 Date: `2026-05-14`
-Status: `design`
+Status: `partially implemented — generated-diff P0.1 and Android target fail-closed slice complete in current source`
+
+## Re-Evaluation 2026-07-27
+
+Current source closes the smallest target-precondition false-positive: the
+existing fire-and-report `unity.edm4u.resolve` Android lane refuses to execute
+unless `BuildTarget.Android` is active and Android Build Support is loaded.
+Successful payloads expose the confirmed target but explicitly remain
+`resolver_output_freshness=unproven` and `decision_ready=false`. This does not
+replace the planned typed `unity.sdk.android_resolve`; engine-driven stable-hash
+and post-resolve dependency proof remain the next P0.2 slice. Cross-version
+evidence includes Unity `2022.3` current-source EditMode `20/20` and PlayMode
+`5/5`, plus Unity `6000.0` compile `6/6`, acceptance `10/10`, and
+refresh/compile contract coverage.
 
 ## Purpose
 
@@ -37,8 +50,9 @@ full SDK rollout gate.
 
 Current gaps:
 
-- `unity.edm4u.resolve` triggers resolver menus but does not enforce active
-  Android build target before Android resolve.
+- released `v0.3.47` does not enforce active Android build target before
+  `unity.edm4u.resolve`; current source now fails closed on that precondition,
+  while the typed resolver and async freshness proof remain open.
 - Resolver success can be superficial if generated Android outputs remain stale.
 - The live-editor lane can open too many GUI Unity instances during broad
   portfolio work unless the host wrapper adds process pooling.
@@ -264,4 +278,3 @@ xuunity_light_unity_mcp.sh device-android-smoke --project-root "$PROJECT" --apk 
 5. Connected Android device install, launch, logcat, and smoke hook.
 6. iOS export, CocoaPods, and `xcodebuild` inspection.
 7. Connected iOS device validation.
-

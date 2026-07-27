@@ -1,8 +1,25 @@
 # SDK Rollout MCP Portfolio Retro
 
 Date: `2026-05-14`
-Status: `active public retro — generated-diff P0.1 complete in current source; typed resolver and orchestration remain open`
+Status: `active public retro — generated-diff P0.1 and Android-target P0.2a complete in current source; typed freshness and orchestration remain open`
 Source prompt: `./CHAT_RETRO_PROMPT.md`
+
+## Re-Evaluation 2026-07-27
+
+The prior generated-diff artifact-registration slice is committed at `a32bb51`;
+the newest release remains `v0.3.47`. Current source now closes the bounded
+Android-target precondition gap: `unity.edm4u.resolve` fails closed unless
+`BuildTarget.Android` is active and Android Build Support is loaded. Passing
+payloads expose the confirmed target but explicitly keep
+`resolver_output_freshness=unproven` and `decision_ready=false`, so menu
+execution cannot be mistaken for a rollout verdict. The next highest-risk slice
+is still the typed engine-driven stable-hash and new-coordinate dependency
+oracle; GUI admission, batch resolve, and portfolio summary remain later.
+Validation passes focused host tests `61/61`, the full host suite `476/476`,
+Unity `2022.3` current-source package tests (`20/20` EditMode and `5/5`
+PlayMode), plus Unity `6000.0` compile `6/6`, acceptance `10/10`, and
+refresh/compile contract coverage. The Unity `6000.0` consumer's pre-existing
+unsaved scene blocked unrelated EditMode/PlayMode execution and was preserved.
 
 ## Re-Evaluation 2026-07-25
 

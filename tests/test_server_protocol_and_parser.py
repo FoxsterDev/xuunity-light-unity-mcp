@@ -137,6 +137,9 @@ class ServerProtocolAndParserTests(unittest.TestCase):
         sdk_diff_guard_tool = next(
             tool for tool in response["result"]["tools"] if tool["name"] == "unity_sdk_generated_diff_guard"
         )
+        edm4u_tool = next(tool for tool in response["result"]["tools"] if tool["name"] == "unity_edm4u_resolve")
+        self.assertIn("BuildTarget.Android", edm4u_tool["description"])
+        self.assertIn("do not prove resolver-output freshness", edm4u_tool["description"])
         self.assertEqual(
             "xml_structural",
             sdk_diff_guard_tool["inputSchema"]["properties"]["diffMode"]["default"]["*.xml"],

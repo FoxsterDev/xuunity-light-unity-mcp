@@ -363,7 +363,10 @@ def build_parser() -> argparse.ArgumentParser:
     install_tf_bridge_cmd.add_argument("--timeout-ms", type=int, default=None)
     install_tf_bridge_cmd.set_defaults(func_name="cmd_request_install_test_framework")
 
-    edm4u_resolve_cmd = sub.add_parser("request-edm4u-resolve", help="Run a whitelisted External Dependency Manager for Unity resolver operation through the active bridge transport.")
+    edm4u_resolve_cmd = sub.add_parser(
+        "request-edm4u-resolve",
+        help="Request a whitelisted EDM4U resolver operation; Android requires the active Android build target and output freshness remains unproven.",
+    )
     edm4u_resolve_cmd.add_argument("--project-root", required=True)
     edm4u_resolve_cmd.add_argument("--platform", default="android", choices=["android", "version_handler"])
     edm4u_resolve_cmd.add_argument("--force", action=argparse.BooleanOptionalAction, default=True)

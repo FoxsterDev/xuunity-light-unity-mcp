@@ -42,6 +42,28 @@ namespace XUUnity.LightMcp.Editor.Operations
             try
             {
                 var platform = NormalizePlatform(args.platform);
+                var activeBuildTargetBefore = EditorUserBuildSettings.activeBuildTarget;
+                if (!TryValidateBuildTargetPrecondition(
+                        platform,
+                        activeBuildTargetBefore,
+                        out var preconditionErrorCode,
+                        out var preconditionErrorMessage))
+                {
+                    return XUUnityLightMcpResponseWriter.Error(
+                        request.request_id,
+                        preconditionErrorCode,
+                        preconditionErrorMessage);
+                }
+
+                if (string.Equals(platform, "android", StringComparison.Ordinal)
+                    && !XUUnityLightMcpBuildTargetGetOperation.IsPlatformSupportLoaded(BuildTarget.Android))
+                {
+                    return XUUnityLightMcpResponseWriter.Error(
+                        request.request_id,
+                        "edm4u_android_support_missing",
+                        "Android EDM4U resolve requires the Unity Android Build Support module, but it is not loaded.");
+                }
+
                 var candidates = ResolveMenuCandidates(args, platform);
                 if (candidates.Count == 0)
                 {
@@ -56,6 +78,16 @@ namespace XUUnity.LightMcp.Editor.Operations
                     project_root = XUUnityLightMcpFileIpcPaths.ProjectRootPath,
                     platform = platform,
                     force = args.force,
+                    required_build_target = string.Equals(platform, "android", StringComparison.Ordinal)
+                        ? BuildTarget.Android.ToString()
+                        : "",
+                    active_build_target_before = activeBuildTargetBefore.ToString(),
+                    active_build_target_after = activeBuildTargetBefore.ToString(),
+                    build_target_precondition = string.Equals(platform, "android", StringComparison.Ordinal)
+                        ? "confirmed"
+                        : "not_applicable",
+                    target_support_loaded = !string.Equals(platform, "android", StringComparison.Ordinal)
+                        || XUUnityLightMcpBuildTargetGetOperation.IsPlatformSupportLoaded(BuildTarget.Android),
                     request_completed_at_utc = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ"),
                     asset_refresh_before_requested = args.refreshBefore,
                     asset_refresh_after_requested = args.refreshAfter,
@@ -116,6 +148,7 @@ namespace XUUnity.LightMcp.Editor.Operations
                 payload.editor_is_updating_after_request = EditorApplication.isUpdating;
                 payload.playmode_state_after_request = XUUnityLightMcpPlayModeStateOperation.ResolvePlayModeState();
                 payload.settle_phase = XUUnityLightMcpBridgeRuntimeState.RefreshSettlePhase;
+                payload.active_build_target_after = EditorUserBuildSettings.activeBuildTarget.ToString();
 
                 return XUUnityLightMcpResponseWriter.Success(
                     request.request_id,
@@ -128,7 +161,30 @@ namespace XUUnity.LightMcp.Editor.Operations
             }
         }
 
-        static string NormalizePlatform(string platform)
+        internal static bool TryValidateBuildTargetPrecondition(
+            string platform,
+            BuildTarget activeBuildTarget,
+            out string errorCode,
+            out string errorMessage)
+        {
+            errorCode = "";
+            errorMessage = "";
+
+            if (!string.Equals(NormalizePlatform(platform), "android", StringComparison.Ordinal)
+                || activeBuildTarget == BuildTarget.Android)
+            {
+                return true;
+            }
+
+            errorCode = "edm4u_android_target_not_active";
+            errorMessage =
+                $"Android EDM4U resolve requires active BuildTarget.Android, but Unity reports '{activeBuildTarget}'. " +
+                "Switch first with unity_build_target_switch (target Android) or request-build-target-switch --target Android, " +
+                "wait for Unity to settle, then retry the resolve.";
+            return false;
+        }
+
+        internal static string NormalizePlatform(string platform)
         {
             var value = string.IsNullOrWhiteSpace(platform)
                 ? "android"
