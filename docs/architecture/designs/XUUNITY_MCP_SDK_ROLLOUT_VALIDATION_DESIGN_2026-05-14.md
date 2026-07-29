@@ -65,9 +65,9 @@ full SDK rollout gate.
 
 Current gaps:
 
-- released `v0.3.47` does not enforce active Android target or provide the typed
-  freshness oracle; current source provides both while retaining the older
-  fire-and-report operation as explicitly non-decision-ready.
+- released `v0.3.48` enforces the active Android target and provides the typed
+  freshness oracle while retaining the older fire-and-report operation as
+  explicitly non-decision-ready.
 - The live-editor lane can open too many GUI Unity instances during broad
   portfolio work unless the host wrapper adds process pooling.
 - `unity.editor.quit` is a request, not a hard process-exit contract.

@@ -2,7 +2,7 @@
 
 Date: `2026-07-12`
 Status: `P0.1 and typed resolver P0.2b complete in current source; package restore and broader orchestration remain open; hardened after adversarial review (§14)`
-Baseline: released source line `v0.3.47`
+Baseline: released source line `v0.3.48`
 Elaborates: `XUUNITY_MCP_SDK_ROLLOUT_VALIDATION_DESIGN_2026-05-14.md` (direction) —
 this document turns that direction into a build-ready plan with exact
 registration seams, contracts, reuse targets, phasing, and validation.

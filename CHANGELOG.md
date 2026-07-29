@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+## 0.3.48
+
+Release tag: `v0.3.48`
+
+Current Git UPM install URL:
+
+```text
+https://github.com/FoxsterDev/xuunity-mcp.git?path=/packages/com.xuunity.light-mcp#v0.3.48
+```
+
+### Changed
+
+- Released `v0.3.48` package metadata, server metadata, package manifests, and Git UPM examples.
+
 ### Added
 
 - Added capability-gated `unity.sdk.android_resolve`,
@@ -52,9 +66,8 @@
   `5/5`; real EDM4U callback failure and local-Maven success routes; a
   development-system consumer `14/14` + `5/5`; and a Unity `6000.0` consumer
   compile matrix `6/6`, acceptance `10/10`, contract/lifecycle, and
-  project-action consistency route. The full host suite reached 476 tests; its
-  only five errors were sandbox-denied loopback-socket binds, with 13 expected
-  platform skips.
+  project-action consistency route. The full host suite passes `476/476` with
+  13 expected platform skips.
 - Android-target precondition coverage passes focused host tests `61/61` and
   the full host suite `476/476` with 13 expected platform skips. Current-source
   package self-tests pass on Unity `2022.3`: EditMode `20/20` and PlayMode

@@ -222,7 +222,7 @@ Minimum evidence object:
   "workflowId": "post_change_validation",
   "projectRoot": "$PROJECT_ROOT",
   "unityVersion": "6000.0.58f2",
-  "packageVersion": "0.3.47",
+  "packageVersion": "0.3.48",
   "packageSourceMode": "git",
   "verdict": "pass",
   "checks": [

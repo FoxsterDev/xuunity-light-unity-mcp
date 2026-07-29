@@ -1,7 +1,7 @@
 # XUUnity Light Unity MCP Design Plan History
 
 Date: `2026-05-26`
-Last re-review: `2026-07-29` (SDK rollout plan re-verified against released `v0.3.47` and current source)
+Last re-review: `2026-07-29` (SDK rollout plan re-verified against released `v0.3.48` and current source)
 Status: `active design-plan history index`
 
 ## Purpose
