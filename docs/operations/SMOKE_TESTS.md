@@ -139,7 +139,16 @@ A failed guard is a validation failure, not a passing resolver request. It does
 not yet prove EDM4U async freshness, perform a package restore, or replace the
 planned portfolio SDK lane.
 
-Before an Android EDM4U request, switch the active build target through
+For a decision-grade Android resolver verdict, prefer
+`unity_sdk_android_resolve` or
+`request-sdk-android-resolve --config-file <resolver.json>`. The config must
+declare at least one `trackedGeneratedPaths` entry and one expected coordinate.
+The operation passes only after the EDM4U callback reports success, all tracked
+outputs have identical size/SHA-256 evidence across `stableIdleTicks` idle
+samples, and dependency verification passes. Callback loss/failure,
+missing/unstable output, and missing expected coordinates fail closed.
+
+Before either Android EDM4U request, switch the active build target through
 `unity_build_target_switch` / `request-build-target-switch` and wait for settle.
 `unity_edm4u_resolve` now fails with `edm4u_android_target_not_active` when the
 active target is not Android and with `edm4u_android_support_missing` when the

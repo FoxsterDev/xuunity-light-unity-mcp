@@ -376,6 +376,15 @@ def build_parser() -> argparse.ArgumentParser:
     edm4u_resolve_cmd.add_argument("--timeout-ms", type=int, default=None)
     edm4u_resolve_cmd.set_defaults(func_name="cmd_request_edm4u_resolve")
 
+    sdk_android_resolve_cmd = sub.add_parser(
+        "request-sdk-android-resolve",
+        help="Run typed Android EDM4U resolution and prove callback completion, stable generated outputs, and expected coordinates.",
+    )
+    sdk_android_resolve_cmd.add_argument("--project-root", required=True)
+    sdk_android_resolve_cmd.add_argument("--config-file", required=True)
+    sdk_android_resolve_cmd.add_argument("--timeout-ms", type=int, default=None)
+    sdk_android_resolve_cmd.set_defaults(func_name="cmd_request_sdk_android_resolve")
+
     sdk_dependency_verify_cmd = sub.add_parser("request-sdk-dependency-verify", help="Verify generated SDK dependency artifacts from a JSON expectations file through the active bridge transport.")
     sdk_dependency_verify_cmd.add_argument("--project-root", required=True)
     sdk_dependency_verify_cmd.add_argument("--config-file", required=True)

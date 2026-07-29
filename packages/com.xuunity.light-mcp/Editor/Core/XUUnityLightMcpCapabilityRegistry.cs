@@ -16,6 +16,7 @@ namespace XUUnity.LightMcp.Editor.Core
         public const string BuildPlayerCapability = "build_player";
         public const string PlayModeCapability = "playmode_control";
         public const string GameViewCapability = "game_view_reflection";
+        public const string SdkAndroidResolverCapability = "sdk_android_resolver";
 
         static readonly HashSet<string> UngatedOperations = new(StringComparer.Ordinal)
         {
@@ -35,6 +36,7 @@ namespace XUUnity.LightMcp.Editor.Core
             { "unity.status", CoreCapability },
             { "unity.project.refresh", CoreCapability },
             { "unity.edm4u.resolve", CoreCapability },
+            { "unity.sdk.android_resolve", SdkAndroidResolverCapability },
             { "unity.sdk.dependency.verify", CoreCapability },
             { "unity.editor.quit", CoreCapability },
             { "unity.package.install_test_framework", CoreCapability },

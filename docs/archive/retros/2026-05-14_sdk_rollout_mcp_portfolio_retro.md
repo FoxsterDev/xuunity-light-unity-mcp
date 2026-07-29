@@ -1,8 +1,27 @@
 # SDK Rollout MCP Portfolio Retro
 
 Date: `2026-05-14`
-Status: `active public retro — generated-diff P0.1 and Android-target P0.2a complete in current source; typed freshness and orchestration remain open`
+Status: `active public retro — generated-diff P0.1 and typed resolver P0.2b complete in current source; package restore and orchestration remain open`
 Source prompt: `./CHAT_RETRO_PROMPT.md`
+
+## Re-Evaluation 2026-07-29
+
+Current source implements the typed `unity.sdk.android_resolve` /
+`unity_sdk_android_resolve` / `request-sdk-android-resolve` lane. It invokes the
+public EDM4U completion callback, fails closed unless Android is active and
+supported, samples every declared generated output until SHA-256 signatures are
+stable across consecutive idle ticks, and then reuses
+`unity.sdk.dependency.verify` for explicit expected-coordinate proof. Only that
+combined evidence returns `decision_ready=true`; callback failure/loss,
+missing/unstable outputs, or missing coordinates remain failed-closed verdicts.
+
+Fresh evidence includes current-source Unity `2022.3` package EditMode `24/24`
+and PlayMode `5/5`, a real callback failure classification, a successful local
+Maven resolve with stable-hash/new-coordinate proof, a development-system
+consumer `14/14` + `5/5`, and a Unity `6000.0` consumer compile `6/6`,
+acceptance `10/10`, contract/lifecycle, and project-action consistency route.
+The remaining coherent work is `unity.sdk.package_restore`, GUI admission,
+batch resolve, and portfolio orchestration.
 
 ## Re-Evaluation 2026-07-27
 

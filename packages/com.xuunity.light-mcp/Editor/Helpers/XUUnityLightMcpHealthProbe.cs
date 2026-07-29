@@ -6,12 +6,13 @@ using UnityEditor;
 using UnityEditor.Build.Player;
 using UnityEngine;
 using XUUnity.LightMcp.Editor.Core;
+using XUUnity.LightMcp.Editor.Operations;
 
 namespace XUUnity.LightMcp.Editor.Helpers
 {
     internal static class XUUnityLightMcpHealthProbe
     {
-        const int ProbeVersion = 2;
+        const int ProbeVersion = 3;
         static readonly BindingFlags StaticBindings = BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Static;
         static XUUnityLightMcpCapabilitiesReport _cachedReport;
 
@@ -45,7 +46,8 @@ namespace XUUnity.LightMcp.Editor.Helpers
                 BuildCompileCapability(),
                 BuildBuildPlayerCapability(),
                 BuildPlayModeCapability(),
-                BuildGameViewCapability()
+                BuildGameViewCapability(),
+                BuildSdkAndroidResolverCapability()
             };
 
             var supportedOperations = new List<string>();
@@ -153,7 +155,33 @@ namespace XUUnity.LightMcp.Editor.Helpers
                    report.probe_version == ProbeVersion &&
                    string.Equals(report.unity_version, Application.unityVersion, StringComparison.Ordinal) &&
                    string.Equals(report.project_root, XUUnityLightMcpFileIpcPaths.ProjectRootPath, StringComparison.Ordinal) &&
-                   TestFrameworkDependencyStateMatches(report);
+                   TestFrameworkDependencyStateMatches(report) &&
+                   SdkAndroidResolverDependencyStateMatches(report);
+        }
+
+        static bool SdkAndroidResolverDependencyStateMatches(XUUnityLightMcpCapabilitiesReport report)
+        {
+            if (report.capabilities == null)
+            {
+                return false;
+            }
+
+            var adapterAvailable = XUUnityLightMcpEdm4uAdapter.TryDescribe(out _, out _);
+            var androidSupportLoaded = XUUnityLightMcpBuildTargetGetOperation.IsPlatformSupportLoaded(BuildTarget.Android);
+            var currentlySupported = adapterAvailable && androidSupportLoaded;
+            foreach (var capability in report.capabilities)
+            {
+                if (capability != null
+                    && string.Equals(
+                        capability.capability_id,
+                        XUUnityLightMcpCapabilityRegistry.SdkAndroidResolverCapability,
+                        StringComparison.Ordinal))
+                {
+                    return capability.supported == currentlySupported;
+                }
+            }
+
+            return false;
         }
 
         static bool TestFrameworkDependencyStateMatches(XUUnityLightMcpCapabilitiesReport report)
@@ -330,6 +358,42 @@ namespace XUUnity.LightMcp.Editor.Helpers
                 {
                     "unity.game_view.configure",
                     "unity.game_view.screenshot"
+                }
+            };
+        }
+
+        static XUUnityLightMcpCapabilityRecord BuildSdkAndroidResolverCapability()
+        {
+            var adapterAvailable = XUUnityLightMcpEdm4uAdapter.TryDescribe(out var adapter, out var adapterReason);
+            var androidSupportLoaded = XUUnityLightMcpBuildTargetGetOperation.IsPlatformSupportLoaded(BuildTarget.Android);
+            var supported = adapterAvailable && androidSupportLoaded;
+            var reason = "";
+            var action = "";
+            var dependency = "com.google.external-dependency-manager";
+            if (!adapterAvailable)
+            {
+                reason = adapterReason;
+                action = "Install or restore External Dependency Manager for Unity, then refresh the project.";
+            }
+            else if (!androidSupportLoaded)
+            {
+                reason = "Unity Android Build Support is not loaded.";
+                action = "Install Android Build Support for this Unity editor version.";
+                dependency = "Unity Android Build Support";
+            }
+
+            return new XUUnityLightMcpCapabilityRecord
+            {
+                capability_id = XUUnityLightMcpCapabilityRegistry.SdkAndroidResolverCapability,
+                adapter_id = string.IsNullOrWhiteSpace(adapter) ? "edm4u_callback_v1" : adapter,
+                supported = supported,
+                status = supported ? "supported" : "disabled_missing_dependency",
+                reason = reason,
+                dependency = dependency,
+                recommended_action = action,
+                operations = new List<string>
+                {
+                    XUUnityLightMcpSdkAndroidResolveOperation.RegisteredOperationName
                 }
             };
         }

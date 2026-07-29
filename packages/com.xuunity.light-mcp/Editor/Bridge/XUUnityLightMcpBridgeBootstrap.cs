@@ -1,6 +1,7 @@
 using System;
 using UnityEditor;
 using XUUnity.LightMcp.Editor.Helpers;
+using XUUnity.LightMcp.Editor.Operations;
 
 namespace XUUnity.LightMcp.Editor.Bridge
 {
@@ -63,6 +64,7 @@ namespace XUUnity.LightMcp.Editor.Bridge
             {
                 XUUnityLightMcpLifecycleMonitor.Tick();
                 XUUnityLightMcpBridgeRequestPump.PumpOnce();
+                XUUnityLightMcpSdkAndroidResolveRuntime.Tick();
                 XUUnityLightMcpScenarioRunner.Tick();
                 _lastPumpAt = now;
             }

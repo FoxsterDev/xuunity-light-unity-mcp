@@ -1,7 +1,7 @@
 # XUUnity MCP SDK Rollout Gate — Implementation Plan
 
 Date: `2026-07-12`
-Status: `P0.1 complete; P0.2a Android target fail-closed enforcement complete in current source; engine-driven resolver freshness and broader plan remain open; hardened after adversarial review (§14)`
+Status: `P0.1 and typed resolver P0.2b complete in current source; package restore and broader orchestration remain open; hardened after adversarial review (§14)`
 Baseline: released source line `v0.3.47`
 Elaborates: `XUUNITY_MCP_SDK_ROLLOUT_VALIDATION_DESIGN_2026-05-14.md` (direction) —
 this document turns that direction into a build-ready plan with exact
@@ -210,8 +210,8 @@ and the scenario kind must be added to **both**
 
 ### 5.2 `unity.sdk.android_resolve` (+ `unity.sdk.package_restore`)
 
-Supersedes `unity.edm4u.resolve` for the gate. Reuses the menu-firing loop and
-settle tracking but adds the two missing proofs.
+Supersedes `unity.edm4u.resolve` for the gate. Current source invokes EDM4U's
+public callback-capable resolve API and adds the two missing proofs.
 
 - **Active-target precondition:** read `EditorUserBuildSettings.activeBuildTarget`;
   if not `BuildTarget.Android`, either fail with `android_target_not_active` or
@@ -219,12 +219,13 @@ settle tracking but adds the two missing proofs.
   pattern in `XUUnityLightMcpBuildPlayerOperation`.
 - **Optional Version Handler update** before Force Resolve
   (`runVersionHandler: true`) via the existing VersionHandler menu candidates.
-- **Force Resolve** via the existing candidate loop + attempt log.
+- **Force Resolve** via
+  `PlayServicesResolver.Resolve(Action,bool,Action<bool>)`, with the callback
+  persisted as authoritative completion evidence.
 - **Generated-output freshness wait (fix §14.1 — prove the NEW correct state, not
   the OLD marker's absence):** a successful `ExecuteMenuItem` return is explicitly
   **not** completion proof. Poll a settle predicate that holds only when ALL of:
-  **(a)** the EDM4U/Android Resolver resolution log/summary reports completion
-  *when such a log exists* (parsed, not assumed); **(b)** every tracked generated
+  **(a)** the EDM4U callback reports completion and success; **(b)** every tracked generated
   output is **sha-stable across N consecutive idle ticks** (reuse the
   `ProcessCompilePlayerScriptsStep` 2-stable-tick template — this also closes the
   partial-write race that an mtime check has); and **(c)** a post-resolve
@@ -235,12 +236,10 @@ settle tracking but adds the two missing proofs.
   unmet fails `resolver_output_stale`, reporting which sub-condition (a/b/c) was
   not met.
 
-Because EDM4U schedules async work after the menu returns, model the freshness
-wait as **either** a scenario `sdk.android_resolve` step using the
-`ProcessCompilePlayerScriptsStep` two-phase deadline template, **or** a
-`project_defined_hook_poll_until` whose poll action evaluates the (a/b/c)
-predicate and reports `{status: running|succeeded|failed, failure_class}` —
-poll-until is preferred so the wait is engine-driven, not a blocking `Execute`.
+Because EDM4U schedules async work, the current implementation returns deferred
+completion from `Execute`, persists the request across editor ticks, and
+evaluates the (a/b/c) predicate from the existing throttled bridge pump. It does
+not block the editor main thread or treat API invocation as completion.
 
 `unity.sdk.package_restore` is the closed-editor sibling: open with package
 resolve, settle, record package-cache ids/versions and dependency-XML sources,
@@ -457,14 +456,16 @@ decisions below are folded into the component designs above and are load-bearing
 skipping them yields a gate that gives *false confidence*, which is worse than no
 gate.
 
-**14.1 Resolver-completion oracle (was the #1 risk).** EDM4U resolution is async
-and exposes no clean bridge-friendly "done" signal; freshness-by-mtime +
-old-version-marker is fragile — a same-coordinate transitive-only bump never
-clears the marker, an identical rewrite bumps mtime, and a mid-write snapshot
-races. **Decision:** prove freshness by the **new correct state**, not the old
-marker's absence — settle predicate = resolver-log completion (when available)
-AND sha-stable across N idle ticks AND post-resolve `dependency.verify` of the
-new coordinate passes. See §5.2.
+**14.1 Resolver-completion oracle (was the #1 risk).** Runtime inspection of
+supported EDM4U versions found the public
+`PlayServicesResolver.Resolve(Action,bool,Action<bool>)` completion callback.
+Current source uses that callback as the authoritative completion signal, then
+proves the **new correct state** with SHA-stable generated outputs across N idle
+ticks and post-resolve `dependency.verify` of the new coordinate. A lost
+callback across reload/timeout, callback failure, missing/unstable output, or
+missing coordinate fails closed. Freshness-by-mtime + old-version-marker
+remains rejected because identical rewrites, partial writes, and
+same-coordinate transitive updates make it unreliable. See §5.2.
 
 **14.2 Baseline provenance (was the #2 risk).** A `Library/` snapshot is
 machine-local, gitignored, unreviewable, and can be captured from an
@@ -542,5 +543,16 @@ unless `BuildTarget.Android` is active and Android Build Support is loaded.
 Successful payloads report the confirmed target, but deliberately expose
 `resolver_output_freshness=unproven` and `decision_ready=false`; this preserves
 the design distinction between menu-request evidence and a trustworthy resolve
-verdict. The typed `android_resolve` stable-hash/new-coordinate oracle remains
-P0.2b, followed by the GUI pool and `batch-edm4u-resolve`.
+verdict.
+
+Current source completes the typed P0.2b `unity.sdk.android_resolve` vertical
+slice. A capability-gated reflection adapter invokes EDM4U's public completion
+callback; the deferred operation persists its state atomically, requires active
+Android plus Android Build Support, samples every caller-declared generated
+output until the SHA-256 signature is stable across consecutive idle ticks,
+then reuses dependency verification for explicit expected coordinates. Only
+that combined proof returns `decision_ready=true`; callback loss/failure,
+missing or unstable output, and missing coordinates fail closed. Fresh proof
+passes current-source Unity `2022.3` EditMode `24/24` and PlayMode `5/5`, plus
+real callback failure and local-Maven success routes. `unity.sdk.package_restore`,
+the GUI pool, `batch-edm4u-resolve`, and portfolio orchestration remain open.

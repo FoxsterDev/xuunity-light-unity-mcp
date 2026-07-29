@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using NUnit.Framework;
@@ -164,6 +165,124 @@ namespace XUUnity.LightMcp.Tests.EditMode
                 Is.True);
             Assert.That(versionHandlerErrorCode, Is.Empty);
             Assert.That(versionHandlerErrorMessage, Is.Empty);
+        }
+
+        [Test]
+        public void SdkAndroidResolve_RequiresTrackedOutputsAndExpectedCoordinates()
+        {
+            var missingOutputs = new XUUnityLightMcpSdkAndroidResolveArgs
+            {
+                expectations = new System.Collections.Generic.List<XUUnityLightMcpSdkDependencyExpectation>
+                {
+                    new()
+                    {
+                        path = "ProjectSettings/AndroidResolverDependencies.xml",
+                        kind = "android_resolver_package",
+                        value = "com.example:sdk:2.0.0",
+                    }
+                }
+            };
+            var missingExpectations = new XUUnityLightMcpSdkAndroidResolveArgs
+            {
+                trackedGeneratedPaths = new System.Collections.Generic.List<string>
+                {
+                    "ProjectSettings/AndroidResolverDependencies.xml"
+                }
+            };
+
+            Assert.That(
+                XUUnityLightMcpSdkAndroidResolveOperation.TryValidateArgs(
+                    missingOutputs,
+                    out var outputsErrorCode,
+                    out _),
+                Is.False);
+            Assert.That(outputsErrorCode, Is.EqualTo("sdk_android_resolve_tracked_outputs_missing"));
+            Assert.That(
+                XUUnityLightMcpSdkAndroidResolveOperation.TryValidateArgs(
+                    missingExpectations,
+                    out var expectationsErrorCode,
+                    out _),
+                Is.False);
+            Assert.That(expectationsErrorCode, Is.EqualTo("sdk_android_resolve_expectations_missing"));
+        }
+
+        [Test]
+        public void SdkAndroidResolve_OutputSignatureIsOrderIndependentAndHashSensitive()
+        {
+            var first = new System.Collections.Generic.List<XUUnityLightMcpSdkGeneratedOutputEvidence>
+            {
+                new() { path = "b.gradle", file_size_bytes = 20, sha256 = "hash-b" },
+                new() { path = "a.xml", file_size_bytes = 10, sha256 = "hash-a" },
+            };
+            var reordered = new System.Collections.Generic.List<XUUnityLightMcpSdkGeneratedOutputEvidence>
+            {
+                new() { path = "a.xml", file_size_bytes = 10, sha256 = "hash-a" },
+                new() { path = "b.gradle", file_size_bytes = 20, sha256 = "hash-b" },
+            };
+            var changed = new System.Collections.Generic.List<XUUnityLightMcpSdkGeneratedOutputEvidence>
+            {
+                new() { path = "a.xml", file_size_bytes = 10, sha256 = "hash-a-new" },
+                new() { path = "b.gradle", file_size_bytes = 20, sha256 = "hash-b" },
+            };
+
+            var firstSignature = XUUnityLightMcpSdkAndroidResolveRuntime.BuildOutputSignature(first);
+            Assert.That(
+                XUUnityLightMcpSdkAndroidResolveRuntime.BuildOutputSignature(reordered),
+                Is.EqualTo(firstSignature));
+            Assert.That(
+                XUUnityLightMcpSdkAndroidResolveRuntime.BuildOutputSignature(changed),
+                Is.Not.EqualTo(firstSignature));
+        }
+
+        [Test]
+        public void SdkAndroidResolve_BoundsMainThreadHashWork()
+        {
+            var args = new XUUnityLightMcpSdkAndroidResolveArgs
+            {
+                trackedGeneratedPaths = Enumerable.Range(
+                        0,
+                        XUUnityLightMcpSdkAndroidResolveOperation.MaxTrackedGeneratedPaths + 1)
+                    .Select(index => $"ProjectSettings/generated-{index}.xml")
+                    .ToList(),
+                expectations = new System.Collections.Generic.List<XUUnityLightMcpSdkDependencyExpectation>
+                {
+                    new()
+                    {
+                        path = "ProjectSettings/AndroidResolverDependencies.xml",
+                        kind = "android_resolver_package",
+                        value = "com.example:sdk:2.0.0",
+                    }
+                }
+            };
+
+            Assert.That(
+                XUUnityLightMcpSdkAndroidResolveOperation.TryValidateArgs(
+                    args,
+                    out var errorCode,
+                    out _),
+                Is.False);
+            Assert.That(errorCode, Is.EqualTo("sdk_android_resolve_tracked_outputs_limit"));
+        }
+
+        [Test]
+        public void SdkAndroidResolve_IsRegisteredAndCapabilityGated()
+        {
+            Assert.That(
+                XUUnityLightMcpOperationRegistry.TryGet(
+                    XUUnityLightMcpSdkAndroidResolveOperation.RegisteredOperationName,
+                    out var operation),
+                Is.True);
+            Assert.That(operation, Is.TypeOf<XUUnityLightMcpSdkAndroidResolveOperation>());
+            Assert.That(
+                XUUnityLightMcpCapabilityRegistry.TryGetRequiredCapability(
+                    XUUnityLightMcpSdkAndroidResolveOperation.RegisteredOperationName,
+                    out var capability),
+                Is.True);
+            Assert.That(capability, Is.EqualTo(XUUnityLightMcpCapabilityRegistry.SdkAndroidResolverCapability));
+            Assert.That(
+                XUUnityLightMcpCapabilityRegistry.IsUngated(
+                    XUUnityLightMcpSdkAndroidResolveOperation.RegisteredOperationName),
+                Is.False);
         }
 
         [Test]

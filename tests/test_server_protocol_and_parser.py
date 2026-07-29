@@ -122,6 +122,7 @@ class ServerProtocolAndParserTests(unittest.TestCase):
         self.assertIn("unity_compile_build_config_matrix", tool_names)
         self.assertIn("unity_build_player", tool_names)
         self.assertIn("unity_edm4u_resolve", tool_names)
+        self.assertIn("unity_sdk_android_resolve", tool_names)
         self.assertIn("unity_sdk_dependency_verify", tool_names)
         self.assertIn("unity_sdk_generated_diff_guard", tool_names)
         self.assertIn("unity_console_grep", tool_names)
@@ -138,8 +139,28 @@ class ServerProtocolAndParserTests(unittest.TestCase):
             tool for tool in response["result"]["tools"] if tool["name"] == "unity_sdk_generated_diff_guard"
         )
         edm4u_tool = next(tool for tool in response["result"]["tools"] if tool["name"] == "unity_edm4u_resolve")
+        typed_resolver_tool = next(
+            tool for tool in response["result"]["tools"] if tool["name"] == "unity_sdk_android_resolve"
+        )
         self.assertIn("BuildTarget.Android", edm4u_tool["description"])
         self.assertIn("do not prove resolver-output freshness", edm4u_tool["description"])
+        self.assertIn("completion callback", typed_resolver_tool["description"])
+        self.assertEqual(
+            ["projectRoot", "trackedGeneratedPaths", "expectations"],
+            typed_resolver_tool["inputSchema"]["required"],
+        )
+        self.assertEqual(
+            2,
+            typed_resolver_tool["inputSchema"]["properties"]["stableIdleTicks"]["minimum"],
+        )
+        self.assertEqual(
+            32,
+            typed_resolver_tool["inputSchema"]["properties"]["trackedGeneratedPaths"]["maxItems"],
+        )
+        self.assertEqual(
+            128,
+            typed_resolver_tool["inputSchema"]["properties"]["expectations"]["maxItems"],
+        )
         self.assertEqual(
             "xml_structural",
             sdk_diff_guard_tool["inputSchema"]["properties"]["diffMode"]["default"]["*.xml"],

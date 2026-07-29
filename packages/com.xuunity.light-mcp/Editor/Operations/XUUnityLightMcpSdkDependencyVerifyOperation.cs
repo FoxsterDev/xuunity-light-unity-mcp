@@ -1,10 +1,9 @@
 using System;
 using System.IO;
-using System.Security.Cryptography;
-using System.Text;
 using System.Text.RegularExpressions;
 using UnityEngine;
 using XUUnity.LightMcp.Editor.Core;
+using XUUnity.LightMcp.Editor.Helpers;
 
 namespace XUUnity.LightMcp.Editor.Operations
 {
@@ -20,12 +19,6 @@ namespace XUUnity.LightMcp.Editor.Operations
 
             try
             {
-                var payload = new XUUnityLightMcpSdkDependencyVerifyPayload
-                {
-                    project_root = XUUnityLightMcpFileIpcPaths.ProjectRootPath,
-                    stop_on_first_failure = args.stopOnFirstFailure,
-                };
-
                 if (args.expectations == null || args.expectations.Count == 0)
                 {
                     return XUUnityLightMcpResponseWriter.Error(
@@ -34,32 +27,7 @@ namespace XUUnity.LightMcp.Editor.Operations
                         "unity.sdk.dependency.verify requires at least one expectation.");
                 }
 
-                foreach (var expectation in args.expectations)
-                {
-                    var result = VerifyExpectation(expectation ?? new XUUnityLightMcpSdkDependencyExpectation());
-                    payload.results.Add(result);
-
-                    if (result.status == "passed")
-                    {
-                        payload.passed++;
-                    }
-                    else if (result.status == "skipped")
-                    {
-                        payload.skipped++;
-                    }
-                    else
-                    {
-                        payload.failed++;
-                    }
-
-                    if (args.stopOnFirstFailure && result.status == "failed")
-                    {
-                        break;
-                    }
-                }
-
-                payload.total = payload.results.Count;
-                payload.status = payload.failed == 0 ? "passed" : "failed";
+                var payload = BuildPayload(args);
 
                 return XUUnityLightMcpResponseWriter.Success(
                     request.request_id,
@@ -72,7 +40,46 @@ namespace XUUnity.LightMcp.Editor.Operations
             }
         }
 
-        static XUUnityLightMcpSdkDependencyVerifyResult VerifyExpectation(XUUnityLightMcpSdkDependencyExpectation expectation)
+        internal static XUUnityLightMcpSdkDependencyVerifyPayload BuildPayload(
+            XUUnityLightMcpSdkDependencyVerifyArgs args)
+        {
+            args ??= new XUUnityLightMcpSdkDependencyVerifyArgs();
+            var payload = new XUUnityLightMcpSdkDependencyVerifyPayload
+            {
+                project_root = XUUnityLightMcpFileIpcPaths.ProjectRootPath,
+                stop_on_first_failure = args.stopOnFirstFailure,
+            };
+
+            foreach (var expectation in args.expectations ?? new System.Collections.Generic.List<XUUnityLightMcpSdkDependencyExpectation>())
+            {
+                var result = VerifyExpectation(expectation ?? new XUUnityLightMcpSdkDependencyExpectation());
+                payload.results.Add(result);
+
+                if (result.status == "passed")
+                {
+                    payload.passed++;
+                }
+                else if (result.status == "skipped")
+                {
+                    payload.skipped++;
+                }
+                else
+                {
+                    payload.failed++;
+                }
+
+                if (args.stopOnFirstFailure && result.status == "failed")
+                {
+                    break;
+                }
+            }
+
+            payload.total = payload.results.Count;
+            payload.status = payload.failed == 0 && payload.total > 0 ? "passed" : "failed";
+            return payload;
+        }
+
+        internal static XUUnityLightMcpSdkDependencyVerifyResult VerifyExpectation(XUUnityLightMcpSdkDependencyExpectation expectation)
         {
             var result = new XUUnityLightMcpSdkDependencyVerifyResult
             {
@@ -90,7 +97,7 @@ namespace XUUnity.LightMcp.Editor.Operations
                 return Fail(result, "Expectation path is required.");
             }
 
-            if (!TryResolveProjectFile(expectation.path, out var fullPath, out var pathError))
+            if (!XUUnityLightMcpSdkPaths.TryResolveProjectFile(expectation.path, out var fullPath, out var pathError))
             {
                 result.full_path = fullPath ?? "";
                 return Fail(result, pathError);
@@ -107,7 +114,7 @@ namespace XUUnity.LightMcp.Editor.Operations
 
             var info = new FileInfo(fullPath);
             result.file_size_bytes = info.Length;
-            result.sha256 = ComputeSha256(fullPath);
+            result.sha256 = XUUnityLightMcpSdkHash.ComputeSha256(fullPath);
 
             var content = File.ReadAllText(fullPath);
             return result.kind switch
@@ -239,52 +246,6 @@ namespace XUUnity.LightMcp.Editor.Operations
 
             var match = Regex.Match(parts[index] ?? "", @"\d+");
             return match.Success && int.TryParse(match.Value, out var value) ? value : 0;
-        }
-
-        static bool TryResolveProjectFile(string path, out string fullPath, out string error)
-        {
-            fullPath = "";
-            error = "";
-
-            try
-            {
-                var projectRoot = Path.GetFullPath(XUUnityLightMcpFileIpcPaths.ProjectRootPath);
-                fullPath = Path.IsPathRooted(path)
-                    ? Path.GetFullPath(path)
-                    : Path.GetFullPath(Path.Combine(projectRoot, path));
-
-                var rootWithSeparator = projectRoot.EndsWith(Path.DirectorySeparatorChar.ToString(), StringComparison.Ordinal)
-                    ? projectRoot
-                    : projectRoot + Path.DirectorySeparatorChar;
-
-                if (!string.Equals(fullPath, projectRoot, StringComparison.Ordinal)
-                    && !fullPath.StartsWith(rootWithSeparator, StringComparison.Ordinal))
-                {
-                    error = "Expectation path must resolve inside the Unity project root.";
-                    return false;
-                }
-
-                return true;
-            }
-            catch (Exception ex)
-            {
-                error = ex.Message;
-                return false;
-            }
-        }
-
-        static string ComputeSha256(string path)
-        {
-            using var sha = SHA256.Create();
-            using var stream = File.OpenRead(path);
-            var hash = sha.ComputeHash(stream);
-            var builder = new StringBuilder(hash.Length * 2);
-            foreach (var b in hash)
-            {
-                builder.Append(b.ToString("x2"));
-            }
-
-            return builder.ToString();
         }
 
         static XUUnityLightMcpSdkDependencyVerifyResult Pass(XUUnityLightMcpSdkDependencyVerifyResult result, string message)

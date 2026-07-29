@@ -27,6 +27,7 @@ namespace XUUnity.LightMcp.Editor.Core
         public static string BridgeGenerationStatePath => Path.Combine(StateDirectory, "bridge_generation_state.json");
         public static string PlayModeTransitionStatePath => Path.Combine(StateDirectory, "playmode_transition_state.json");
         public static string ActiveTestRunStatePath => Path.Combine(StateDirectory, "active_test_run.json");
+        public static string ActiveSdkAndroidResolveStatePath => Path.Combine(StateDirectory, "active_sdk_android_resolve.json");
         public static string TestRunResultPath(string requestId) => Path.Combine(TestResultsDirectory, $"{requestId}.json");
         public static string CapabilitiesReportPath => Path.Combine(StateDirectory, "capabilities_report.json");
 

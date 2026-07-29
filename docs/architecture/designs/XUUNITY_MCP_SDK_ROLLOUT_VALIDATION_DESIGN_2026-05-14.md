@@ -1,17 +1,30 @@
 # XUUnity MCP SDK Rollout Validation Design
 
 Date: `2026-05-14`
-Status: `partially implemented — generated-diff P0.1 and Android target fail-closed slice complete in current source`
+Status: `partially implemented — generated-diff P0.1 and typed Android resolver P0.2b complete in current source`
+
+## Re-Evaluation 2026-07-29
+
+Current source implements typed `unity.sdk.android_resolve`: EDM4U callback
+completion, active-Android/module enforcement, stable SHA-256 output sampling,
+and explicit post-resolve coordinate proof are required for a decision-grade
+pass. Callback failure/loss, missing or unstable output, and missing coordinates
+fail closed. Cross-version evidence includes current-source Unity `2022.3`
+EditMode `24/24` and PlayMode `5/5`, real callback failure and local-Maven
+success routes, and a Unity `6000.0` consumer compile `6/6`, acceptance `10/10`,
+contract/lifecycle, and catalog route. Package restore, GUI admission, batch
+resolve, and portfolio orchestration remain open.
 
 ## Re-Evaluation 2026-07-27
 
-Current source closes the smallest target-precondition false-positive: the
+At the 2026-07-27 snapshot, current source closed the smallest
+target-precondition false-positive: the
 existing fire-and-report `unity.edm4u.resolve` Android lane refuses to execute
 unless `BuildTarget.Android` is active and Android Build Support is loaded.
 Successful payloads expose the confirmed target but explicitly remain
-`resolver_output_freshness=unproven` and `decision_ready=false`. This does not
-replace the planned typed `unity.sdk.android_resolve`; engine-driven stable-hash
-and post-resolve dependency proof remain the next P0.2 slice. Cross-version
+`resolver_output_freshness=unproven` and `decision_ready=false`. The typed
+`unity.sdk.android_resolve` stable-hash and post-resolve dependency proof then
+remained the next P0.2 slice. Cross-version
 evidence includes Unity `2022.3` current-source EditMode `20/20` and PlayMode
 `5/5`, plus Unity `6000.0` compile `6/6`, acceptance `10/10`, and
 refresh/compile contract coverage.
@@ -40,6 +53,8 @@ The current public MCP surface already supports:
 - active build target get/switch
 - project refresh and package resolve
 - live-editor EDM4U resolver triggering through known menu item paths
+- typed callback-backed Android resolve with stable generated-output hashes and
+  explicit expected-coordinate proof in current source
 - generated dependency artifact verification from JSON expectations
 - Android/iOS player script compile checks
 - batch compile, compile matrix, EditMode tests, and plain batch player build
@@ -50,15 +65,15 @@ full SDK rollout gate.
 
 Current gaps:
 
-- released `v0.3.47` does not enforce active Android build target before
-  `unity.edm4u.resolve`; current source now fails closed on that precondition,
-  while the typed resolver and async freshness proof remain open.
-- Resolver success can be superficial if generated Android outputs remain stale.
+- released `v0.3.47` does not enforce active Android target or provide the typed
+  freshness oracle; current source provides both while retaining the older
+  fire-and-report operation as explicitly non-decision-ready.
 - The live-editor lane can open too many GUI Unity instances during broad
   portfolio work unless the host wrapper adds process pooling.
 - `unity.editor.quit` is a request, not a hard process-exit contract.
-- `unity.sdk.dependency.verify` checks required values, but it does not guard
-  against unrelated destructive generated-file changes.
+- `unity.sdk.dependency.verify` alone does not guard against unrelated
+  destructive generated-file changes; current-source rollout workflows must
+  compose the implemented generated-diff guard.
 - The public MCP core does not yet install apps on connected devices, launch
   them, capture device logs, or run SDK runtime smoke flows.
 

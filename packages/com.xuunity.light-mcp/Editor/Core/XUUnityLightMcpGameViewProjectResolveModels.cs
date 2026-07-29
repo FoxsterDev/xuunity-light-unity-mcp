@@ -142,6 +142,90 @@ namespace XUUnity.LightMcp.Editor.Core
         }
 
         [Serializable]
+        internal sealed class XUUnityLightMcpSdkAndroidResolveArgs
+        {
+            public bool force = true;
+            public bool refreshBefore = true;
+            public int stableIdleTicks = 2;
+            public List<string> trackedGeneratedPaths = new();
+            public List<XUUnityLightMcpSdkDependencyExpectation> expectations = new();
+        }
+
+        [Serializable]
+        internal sealed class XUUnityLightMcpSdkGeneratedOutputEvidence
+        {
+            public string path = "";
+            public string full_path = "";
+            public bool file_exists;
+            public long file_size_bytes;
+            public string sha256 = "";
+            public string error = "";
+        }
+
+        [Serializable]
+        internal sealed class XUUnityLightMcpSdkAndroidResolvePayload
+        {
+            public string backend_id = "xuunity.light_unity_mcp";
+            public string project_root = "";
+            public string status = "failed";
+            public string verdict = "inconclusive";
+            public string trust_class = "unproven";
+            public bool decision_ready;
+            public string failure_class = "";
+            public string required_build_target = "Android";
+            public string active_build_target = "";
+            public string build_target_precondition = "";
+            public bool target_support_loaded;
+            public bool force;
+            public bool asset_refresh_before_requested;
+            public string resolver_adapter = "";
+            public string resolver_completion_source = "edm4u_callback";
+            public bool resolver_callback_received;
+            public bool resolver_callback_success;
+            public string resolver_callback_at_utc = "";
+            public string resolver_output_freshness = "unproven";
+            public int stable_idle_ticks_required = 2;
+            public int stable_idle_ticks_observed;
+            public List<XUUnityLightMcpSdkGeneratedOutputEvidence> generated_outputs = new();
+            public XUUnityLightMcpSdkDependencyVerifyPayload dependency_verification = new();
+            public string started_at_utc = "";
+            public string completed_at_utc = "";
+            public double duration_seconds;
+            public string recommended_next_action = "";
+            public string validation_evidence = "unity_mcp";
+        }
+
+        [Serializable]
+        internal sealed class XUUnityLightMcpPersistedSdkAndroidResolveState
+        {
+            public string request_id = "";
+            public string operation = "unity.sdk.android_resolve";
+            public string project_root = "";
+            public string started_at_utc = "";
+            public string deadline_at_utc = "";
+            public string completed_at_utc = "";
+            public string response_handoff_state = "pending";
+            public XUUnityLightMcpSdkAndroidResolveArgs args = new();
+            public string active_build_target = "";
+            public bool target_support_loaded;
+            public string resolver_adapter = "";
+            public bool resolver_callback_received;
+            public bool resolver_callback_success;
+            public string resolver_callback_at_utc = "";
+            public int stable_idle_ticks_observed;
+            public string last_output_signature = "";
+            public List<XUUnityLightMcpSdkGeneratedOutputEvidence> generated_outputs = new();
+            public XUUnityLightMcpSdkDependencyVerifyPayload dependency_verification = new();
+            public string status = "running";
+            public string verdict = "inconclusive";
+            public string trust_class = "unproven";
+            public bool decision_ready;
+            public string failure_class = "";
+            public string resolver_output_freshness = "unproven";
+            public string recommended_next_action = "";
+        }
+
+        [Serializable]
         internal sealed class XUUnityLightMcpSdkDependencyVerifyArgs
         {
             public bool stopOnFirstFailure;

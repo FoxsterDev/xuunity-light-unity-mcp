@@ -84,8 +84,12 @@ SDK rollout safety (`v0.3.45` plus current-source hardening):
 - Android `unity.edm4u.resolve` now refuses to fire unless
   `BuildTarget.Android` is active and Android Build Support is loaded. Passing
   request payloads expose the target precondition while keeping
-  `resolver_output_freshness=unproven` and `decision_ready=false`; the planned
-  typed resolver freshness oracle remains open.
+  `resolver_output_freshness=unproven` and `decision_ready=false`.
+- Current source adds capability-gated `unity.sdk.android_resolve` /
+  `unity_sdk_android_resolve` / `request-sdk-android-resolve`. It uses EDM4U's
+  callback as completion proof, requires stable SHA-256 generated outputs across
+  idle ticks, and verifies explicit expected coordinates before returning
+  `trust_class=decision_grade` and `decision_ready=true`.
 - `unity_sdk_generated_diff_guard` / `sdk-generated-diff-guard` provides the
   generated-file vertical slice of the SDK rollout gate. Git-tracked paths use
   a named Git ref; Git-untracked paths can use an explicit `Library/` capture
@@ -96,8 +100,8 @@ SDK rollout safety (`v0.3.45` plus current-source hardening):
   invalid structured files, and normalization-only XML/Gradle rewrites without
   opening Unity. Current source registers every published pass/fail JSON report
   as an `sdk_generated_diff_report` artifact and returns its hash plus registry
-  pointer. Engine-driven resolver freshness, package restore, GUI admission
-  control, and portfolio orchestration remain separate open slices.
+  pointer. Package restore, GUI admission control, batch resolve, and portfolio
+  orchestration remain separate open slices.
 
 Implemented Unity-side operations:
 
@@ -110,6 +114,7 @@ Implemented Unity-side operations:
 - `unity.project.refresh`
 - `unity.package.install_test_framework`
 - `unity.edm4u.resolve`
+- `unity.sdk.android_resolve`
 - `unity.sdk.dependency.verify`
 - `unity.console.tail`
 - `unity.console.grep`
@@ -160,6 +165,7 @@ Implemented host-side MCP tools and helpers:
 - `unity_build_target_get`
 - `unity_build_target_switch`
 - `unity_edm4u_resolve`
+- `unity_sdk_android_resolve`
 - `unity_sdk_dependency_verify`
 - `unity_sdk_generated_diff_guard`
 - `xuunity_setup_plan`
@@ -222,10 +228,11 @@ Latest release and current-source validation above `v0.3.47`:
 | Area | Evidence | Result |
 | --- | --- | --- |
 | Package metadata | `packages/com.xuunity.light-mcp/package.json` | `name=com.xuunity.light-mcp`, `version=0.3.47`, `unity=2021.3`, no hard Test Framework dependency |
-| Host Python tests | `python3 -m unittest discover -s tests` | Current source passes `471` tests with `13` expected skips |
+| Host Python tests | Focused protocol/parity/atomicity/launcher suite plus full discovery | Focused current-source coverage passes `77/77`. Full discovery reached 476 tests with 13 expected platform skips; five loopback-framing cases were blocked by this automation sandbox denying `bind(127.0.0.1)`, with no assertion failure. |
 | Compact MCP envelopes | Changelog and regression coverage for `0.3.32`-`0.3.47` | Scenario decision verdicts, compact operation/readiness/status summaries, authoritative post-settle compile/test/refresh fields, editor-log identity, scenario step-payload opt-ins, PlayMode already-playing stale-risk summaries, deterministic scene-open setup, opt-in compact batch helper output, safer `Editor.log` console grep/tail defaults, compact transport/idle timeout errors, compile-first post-change validation, lane-agnostic GUI-fallback compile evidence, and requested-filter zero-match verdicts are documented with full-payload recovery. |
-| Package self-tests | Clean devmode projects on installed Unity editors | Current source passes EditMode `18/18` and PlayMode `5/5` on a Unity `2022.3` consumer, including passive `not_started` poll continuation and explicit-failure precedence. Release-line validation previously passed EditMode `16/16` and PlayMode `5/5` on Unity `6000.x`, including deterministic scene-open and zero-match classification. |
-| Current-source consumer route | Compile preflight + scenario/contract + PlayMode lifecycle + consistency | Unity `6000.0` passes compile preflight `6/6`, acceptance `10/10`, refresh/compile contract, settled-state and lifecycle recovery, healthy final Edit Mode with zero compiler errors/unrecovered abandons, and project-action consistency. |
+| Package self-tests | Clean devmode projects on installed Unity editors | Current source passes EditMode `24/24` and PlayMode `5/5` on Unity `2022.3`, including typed resolver argument/signature/registration/bounded-work coverage. A development-system consumer on its release pin passes EditMode `14/14` and PlayMode `5/5`. |
+| Typed resolver oracle | Current-source Unity `2022.3` + EDM4U callback adapter | Inactive Android and resolver callback failure fail closed; a project-local Maven coordinate passes with callback success, two stable SHA-256 samples, explicit dependency proof, `trust_class=decision_grade`, and a cleared package-operation busy flag. |
+| Consumer regression route | Compile preflight + scenario/contract + PlayMode lifecycle + consistency | Unity `6000.0` passes compile preflight `6/6`, acceptance `10/10`, refresh/compile contract, settled-state and lifecycle recovery, healthy final Edit Mode with zero compiler errors/unrecovered abandons, and project-action consistency. |
 | Public site checks | `scripts/testing/run_site_ui_checks.sh` | Public site Playwright checks passed for `v0.3.47`: `42/42`. |
 | Historical Git UPM release smoke | Clean Unity project pinned to an earlier public tag | Bridge reached healthy `git_pinned` status, Android APK smoke passed, package self-tests passed, and closeout verified process exit. |
 | Multi-project compile matrix | Public summary evidence from consumer validation | `9/9` projects, `38/38` compile lanes, `0` failures |

@@ -398,6 +398,64 @@ TOOLS: dict[str, dict[str, Any]] = {
             "required": ["projectRoot"]
         }
     },
+    "unity_sdk_android_resolve": {
+        "bridgeOperation": "unity.sdk.android_resolve",
+        "description": "Run Android resolution through EDM4U's completion callback, then pass only after every tracked generated output is hash-stable across idle ticks and the expected new dependency coordinates verify.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "projectRoot": {"type": "string"},
+                "force": {"type": "boolean", "default": True},
+                "refreshBefore": {"type": "boolean", "default": True},
+                "stableIdleTicks": {
+                    "type": "integer",
+                    "default": 2,
+                    "minimum": 2,
+                    "maximum": 10,
+                    "description": "Consecutive idle samples with identical hashes required after EDM4U reports completion."
+                },
+                "trackedGeneratedPaths": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 32,
+                    "items": {"type": "string"},
+                    "description": "Project-relative generated outputs that must exist and remain hash-stable."
+                },
+                "expectations": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 128,
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "id": {"type": "string"},
+                            "platform": {"type": "string", "default": "android"},
+                            "path": {"type": "string"},
+                            "kind": {
+                                "type": "string",
+                                "enum": [
+                                    "file_contains",
+                                    "file_regex",
+                                    "android_resolver_package",
+                                    "gradle_dependency",
+                                    "gradle_repository"
+                                ],
+                                "default": "file_contains"
+                            },
+                            "value": {"type": "string"},
+                            "version": {"type": "string"},
+                            "minVersion": {"type": "string"},
+                            "optional": {"type": "boolean", "default": False}
+                        },
+                        "required": ["path", "kind", "value"]
+                    },
+                    "description": "Expected post-resolve dependency coordinates or generated content. At least one is required."
+                },
+                "timeoutMs": {"type": "integer", "default": 300000, "minimum": 5000}
+            },
+            "required": ["projectRoot", "trackedGeneratedPaths", "expectations"]
+        }
+    },
     "unity_sdk_dependency_verify": {
         "bridgeOperation": "unity.sdk.dependency.verify",
         "description": "Verify generated SDK dependency artifacts against explicit expectations after package restore, EDM4U resolve, export, or build.",

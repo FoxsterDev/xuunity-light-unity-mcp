@@ -96,6 +96,7 @@ Use these MCP tools from compatible clients:
 - `unity_artifact_register`
 - `unity_artifact_write_report`
 - `unity_edm4u_resolve`
+- `unity_sdk_android_resolve`
 - `unity_sdk_dependency_verify`
 - `xuunity_uninstall_plan`
 - `xuunity_uninstall_apply`
@@ -647,12 +648,10 @@ Gradle dependency expectations, or generated dependency artifacts.
 Agent prompt:
 
 ```text
-Refresh the project, run the whitelisted EDM4U resolver if available, then
-verify generated dependency artifacts against an explicit expectation file. Do
-not print credentials or secret-bearing URLs. Before Android resolve, confirm
-that Unity's active build target is Android; the resolver request fails closed
-otherwise. Treat menu execution and editor-idle settle as request evidence, not
-as resolver-output freshness proof.
+Refresh the project, switch to Android, then run the typed EDM4U resolver with
+tracked generated outputs and explicit expected coordinates. Do not print
+credentials or secret-bearing URLs. Accept a rollout verdict only when callback
+completion, stable output hashes, and coordinate verification all pass.
 ```
 
 CLI route:
@@ -670,13 +669,10 @@ CLI route:
   --target Android \
   --timeout-ms 180000
 
-"$WRAPPER" request-edm4u-resolve \
+"$WRAPPER" request-sdk-android-resolve \
   --project-root "$PROJECT_ROOT" \
-  --platform android \
-  --force \
-  --refresh-before \
-  --refresh-after \
-  --timeout-ms 180000
+  --config-file /path/to/sdk-android-resolver.json \
+  --timeout-ms 300000
 
 "$WRAPPER" request-sdk-dependency-verify \
   --project-root "$PROJECT_ROOT" \
@@ -687,17 +683,19 @@ CLI route:
 Evidence to report:
 
 - required and active build target
-- EDM4U menu path used or missing capability
-- resolver request status and `resolver_output_freshness`
+- EDM4U callback adapter or missing capability
+- resolver callback status, stable output hashes, and
+  `resolver_output_freshness`
 - verified files
 - missing dependencies
 - redacted evidence for sensitive config fields
 
-`resolver_output_freshness: unproven` and `decision_ready: false` are expected
-on this fire-and-report operation. Run `unity_sdk_dependency_verify` and
-`unity_sdk_generated_diff_guard` before accepting the SDK rollout. The planned
-typed Android resolver will add engine-driven stable-hash and new-coordinate
-proof; the current request must not be promoted to that verdict.
+The typed operation returns `decision_ready: true` only with callback success,
+stable generated outputs, and expected-coordinate proof. The older
+`unity_edm4u_resolve` remains fire-and-report; its
+`resolver_output_freshness: unproven` / `decision_ready: false` payload must not
+be promoted to a rollout verdict. Run `unity_sdk_generated_diff_guard` after
+either resolver lane to catch destructive unrelated generated-file changes.
 
 ## Workflow 9: Closed-Project Batch Validation
 

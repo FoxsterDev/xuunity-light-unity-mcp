@@ -1,7 +1,7 @@
 # XUUnity Light Unity MCP Public Retro Registry
 
 Status: active public registry
-Last triage: 2026-07-27 (re-evaluated against released source line `v0.3.47` plus current source at `a32bb51` and the uncommitted Android-target fail-closed slice)
+Last triage: 2026-07-29 (re-evaluated against released source line `v0.3.47` plus current source at `0d3a460` and the uncommitted typed Android resolver slice)
 Current released source line: `v0.3.47`
 
 Update this file whenever a public-safe MCP retro is added, moved, renamed, or
@@ -25,6 +25,30 @@ host-local registry.
 - `Completed Public History` is the place to find reusable lessons already
   implemented, applied, superseded, or retained only for history.
 - Prompt templates are listed separately and are not backlog items.
+
+## Re-Evaluation 2026-07-29
+
+- No release tag newer than `v0.3.47` exists; `HEAD`, `master`, and
+  `origin/master` align at `0d3a460`, which commits the prior Android-target
+  precondition slice.
+- Current source completes the typed P0.2b resolver-freshness vertical slice:
+  `unity.sdk.android_resolve` uses EDM4U's callback API, requires active Android
+  plus Android Build Support, waits for hash-stable generated outputs, and
+  verifies explicit expected coordinates before returning
+  `trust_class=decision_grade` and `decision_ready=true`.
+- Callback failure, callback loss/timeout, missing or unstable generated output,
+  and missing expected coordinates all fail closed. The older
+  `unity.edm4u.resolve` fire-and-report contract remains available and explicitly
+  non-decision-ready.
+- Fresh proof passes focused host protocol/parity/atomicity tests `77/77`;
+  current-source Unity `2022.3` package tests (`24/24` EditMode and `5/5`
+  PlayMode); a real callback failure and a local-Maven callback success with
+  stable SHA-256/new-coordinate proof; a development-system consumer
+  (`14/14` EditMode, `5/5` PlayMode); and a Unity `6000.0` consumer compile
+  matrix `6/6`, acceptance `10/10`, contract, lifecycle, and catalog route.
+- `unity.sdk.package_restore`, GUI admission, batch resolve, and portfolio
+  orchestration remain open. The decision-verdict, post-settle truth, UI/path
+  proof, and infrastructure classification cluster remains complete.
 
 ## Re-Evaluation 2026-07-27
 
@@ -167,7 +191,7 @@ the entire Windows install root-cause set (python3 delegation, UTF-8 BOM,
 
 | Date | File | Scope | Registry Status | Why It Is Not Completed History |
 | --- | --- | --- | --- | --- |
-| 2026-05-14 | `2026-05-14_sdk_rollout_mcp_portfolio_retro.md` | SDK/EDM4U rollout validation lane: typed resolver preconditions, generated-Gradle diff guard, GUI process pool + quit-and-wait closeout, portfolio SDK summary | **P0.1 + P0.2a complete in current source; typed freshness oracle is highest open end-user ROI (P1)** | `v0.3.45` shipped the Git-tracked `unity_sdk_generated_diff_guard` / `sdk-generated-diff-guard`; `v0.3.46` shipped structure-aware/comment-safe hardening. Later source adds fingerprint-bound Git-untracked comparison and artifact registration. Current source makes Android `unity.edm4u.resolve` fail closed unless Android is active and marks output freshness unproven. Still open: typed engine-driven freshness/new-coordinate proof, GUI process pool, closeout contract, and portfolio summary. Device lanes remain ROADMAP Wave 5. |
+| 2026-05-14 | `2026-05-14_sdk_rollout_mcp_portfolio_retro.md` | SDK/EDM4U rollout validation lane: typed resolver preconditions, generated-Gradle diff guard, GUI process pool + quit-and-wait closeout, portfolio SDK summary | **P0.1 + typed resolver P0.2b complete in current source; package restore/orchestration remain P1** | `v0.3.45` shipped the Git-tracked `unity_sdk_generated_diff_guard` / `sdk-generated-diff-guard`; `v0.3.46` shipped structure-aware/comment-safe hardening. Later source adds fingerprint-bound Git-untracked comparison and artifact registration. Current source adds callback-backed `unity.sdk.android_resolve` with Android preconditions, stable generated-output hashes, and explicit expected-coordinate proof. Still open: `unity.sdk.package_restore`, GUI process pool, batch resolve, closeout orchestration, and portfolio summary. Device lanes remain ROADMAP Wave 5. |
 | 2026-06-02 | `2026-06-02_token_efficiency_response_envelope_retro.md` | Response-envelope token efficiency: compact-by-default across MCP tool surfaces | mostly implemented; P2 residual | Compact-by-default shipped `v0.3.32`-`v0.3.44` for scenario, refresh, compile, build-config compile, test, `unity_status_summary`, `ensure-ready`, and batch CLI, each with `includeFullPayload`/`--output` opt-in (STATUS.md "Compact MCP envelopes"). Remaining (ROADMAP.md "Phase 2" residual): broader multi-project compact ceilings, a token ledger, and fast-path profiles. |
 | 2026-06-11 | `2026-06-11_token_accounting_and_fast_path_retro.md` | Token-accounting ledger, one-shot package-pin verifier, fast-path prompt profile | partial; P2 | The biggest win (compact output) shipped through `v0.3.40`/`v0.3.44`, and the fast path is documented in `docs/agents/PACKAGE_BUMP_FAST_PATH.md`, but no token-accounting ledger, one-shot verify-package-pin verifier, or runner token-budget hints exist in source or ROADMAP/STATUS. Overlaps the response-envelope row above as the token-efficiency tail. |
 | 2026-06-17 | `2026-06-17_windows_setup_failure_retro.md` | Native Windows setup failure postmortem; residual = live Windows/Linux host proof | Windows root causes fixed + CI-exercised in `v0.3.43`; live-host proof still open (P2) | The concrete Windows helper failures (path-with-spaces, ExecutionPolicy, `python3` delegation, PID liveness, discovery) are fixed and CI-exercised end to end. STATUS.md still marks a live Windows/Linux host session with a real Unity editor as needing execution proof (ROADMAP Phase 3 breadth). This row now tracks that single remaining cross-platform proof item; the Windows install root-cause retros (2026-06-09 v1/v2, 2026-06-10) are completed history. |

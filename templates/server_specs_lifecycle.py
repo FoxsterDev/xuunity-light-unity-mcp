@@ -60,6 +60,16 @@ OPERATION_LIFECYCLE_POLICIES: dict[str, dict[str, Any]] = {
         "retry_on_transport_connect_failed": True,
         "post_reset_recovery_cap_ms": 300000,
     },
+    "unity.sdk.android_resolve": {
+        "activate_unity": True,
+        "wait_for_idle_before": True,
+        "wait_for_idle_after": False,
+        "idle_stable_cycles_after": 1,
+        "retry_on_lifecycle_reset": False,
+        "retry_on_transport_response_missing": True,
+        "retry_on_transport_connect_failed": True,
+        "post_reset_recovery_cap_ms": 300000,
+    },
     "unity.sdk.dependency.verify": {
         "activate_unity": True,
         "wait_for_idle_before": True,

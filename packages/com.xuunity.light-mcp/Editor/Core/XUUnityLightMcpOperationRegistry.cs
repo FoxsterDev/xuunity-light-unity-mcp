@@ -23,6 +23,7 @@ namespace XUUnity.LightMcp.Editor.Core
             { "unity.package.install_test_framework", new XUUnityLightMcpInstallTestFrameworkOperation() },
             { "unity.project.refresh", new XUUnityLightMcpProjectRefreshOperation() },
             { "unity.edm4u.resolve", new XUUnityLightMcpEdm4uResolveOperation() },
+            { "unity.sdk.android_resolve", new XUUnityLightMcpSdkAndroidResolveOperation() },
             { "unity.sdk.dependency.verify", new XUUnityLightMcpSdkDependencyVerifyOperation() },
             { "unity.console.tail", new XUUnityLightMcpConsoleTailOperation() },
             { "unity.console.grep", new XUUnityLightMcpConsoleGrepOperation() },

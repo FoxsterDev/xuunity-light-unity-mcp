@@ -22,6 +22,7 @@ Current public operations:
 - `unity_compile_build_config_matrix`
 - `unity_license_capabilities`
 - `unity.edm4u.resolve`
+- `unity.sdk.android_resolve`
 - `unity.sdk.dependency.verify`
 - `unity_status_summary`
 - `unity_request_final_status`
@@ -74,10 +75,13 @@ For third-party SDK updates, prefer this validation order:
 1. project refresh with package resolve
 2. compile validation for affected Android/iOS targets
 3. switch and settle the active build target to Android
-4. `unity.edm4u.resolve` for Android dependency generation; it fails closed
-   when Android is not active, but its successful menu request does not prove
-   resolver-output freshness
-5. `unity.sdk.dependency.verify` against generated resolver files
+4. `unity.sdk.android_resolve` with tracked generated paths and explicit
+   expected coordinates. It requires EDM4U callback success, stable SHA-256
+   outputs across idle ticks, and dependency proof. Use `unity.edm4u.resolve`
+   only when fire-and-report evidence is sufficient and retain its
+   non-decision-ready classification.
+5. `unity.sdk.dependency.verify` for additional generated resolver files or iOS
+   outputs not covered by the typed Android config
 6. `unity_sdk_generated_diff_guard` against the approved generated-file baseline
 7. batch export or player build
 8. generated artifact inspection, such as Gradle output, Xcode export, Podfile.lock, manifest, plist, or dependency reports

@@ -4,6 +4,12 @@
 
 ### Added
 
+- Added capability-gated `unity.sdk.android_resolve`,
+  `unity_sdk_android_resolve`, and `request-sdk-android-resolve`. The typed lane
+  uses EDM4U's completion callback, requires active Android plus Android Build
+  Support, waits for declared generated outputs to be SHA-256 stable across
+  consecutive idle ticks, and verifies explicit expected coordinates before
+  returning a decision-grade rollout verdict.
 - Added a standardized `xuunity.mutation-delta.v1` trust contract for mutating
   project actions. Hook summaries promote before/after/added/removed/changed
   counts, while `unity_project_action_invoke` distinguishes successful Unity
@@ -22,6 +28,12 @@
 
 ### Fixed
 
+- Typed Android resolver callback failure/loss, missing or unstable generated
+  output, missing expected coordinates, and inactive/unsupported Android target
+  now produce explicit failed-closed classifications. Deferred completion state
+  is atomically persisted, package-operation busy state is cleared after
+  response handoff, and cached capability reports invalidate when EDM4U or
+  Android support availability changes.
 - Android `unity_edm4u_resolve` now fails closed with
   `edm4u_android_target_not_active` unless `BuildTarget.Android` is active, and
   rejects a missing Android Build Support module. Successful requests report
@@ -35,6 +47,14 @@
 
 ### Validation
 
+- Typed resolver coverage passes focused host protocol/parity/atomicity tests
+  `77/77`; current-source Unity `2022.3` package EditMode `24/24` and PlayMode
+  `5/5`; real EDM4U callback failure and local-Maven success routes; a
+  development-system consumer `14/14` + `5/5`; and a Unity `6000.0` consumer
+  compile matrix `6/6`, acceptance `10/10`, contract/lifecycle, and
+  project-action consistency route. The full host suite reached 476 tests; its
+  only five errors were sandbox-denied loopback-socket binds, with 13 expected
+  platform skips.
 - Android-target precondition coverage passes focused host tests `61/61` and
   the full host suite `476/476` with 13 expected platform skips. Current-source
   package self-tests pass on Unity `2022.3`: EditMode `20/20` and PlayMode
