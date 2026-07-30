@@ -3,6 +3,9 @@ from __future__ import annotations
 
 from server_cli_shared import *
 
+from server_ui_reference_compare import compare_ui_reference
+from server_ui_reference_registry import register_ui_reference, validate_ui_reference
+
 def cmd_project_action_list(args):
     project_root = ensure_project_root(args.project_root)
     catalog = load_project_action_catalog(project_root, args.catalog_file or "")
@@ -267,3 +270,79 @@ def cmd_maintenance_prune(args):
         read_json=read_json,
     )
     print_json(result)
+
+
+def load_optional_json_object_list(value: str, error_code: str) -> list[dict[str, Any]] | None:
+    raw = str(value or "").strip()
+    if not raw:
+        return None
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise ToolInvocationError(error_code, str(exc)) from exc
+    if not isinstance(payload, list) or any(not isinstance(item, dict) for item in payload):
+        raise ToolInvocationError(error_code, "Expected a JSON array of objects.")
+    return payload
+
+
+def cmd_ui_reference_register(args):
+    project_root = ensure_project_root(args.project_root)
+    payload = register_ui_reference(
+        project_root=project_root,
+        reference_id=args.reference_id,
+        source_image=args.source_image,
+        viewport=load_optional_json_object(args.viewport_json, "ui_reference_viewport_invalid") or None,
+        safe_area=args.safe_area,
+        fixture=args.fixture,
+        regions=load_optional_json_object_list(args.regions_json, "ui_reference_region_invalid"),
+        dynamic_masks=load_optional_json_object_list(args.dynamic_masks_json, "ui_reference_mask_invalid"),
+        required_ui=load_optional_json_object_list(args.required_ui_json, "ui_reference_required_ui_invalid"),
+        thresholds=load_optional_json_object(args.thresholds_json, "ui_reference_threshold_invalid") or None,
+        tolerance_profile=args.tolerance_profile,
+        scale_policy=args.scale_policy,
+        owner=args.owner,
+        acceptance=load_optional_json_object(args.acceptance_json, "ui_reference_acceptance_invalid") or None,
+        notes=args.notes,
+        category=args.category,
+        workspace_root=args.workspace_root,
+        overwrite=bool(args.overwrite),
+    )
+    print_json(payload)
+
+
+def cmd_ui_reference_validate(args):
+    project_root = ensure_project_root(args.project_root)
+    payload = validate_ui_reference(
+        project_root=project_root,
+        reference_id=args.reference_id,
+        manifest_path=args.manifest_path,
+        category=args.category,
+        workspace_root=args.workspace_root,
+    )
+    print_json(payload)
+    if not bool((payload.get("validation") or {}).get("valid")):
+        raise SystemExit(1)
+
+
+def cmd_ui_reference_compare(args):
+    project_root = ensure_project_root(args.project_root)
+    payload = compare_ui_reference(
+        project_root=project_root,
+        actual_image=args.actual_image,
+        reference_id=args.reference_id,
+        manifest_path=args.manifest_path,
+        stability_image=args.stability_image,
+        require_capture_stability=not bool(args.no_require_capture_stability),
+        emit_artifacts=not bool(args.no_artifacts),
+        include_expected_copy=bool(args.include_expected_copy),
+        comparison_id=args.comparison_id,
+        tolerance_profile=args.tolerance_profile,
+        fixture_evidence=load_optional_json_object(
+            args.fixture_evidence_json, "ui_reference_fixture_evidence_invalid"
+        ),
+        category=args.category,
+        workspace_root=args.workspace_root,
+    )
+    print_json(payload)
+    if payload.get("reference_acceptance") != "passed":
+        raise SystemExit(1)

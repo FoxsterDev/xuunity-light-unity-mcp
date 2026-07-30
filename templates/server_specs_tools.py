@@ -351,6 +351,138 @@ TOOLS: dict[str, dict[str, Any]] = {
             "required": ["projectRoot", "content"]
         }
     },
+    "unity_ui_reference_register": {
+        "description": (
+            "Register a supplied UI design reference image as a ui-reference.v1 acceptance contract "
+            "(immutable expected image, declared viewport, comparison regions, declared masks, thresholds, "
+            "and acceptance lanes). Host-side only; never touches Unity assets."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "projectRoot": {"type": "string"},
+                "referenceId": {
+                    "type": "string",
+                    "description": "Stable id such as flying-gift-available-v1."
+                },
+                "sourceImage": {
+                    "type": "string",
+                    "description": "Path to the supplied PNG reference. Copied verbatim; never resized or recompressed."
+                },
+                "viewport": {
+                    "type": "object",
+                    "description": "Declared capture viewport. Defaults to the reference image dimensions.",
+                    "properties": {
+                        "width": {"type": "integer"},
+                        "height": {"type": "integer"},
+                        "orientation": {"type": "string", "enum": ["portrait", "landscape", "square"]},
+                        "dpiPolicy": {"type": "string"}
+                    }
+                },
+                "safeArea": {"type": "string", "default": "full_screen"},
+                "fixture": {
+                    "type": "string",
+                    "description": "Canonical UI fixture id that must establish this state before capture."
+                },
+                "regions": {
+                    "type": "array",
+                    "items": {"type": "object"},
+                    "description": "Comparison regions [{id, rect:{x,y,width,height}, required, weight}]. Defaults to one full-screen region."
+                },
+                "dynamicMasks": {
+                    "type": "array",
+                    "items": {"type": "object"},
+                    "description": "Declared masks [{id, rect, reason}]. Undeclared dynamic content is a failure, not a mask."
+                },
+                "requiredUi": {
+                    "type": "array",
+                    "items": {"type": "object"},
+                    "description": "Semantic expectations [{selector, text, interactable}] for the later semantic lane."
+                },
+                "toleranceProfile": {
+                    "type": "string",
+                    "enum": ["strict", "balanced", "lenient"],
+                    "default": "balanced",
+                    "description": "How close counts as accepted. Acceptance is human-similarity on a resolution-independent grid, not pixel equality."
+                },
+                "scalePolicy": {
+                    "type": "string",
+                    "enum": ["aspect_scale", "strict", "stretch"],
+                    "default": "aspect_scale",
+                    "description": "aspect_scale accepts any Game View resolution with the reference aspect; strict demands identical pixel dimensions; stretch also allows a different aspect."
+                },
+                "thresholds": {
+                    "type": "object",
+                    "description": "Per-reference numeric overrides on top of the profile (cell_color_tolerance, cell_structure_tolerance, region_min_similarity, global_min_similarity, layout_offset_tolerance, layout_size_tolerance, comparison_grid_width, ...)."
+                },
+                "owner": {"type": "string", "enum": ["agent", "human"], "default": "agent"},
+                "acceptance": {
+                    "type": "object",
+                    "description": "Per-lane requirement: {visual, semantic, interaction} each required|optional|not_required."
+                },
+                "notes": {"type": "string"},
+                "category": {"type": "string", "default": "UIReference"},
+                "workspaceRoot": {"type": "string"},
+                "overwrite": {"type": "boolean", "default": False}
+            },
+            "required": ["projectRoot", "referenceId", "sourceImage"]
+        }
+    },
+    "unity_ui_reference_validate": {
+        "description": (
+            "Validate a registered ui-reference.v1 contract: schema, expected-image hash, viewport agreement, "
+            "region geometry, and mask policy. Reports why a reference is not usable before any capture is compared."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "projectRoot": {"type": "string"},
+                "referenceId": {"type": "string"},
+                "manifestPath": {"type": "string"},
+                "category": {"type": "string", "default": "UIReference"},
+                "workspaceRoot": {"type": "string"}
+            },
+            "required": ["projectRoot"]
+        }
+    },
+    "unity_ui_reference_compare": {
+        "description": (
+            "Compare a Game View capture against a registered UI reference and publish actual/overlay/diff/metrics "
+            "artifacts with per-region colour, structure, and layout scores plus an explicit reference_acceptance "
+            "verdict. Acceptance is tolerance-based human similarity on a resolution-independent grid, so a capture "
+            "at a different resolution than the reference is valid input; only an orientation or aspect mismatch "
+            "is refused as not comparable."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "projectRoot": {"type": "string"},
+                "referenceId": {"type": "string"},
+                "manifestPath": {"type": "string"},
+                "actualImage": {"type": "string", "description": "Path to the captured PNG under review."},
+                "stabilityImage": {
+                    "type": "string",
+                    "description": "Second capture of the same frozen fixture. Required before a passing verdict."
+                },
+                "requireCaptureStability": {"type": "boolean", "default": True},
+                "toleranceProfile": {
+                    "type": "string",
+                    "enum": ["strict", "balanced", "lenient"],
+                    "description": "Overrides the reference's tolerance profile for this comparison only."
+                },
+                "emitArtifacts": {"type": "boolean", "default": True},
+                "includeExpectedCopy": {"type": "boolean", "default": False},
+                "comparisonId": {"type": "string"},
+                "fixtureEvidence": {
+                    "type": "object",
+                    "description": "Optional fixture report {fixture, data_source, clock_frozen, locale, established}."
+                },
+                "category": {"type": "string", "default": "UIReference"},
+                "workspaceRoot": {"type": "string"}
+            },
+            "required": ["projectRoot", "actualImage"]
+        }
+    },
     "unity_package_install_test_framework": {
         "bridgeOperation": "unity.package.install_test_framework",
         "description": "Install or cautiously upgrade the optional Unity Test Framework package through Unity Package Manager after explicit approval.",

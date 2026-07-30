@@ -184,6 +184,9 @@ Implemented host-side MCP tools and helpers:
 - `unity_project_action_invoke`
 - `unity_artifact_register`
 - `unity_artifact_write_report`
+- `unity_ui_reference_register`
+- `unity_ui_reference_validate`
+- `unity_ui_reference_compare`
 - `unity_maintenance_prune`
 - `project-discovery-report`
 - `registry-context-report`

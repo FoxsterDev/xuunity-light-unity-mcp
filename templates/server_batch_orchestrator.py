@@ -239,6 +239,9 @@ from server_runtime_config import (
 from server_artifact_probe import load_artifact_probe_config, run_artifact_probe
 from server_artifact_registry import register_artifact, write_artifact_report
 from server_sdk_diff_guard import run_sdk_generated_diff_guard
+from server_ui_reference_compare import compare_ui_reference
+from server_ui_reference_manifest import DEFAULT_REFERENCE_CATEGORY as UI_REFERENCE_DEFAULT_CATEGORY
+from server_ui_reference_registry import register_ui_reference, validate_ui_reference
 
 # ProcessLauncher for self-invocation
 from server_process_launcher import ProcessLauncher
@@ -1851,6 +1854,24 @@ def _optional_string_list_arg(arguments: dict[str, Any], name: str) -> list[str]
     return list(value)
 
 
+def _optional_object_arg(arguments: dict[str, Any], name: str) -> dict[str, Any] | None:
+    value = arguments.get(name)
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        raise JsonRpcError(-32602, f"{name} must be an object when provided.")
+    return dict(value)
+
+
+def _optional_object_list_arg(arguments: dict[str, Any], name: str) -> list[dict[str, Any]] | None:
+    value = arguments.get(name)
+    if value is None:
+        return None
+    if not isinstance(value, list) or any(not isinstance(item, dict) for item in value):
+        raise JsonRpcError(-32602, f"{name} must be an array of objects when provided.")
+    return [dict(item) for item in value]
+
+
 def _optional_bool_arg(arguments: dict[str, Any], name: str, default: bool) -> bool:
     value = arguments.get(name, default)
     if not isinstance(value, bool):
@@ -2037,6 +2058,96 @@ def call_unity_sdk_generated_diff_guard_tool(arguments: dict[str, Any]) -> dict[
     return mcp_json_result(payload, is_error=payload.get("verdict") != "passed")
 
 
+def call_unity_ui_reference_register_tool(arguments: dict[str, Any]) -> dict[str, Any]:
+    project_root_value = arguments.get("projectRoot")
+    if not isinstance(project_root_value, str) or not project_root_value.strip():
+        raise JsonRpcError(-32602, "projectRoot is required.")
+
+    reference_id = arguments.get("referenceId")
+    if not isinstance(reference_id, str) or not reference_id.strip():
+        raise JsonRpcError(-32602, "referenceId is required.")
+
+    source_image = arguments.get("sourceImage")
+    if not isinstance(source_image, str) or not source_image.strip():
+        raise JsonRpcError(-32602, "sourceImage is required.")
+
+    try:
+        project_root = ensure_project_root(project_root_value)
+        payload = register_ui_reference(
+            project_root=project_root,
+            reference_id=reference_id,
+            source_image=source_image,
+            viewport=_optional_object_arg(arguments, "viewport"),
+            safe_area=_optional_string_arg(arguments, "safeArea") or "full_screen",
+            fixture=_optional_string_arg(arguments, "fixture"),
+            regions=_optional_object_list_arg(arguments, "regions"),
+            dynamic_masks=_optional_object_list_arg(arguments, "dynamicMasks"),
+            required_ui=_optional_object_list_arg(arguments, "requiredUi"),
+            thresholds=_optional_object_arg(arguments, "thresholds"),
+            tolerance_profile=_optional_string_arg(arguments, "toleranceProfile") or "balanced",
+            scale_policy=_optional_string_arg(arguments, "scalePolicy") or "aspect_scale",
+            owner=_optional_string_arg(arguments, "owner") or "agent",
+            acceptance=_optional_object_arg(arguments, "acceptance"),
+            notes=_optional_string_arg(arguments, "notes"),
+            category=_optional_string_arg(arguments, "category") or UI_REFERENCE_DEFAULT_CATEGORY,
+            workspace_root=_optional_string_arg(arguments, "workspaceRoot"),
+            overwrite=_optional_bool_arg(arguments, "overwrite", False),
+        )
+    except ToolInvocationError as exc:
+        return mcp_json_result(build_tool_error_payload(exc), is_error=True)
+    return mcp_json_result(payload)
+
+
+def call_unity_ui_reference_validate_tool(arguments: dict[str, Any]) -> dict[str, Any]:
+    project_root_value = arguments.get("projectRoot")
+    if not isinstance(project_root_value, str) or not project_root_value.strip():
+        raise JsonRpcError(-32602, "projectRoot is required.")
+
+    try:
+        project_root = ensure_project_root(project_root_value)
+        payload = validate_ui_reference(
+            project_root=project_root,
+            reference_id=_optional_string_arg(arguments, "referenceId"),
+            manifest_path=_optional_string_arg(arguments, "manifestPath"),
+            category=_optional_string_arg(arguments, "category") or UI_REFERENCE_DEFAULT_CATEGORY,
+            workspace_root=_optional_string_arg(arguments, "workspaceRoot"),
+        )
+    except ToolInvocationError as exc:
+        return mcp_json_result(build_tool_error_payload(exc), is_error=True)
+    return mcp_json_result(payload, is_error=not bool((payload.get("validation") or {}).get("valid")))
+
+
+def call_unity_ui_reference_compare_tool(arguments: dict[str, Any]) -> dict[str, Any]:
+    project_root_value = arguments.get("projectRoot")
+    if not isinstance(project_root_value, str) or not project_root_value.strip():
+        raise JsonRpcError(-32602, "projectRoot is required.")
+
+    actual_image = arguments.get("actualImage")
+    if not isinstance(actual_image, str) or not actual_image.strip():
+        raise JsonRpcError(-32602, "actualImage is required.")
+
+    try:
+        project_root = ensure_project_root(project_root_value)
+        payload = compare_ui_reference(
+            project_root=project_root,
+            actual_image=actual_image,
+            reference_id=_optional_string_arg(arguments, "referenceId"),
+            manifest_path=_optional_string_arg(arguments, "manifestPath"),
+            stability_image=_optional_string_arg(arguments, "stabilityImage"),
+            require_capture_stability=_optional_bool_arg(arguments, "requireCaptureStability", True),
+            emit_artifacts=_optional_bool_arg(arguments, "emitArtifacts", True),
+            include_expected_copy=_optional_bool_arg(arguments, "includeExpectedCopy", False),
+            comparison_id=_optional_string_arg(arguments, "comparisonId"),
+            fixture_evidence=_optional_object_arg(arguments, "fixtureEvidence"),
+            tolerance_profile=_optional_string_arg(arguments, "toleranceProfile"),
+            category=_optional_string_arg(arguments, "category") or UI_REFERENCE_DEFAULT_CATEGORY,
+            workspace_root=_optional_string_arg(arguments, "workspaceRoot"),
+        )
+    except ToolInvocationError as exc:
+        return mcp_json_result(build_tool_error_payload(exc), is_error=True)
+    return mcp_json_result(payload, is_error=payload.get("reference_acceptance") != "passed")
+
+
 def call_unity_artifact_register_tool(arguments: dict[str, Any]) -> dict[str, Any]:
     project_root_value = arguments.get("projectRoot")
     if not isinstance(project_root_value, str) or not project_root_value.strip():
@@ -2212,6 +2323,9 @@ def call_tool(name: str, arguments: dict[str, Any] | None) -> dict[str, Any]:
             "unity_sdk_generated_diff_guard": call_unity_sdk_generated_diff_guard_tool,
             "unity_artifact_register": call_unity_artifact_register_tool,
             "unity_artifact_write_report": call_unity_artifact_write_report_tool,
+            "unity_ui_reference_register": call_unity_ui_reference_register_tool,
+            "unity_ui_reference_validate": call_unity_ui_reference_validate_tool,
+            "unity_ui_reference_compare": call_unity_ui_reference_compare_tool,
         },
         tool_invocation_error_type=ToolInvocationError,
         ensure_project_root=ensure_project_root,
@@ -2558,5 +2672,8 @@ wrap_globals_with_proxies(globals(), [
     "call_unity_project_action_invoke_tool",
     "call_unity_artifact_register_tool",
     "call_unity_artifact_write_report_tool",
+    "call_unity_ui_reference_register_tool",
+    "call_unity_ui_reference_validate_tool",
+    "call_unity_ui_reference_compare_tool",
 ])
 time = TimeProxy()

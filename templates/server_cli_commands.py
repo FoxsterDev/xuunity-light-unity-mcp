@@ -319,6 +319,9 @@ from server_cli_project_commands import (
     cmd_request_scenario_run,
     cmd_request_scenario_run_and_wait,
     cmd_request_scenario_validate,
+    cmd_ui_reference_compare,
+    cmd_ui_reference_register,
+    cmd_ui_reference_validate,
 )
 from server_cli_sdk_commands import (
     cmd_sdk_generated_diff_guard,
@@ -1239,4 +1242,7 @@ wrap_globals_with_proxies(globals(), [
     "call_unity_project_action_invoke_tool",
     "call_unity_artifact_register_tool",
     "call_unity_artifact_write_report_tool",
+    "call_unity_ui_reference_register_tool",
+    "call_unity_ui_reference_validate_tool",
+    "call_unity_ui_reference_compare_tool",
 ])

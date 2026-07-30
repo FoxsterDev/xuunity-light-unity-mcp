@@ -95,6 +95,9 @@ Use these MCP tools from compatible clients:
 - `unity_project_action_invoke`
 - `unity_artifact_register`
 - `unity_artifact_write_report`
+- `unity_ui_reference_register`
+- `unity_ui_reference_validate`
+- `unity_ui_reference_compare`
 - `unity_edm4u_resolve`
 - `unity_sdk_android_resolve`
 - `unity_sdk_dependency_verify`

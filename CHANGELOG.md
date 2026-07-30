@@ -2,6 +2,28 @@
 
 ## Unreleased
 
+### Added
+
+- Added the reference-driven UI acceptance surface: `unity_ui_reference_register`,
+  `unity_ui_reference_validate`, `unity_ui_reference_compare`, and the matching
+  `ui-reference-register` / `ui-reference-validate` / `ui-reference-compare` host
+  commands. A supplied design PNG becomes a hash-pinned `xuunity.ui-reference.v1`
+  contract with declared viewport, comparison regions, reviewable masks, tolerance
+  profile, and per-lane acceptance requirements.
+- UI comparison is tolerance-based similarity on a resolution-independent cell grid
+  (exact box average, local contrast, and per-region layout bounding boxes) rather
+  than pixel equality, so a Game View capture whose resolution differs from the
+  reference is valid input. `strict`, `balanced`, and `lenient` profiles plus
+  per-reference numeric overrides control how close counts as accepted. Orientation
+  or aspect mismatch is refused as `comparison_not_comparable` with recommended
+  same-aspect capture resolutions and no score.
+- Comparisons publish `actual.png`, `overlay.png`, `diff.png`, `metrics.json`, and
+  `verdict.json`, and return `reference_acceptance` of `passed`, `failed`, `blocked`,
+  `pending_lanes`, or `pending_manual_style` with a separate `decision_ready` flag.
+  A passing verdict requires proven capture stability, and required semantic or
+  interaction lanes that no tool can yet evaluate keep the reference pending instead
+  of reporting acceptance.
+
 ## 0.3.48
 
 Release tag: `v0.3.48`

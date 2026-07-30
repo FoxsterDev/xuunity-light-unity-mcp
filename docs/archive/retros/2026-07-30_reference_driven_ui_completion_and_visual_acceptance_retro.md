@@ -2,7 +2,15 @@
 
 Date: `2026-07-30`
 
-Status: `active public retro — P0 reference-to-render acceptance loop is absent`
+Status: `active public retro — P0.1 shipped 2026-07-30; fixture, semantic, and render slices remain`
+
+Implementation: [`XUUNITY_MCP_REFERENCE_DRIVEN_UI_ACCEPTANCE_DESIGN_2026-07-30.md`](../../architecture/designs/XUUNITY_MCP_REFERENCE_DRIVEN_UI_ACCEPTANCE_DESIGN_2026-07-30.md)
+carries the delivered P0.1 slice (reference contract + comparator) and the remaining
+delivery order. One correction to this retro's framing: acceptance is deliberately
+**not** pixel equality. The Game View resolution in Play mode is switchable and will
+differ from a supplied reference, so the comparator scores human-visible similarity —
+colour, detail, placement, size — on a resolution-independent grid with configurable
+tolerance profiles.
 
 Scope: `Operations/XUUnityLightUnityMcp`; public-safe lessons from a Unity
 feature session that began from supplied mobile UI reference screenshots and

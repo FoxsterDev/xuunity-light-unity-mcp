@@ -353,6 +353,66 @@ def build_parser() -> argparse.ArgumentParser:
     artifact_write_report_cmd.add_argument("--allow-unity-assets", action="store_true")
     artifact_write_report_cmd.set_defaults(func_name="cmd_artifact_write_report")
 
+    ui_reference_register_cmd = sub.add_parser(
+        "ui-reference-register",
+        help="Register a supplied UI design reference image as a ui-reference.v1 acceptance contract.",
+    )
+    ui_reference_register_cmd.add_argument("--project-root", required=True)
+    ui_reference_register_cmd.add_argument("--reference-id", required=True)
+    ui_reference_register_cmd.add_argument("--source-image", required=True)
+    ui_reference_register_cmd.add_argument("--viewport-json", default="")
+    ui_reference_register_cmd.add_argument("--safe-area", default="full_screen")
+    ui_reference_register_cmd.add_argument("--fixture", default="")
+    ui_reference_register_cmd.add_argument("--regions-json", default="")
+    ui_reference_register_cmd.add_argument("--dynamic-masks-json", default="")
+    ui_reference_register_cmd.add_argument("--required-ui-json", default="")
+    ui_reference_register_cmd.add_argument("--thresholds-json", default="")
+    ui_reference_register_cmd.add_argument(
+        "--tolerance-profile", default="balanced", choices=["strict", "balanced", "lenient"]
+    )
+    ui_reference_register_cmd.add_argument(
+        "--scale-policy", default="aspect_scale", choices=["aspect_scale", "strict", "stretch"]
+    )
+    ui_reference_register_cmd.add_argument("--owner", default="agent")
+    ui_reference_register_cmd.add_argument("--acceptance-json", default="")
+    ui_reference_register_cmd.add_argument("--notes", default="")
+    ui_reference_register_cmd.add_argument("--category", default="UIReference")
+    ui_reference_register_cmd.add_argument("--workspace-root", default="")
+    ui_reference_register_cmd.add_argument("--overwrite", action="store_true")
+    ui_reference_register_cmd.set_defaults(func_name="cmd_ui_reference_register")
+
+    ui_reference_validate_cmd = sub.add_parser(
+        "ui-reference-validate",
+        help="Validate a registered ui-reference.v1 contract before any capture is compared against it.",
+    )
+    ui_reference_validate_cmd.add_argument("--project-root", required=True)
+    ui_reference_validate_cmd.add_argument("--reference-id", default="")
+    ui_reference_validate_cmd.add_argument("--manifest-path", default="")
+    ui_reference_validate_cmd.add_argument("--category", default="UIReference")
+    ui_reference_validate_cmd.add_argument("--workspace-root", default="")
+    ui_reference_validate_cmd.set_defaults(func_name="cmd_ui_reference_validate")
+
+    ui_reference_compare_cmd = sub.add_parser(
+        "ui-reference-compare",
+        help="Compare a capture against a registered UI reference and publish an acceptance verdict with artifacts.",
+    )
+    ui_reference_compare_cmd.add_argument("--project-root", required=True)
+    ui_reference_compare_cmd.add_argument("--reference-id", default="")
+    ui_reference_compare_cmd.add_argument("--manifest-path", default="")
+    ui_reference_compare_cmd.add_argument("--actual-image", required=True)
+    ui_reference_compare_cmd.add_argument("--stability-image", default="")
+    ui_reference_compare_cmd.add_argument("--no-require-capture-stability", action="store_true")
+    ui_reference_compare_cmd.add_argument("--no-artifacts", action="store_true")
+    ui_reference_compare_cmd.add_argument("--include-expected-copy", action="store_true")
+    ui_reference_compare_cmd.add_argument("--comparison-id", default="")
+    ui_reference_compare_cmd.add_argument(
+        "--tolerance-profile", default="", choices=["", "strict", "balanced", "lenient"]
+    )
+    ui_reference_compare_cmd.add_argument("--fixture-evidence-json", default="")
+    ui_reference_compare_cmd.add_argument("--category", default="UIReference")
+    ui_reference_compare_cmd.add_argument("--workspace-root", default="")
+    ui_reference_compare_cmd.set_defaults(func_name="cmd_ui_reference_compare")
+
     install_tf_bridge_cmd = sub.add_parser(
         "request-install-test-framework",
         help="Install optional com.unity.test-framework through Unity Package Manager on a healthy bridge after explicit approval.",

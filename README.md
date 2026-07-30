@@ -796,6 +796,8 @@ Popular MCP tools:
 `unity_request_final_status` | `unity_project_refresh` |
 `unity_project_action_list` | `unity_project_action_invoke` |
 `unity_artifact_register` | `unity_artifact_write_report` |
+`unity_ui_reference_register` | `unity_ui_reference_validate` |
+`unity_ui_reference_compare` |
 `unity_package_install_test_framework` | `unity_edm4u_resolve` |
 `unity_sdk_dependency_verify`
 

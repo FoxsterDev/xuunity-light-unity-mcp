@@ -121,7 +121,7 @@
       "request-scenario-run-and-wait",
       "batch-compile"
     ],
-    "root_command_count": 68,
+    "root_command_count": 71,
     "root_commands": [
       "setup-plan",
       "setup-apply",
@@ -157,6 +157,9 @@
       "project-hook-scaffold",
       "artifact-register",
       "artifact-write-report",
+      "ui-reference-register",
+      "ui-reference-validate",
+      "ui-reference-compare",
       "request-install-test-framework",
       "request-edm4u-resolve",
       "request-sdk-android-resolve",
@@ -194,8 +197,8 @@
     ]
   },
   "mcp_tools_list": {
-    "sha256": "c2a8d96fd750200e6ea5735d25f0f546c969cc2bb7d2ee2208b80b7f0580ced0",
-    "tool_count": 47,
+    "sha256": "ff1e5e8fc7263f912b67d3167b95d4f65232282af709dc0beaa6f76572f75279",
+    "tool_count": 50,
     "tool_names": [
       "xuunity_setup_plan",
       "xuunity_setup_apply",
@@ -215,6 +218,9 @@
       "unity_project_action_invoke",
       "unity_artifact_register",
       "unity_artifact_write_report",
+      "unity_ui_reference_register",
+      "unity_ui_reference_validate",
+      "unity_ui_reference_compare",
       "unity_package_install_test_framework",
       "unity_edm4u_resolve",
       "unity_sdk_android_resolve",

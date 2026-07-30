@@ -94,6 +94,9 @@ Unity MCP implementations when the user wants safe production validation.
 | Project actions | `unity_project_action_invoke` | `Project-dependent` | Invokes a typed project action by compiling it to a one-step Unity scenario and enforcing mutation approval. |
 | Artifacts | `unity_artifact_register` | `Supported` | Registers artifact metadata in the project MCP artifact registry without invoking Unity. |
 | Artifacts | `unity_artifact_write_report` | `Supported` | Writes a text report to an approved project output root and registers it. |
+| UI reference | `unity_ui_reference_register` | `Supported` | Registers a supplied design reference as a `ui-reference.v1` acceptance contract with viewport, regions, declared masks, tolerance profile, and acceptance lanes. |
+| UI reference | `unity_ui_reference_validate` | `Supported` | Validates a registered reference (schema, expected-image hash, viewport agreement, region geometry, mask policy) and reports same-aspect capture resolutions. |
+| UI reference | `unity_ui_reference_compare` | `Supported` | Compares a Game View capture against a reference on a resolution-independent similarity grid and publishes actual/overlay/diff/metrics artifacts with a `reference_acceptance` verdict. |
 | Maintenance | `unity_maintenance_prune` | `Supported` | Prunes stale request, scenario, capture, and optional log artifacts. |
 
 ## Host-Side Helper Commands
