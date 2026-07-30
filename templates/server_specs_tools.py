@@ -473,14 +473,351 @@ TOOLS: dict[str, dict[str, Any]] = {
                 "emitArtifacts": {"type": "boolean", "default": True},
                 "includeExpectedCopy": {"type": "boolean", "default": False},
                 "comparisonId": {"type": "string"},
+                "fixtureResultPath": {
+                    "type": "string",
+                    "description": "Scenario result JSON whose project hook reported a ui-fixture.v1 block. Preferred over fixtureEvidence: it is a receipt the editor wrote, not a caller assertion."
+                },
                 "fixtureEvidence": {
                     "type": "object",
-                    "description": "Optional fixture report {fixture, data_source, clock_frozen, locale, established}."
+                    "description": "Caller-asserted ui-fixture.v1 block. Accepted, but never proves visual determinism; use fixtureResultPath for decision-ready evidence."
+                },
+                "uiSnapshotPath": {
+                    "type": "string",
+                    "description": "A ui.read.v1 snapshot (from unity_ui_tree_snapshot or unity_prefab_render). Failed regions are mapped to the nodes whose bounds cover them, and declared requiredUi selectors are checked as the semantic lane."
+                },
+                "captureLane": {
+                    "type": "string",
+                    "enum": ["game_view", "device"],
+                    "default": "game_view",
+                    "description": "Which acceptance lane this capture belongs to. Game View parity is never reported as device parity."
+                },
+                "device": {
+                    "type": "object",
+                    "description": "Required for captureLane=device: {model, os, osVersion, resolution:{width,height}, orientation, safeArea:{top,bottom,left,right}, buildRevision}."
                 },
                 "category": {"type": "string", "default": "UIReference"},
                 "workspaceRoot": {"type": "string"}
             },
             "required": ["projectRoot", "actualImage"]
+        }
+    },
+    "unity_ui_fixture_validate": {
+        "description": (
+            "Validate a ui-fixture.v1 readiness report from a scenario result or an inline block: fixture and "
+            "state id, frozen clock, pinned locale, data source, resolved viewport/safe-area, and ready-predicate "
+            "evidence. Live or mixed data without a recorded payload hash is downgraded to "
+            "visual_determinism=unproven. Returns the contract itself when no evidence is supplied."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "projectRoot": {"type": "string"},
+                "fixtureResultPath": {
+                    "type": "string",
+                    "description": "Scenario result JSON whose project hook reported a ui_fixture block."
+                },
+                "fixtureEvidence": {
+                    "type": "object",
+                    "description": "Inline ui-fixture.v1 block, for authoring a project hook before wiring a scenario."
+                },
+                "declaredFixture": {
+                    "type": "string",
+                    "description": "Fixture id the reference declares, to detect a capture taken under a different fixture."
+                },
+                "declaredViewport": {
+                    "type": "object",
+                    "description": "Reference viewport {width, height} to detect a fixture resolved at another size."
+                },
+                "workspaceRoot": {"type": "string"}
+            },
+            "required": ["projectRoot"]
+        }
+    },
+    "unity_prefab_snapshot": {
+        "bridgeOperation": "unity.prefab.snapshot",
+        "description": (
+            "Read a prefab asset's hierarchy as normalized ui.read.v1 nodes (path, active state, components, "
+            "canvas context, and component detail where a uGUI/TMP reader is available). Read-only; the prefab "
+            "asset is never opened for editing."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "projectRoot": {"type": "string"},
+                "prefabPath": {
+                    "type": "string",
+                    "description": "Project-relative prefab path such as Assets/UI/Popup.prefab."
+                },
+                "maxDepth": {"type": "integer", "default": 12, "minimum": 1},
+                "maxNodes": {"type": "integer", "default": 500, "minimum": 1},
+                "includeInactive": {"type": "boolean", "default": True},
+                "includeBounds": {
+                    "type": "boolean",
+                    "default": False,
+                    "description": "Prefab assets are not in a Canvas, so bounds are layout-local, not screen pixels."
+                },
+                "includeText": {"type": "boolean", "default": True},
+                "timeoutMs": {"type": "integer", "default": 30000, "minimum": 1000}
+            },
+            "required": ["projectRoot", "prefabPath"]
+        }
+    },
+    "unity_prefab_validate": {
+        "bridgeOperation": "unity.prefab.validate",
+        "description": (
+            "Validate a prefab before PlayMode and report typed defects: missing_script_guid, "
+            "serialized_reference_missing_component, serialized_reference_type_mismatch, missing_prefab_instance, "
+            "and optionally serialized_reference_unassigned. Lanes that need an absent backend are reported as "
+            "not evaluated rather than silently passing."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "projectRoot": {"type": "string"},
+                "prefabPath": {"type": "string"},
+                "reportUnassignedReferences": {
+                    "type": "boolean",
+                    "default": False,
+                    "description": "Also report empty serialized references as info-level findings."
+                },
+                "timeoutMs": {"type": "integer", "default": 30000, "minimum": 1000}
+            },
+            "required": ["projectRoot", "prefabPath"]
+        }
+    },
+    "unity_prefab_render": {
+        "bridgeOperation": "unity.prefab.render",
+        "description": (
+            "Render a prefab in an isolated preview scene under a controlled Canvas at the declared viewport and "
+            "safe area, without booting the application. Returns both the PNG and the ui.read.v1 snapshot it "
+            "rendered, so the capture can go straight into unity_ui_reference_compare with uiSnapshotPath. "
+            "Non-persistent: the preview scene is closed and no open scene is modified. Requires com.unity.ugui."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "projectRoot": {"type": "string"},
+                "prefabPath": {"type": "string"},
+                "width": {"type": "integer", "minimum": 1, "description": "Reference viewport width in pixels."},
+                "height": {"type": "integer", "minimum": 1, "description": "Reference viewport height in pixels."},
+                "safeAreaTop": {"type": "integer", "default": 0},
+                "safeAreaBottom": {"type": "integer", "default": 0},
+                "safeAreaLeft": {"type": "integer", "default": 0},
+                "safeAreaRight": {"type": "integer", "default": 0},
+                "outputPath": {"type": "string", "description": "Defaults to the project's MCP captures directory."},
+                "backgroundColor": {"type": "string", "default": "#00000000"},
+                "referenceWidth": {"type": "integer", "description": "Adds a CanvasScaler with this reference resolution."},
+                "referenceHeight": {"type": "integer"},
+                "scalerMatch": {"type": "number", "default": 0.5},
+                "antiAliasing": {"type": "integer", "enum": [1, 2, 4, 8], "default": 1},
+                "includeSnapshot": {"type": "boolean", "default": True},
+                "includeInactive": {"type": "boolean", "default": False},
+                "maxDepth": {"type": "integer", "default": 12, "minimum": 1},
+                "maxNodes": {"type": "integer", "default": 500, "minimum": 1},
+                "timeoutMs": {"type": "integer", "default": 60000, "minimum": 1000}
+            },
+            "required": ["projectRoot", "prefabPath", "width", "height"]
+        }
+    },
+    "unity_prefab_mutate": {
+        "bridgeOperation": "unity.prefab.mutate",
+        "description": (
+            "Apply a typed, atomic prefab transaction through the Editor API - never raw YAML. Supported ops: "
+            "set_serialized_field, set_rect_transform, set_canvas_group, set_active, delete_child, "
+            "create_child_from_template, add_component, remove_component. Previews by default; approve plus "
+            "previewOnly=false is required to write. Any failing operation or failed post-validation discards the "
+            "whole batch, and object-reference fields are out of scope so a component can never be swapped for "
+            "another type."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "projectRoot": {"type": "string"},
+                "prefabPath": {"type": "string"},
+                "operations": {
+                    "type": "array",
+                    "items": {"type": "object"},
+                    "description": "Typed operations [{op, path, componentType, propertyPath, stringValue|numberValue|boolValue|x,y,z,w, templatePath, childName}]."
+                },
+                "previewOnly": {"type": "boolean", "default": True},
+                "approve": {
+                    "type": "boolean",
+                    "default": False,
+                    "description": "Must be true, together with previewOnly=false, before the prefab asset is written."
+                },
+                "expectedSha256": {
+                    "type": "string",
+                    "description": "Optional precondition: refuse if the prefab file changed since it was inspected."
+                },
+                "allowedComponentTypes": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Extra component types this transaction may add or remove, on top of the built-in layout allowlist."
+                },
+                "timeoutMs": {"type": "integer", "default": 60000, "minimum": 1000}
+            },
+            "required": ["projectRoot", "prefabPath", "operations"]
+        }
+    },
+    "unity_ui_click": {
+        "bridgeOperation": "unity.ui.click",
+        "description": (
+            "Deliver one guarded semantic click to a unique selector through the EventSystem - never a coordinate "
+            "click or OS automation. Refuses ambiguous, hidden, non-interactable, raycast-transparent, and "
+            "handler-less targets, and records the matched node, delivery mechanism, and before/after snapshot "
+            "signatures. Requires explicit approve=true and action='click'. Requires com.unity.ugui."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "projectRoot": {"type": "string"},
+                "selector": {"type": "object"},
+                "action": {"type": "string", "enum": ["click"], "default": "click"},
+                "approve": {"type": "boolean", "default": False},
+                "targetKind": {
+                    "type": "string",
+                    "enum": ["active_scene", "game_object_path", "game_object_name"],
+                    "default": "active_scene"
+                },
+                "targetValue": {"type": "string"},
+                "maxDepth": {"type": "integer", "default": 12, "minimum": 1},
+                "maxNodes": {"type": "integer", "default": 500, "minimum": 1},
+                "timeoutMs": {"type": "integer", "default": 30000, "minimum": 1000}
+            },
+            "required": ["projectRoot", "selector", "approve"]
+        }
+    },
+    "unity_ui_tree_snapshot": {
+        "bridgeOperation": "unity.ui.tree_snapshot",
+        "description": (
+            "Snapshot the live uGUI hierarchy of the active scene or a named subtree as ui.read.v1 nodes: "
+            "stable-within-snapshot path, active state, components, effective CanvasGroup alpha, raycast blocking, "
+            "canvas sort order, screen-space bounds, and text/font/material where a reader is available. "
+            "Read-only and never OCR-derived; reports proof_class and truncation explicitly."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "projectRoot": {"type": "string"},
+                "targetKind": {
+                    "type": "string",
+                    "enum": ["active_scene", "game_object_path", "game_object_name"],
+                    "default": "active_scene"
+                },
+                "targetValue": {"type": "string"},
+                "maxDepth": {"type": "integer", "default": 12, "minimum": 1},
+                "maxNodes": {"type": "integer", "default": 500, "minimum": 1},
+                "includeInactive": {"type": "boolean", "default": False},
+                "includeBounds": {"type": "boolean", "default": True},
+                "includeText": {"type": "boolean", "default": True},
+                "timeoutMs": {"type": "integer", "default": 30000, "minimum": 1000}
+            },
+            "required": ["projectRoot"]
+        }
+    },
+    "unity_ui_query": {
+        "bridgeOperation": "unity.ui.query",
+        "description": (
+            "Return the uGUI nodes matching a selector. Selector fields combine with AND: name, type, path, "
+            "pathContains, textEquals, textContains, requireVisible, requireInteractable. Ambiguity is reported, "
+            "never hidden."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "projectRoot": {"type": "string"},
+                "targetKind": {
+                    "type": "string",
+                    "enum": ["active_scene", "game_object_path", "game_object_name"],
+                    "default": "active_scene"
+                },
+                "targetValue": {"type": "string"},
+                "selector": {"type": "object"},
+                "maxDepth": {"type": "integer", "default": 12, "minimum": 1},
+                "maxNodes": {"type": "integer", "default": 500, "minimum": 1},
+                "maxMatches": {"type": "integer", "default": 20, "minimum": 1},
+                "includeInactive": {"type": "boolean", "default": False},
+                "timeoutMs": {"type": "integer", "default": 30000, "minimum": 1000}
+            },
+            "required": ["projectRoot", "selector"]
+        }
+    },
+    "unity_ui_exists": {
+        "bridgeOperation": "unity.ui.exists",
+        "description": (
+            "Existence check over the same selector model as unity_ui_query. Reports match_count and ambiguity "
+            "even when the answer is true. Never answers from a screenshot."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "projectRoot": {"type": "string"},
+                "targetKind": {
+                    "type": "string",
+                    "enum": ["active_scene", "game_object_path", "game_object_name"],
+                    "default": "active_scene"
+                },
+                "targetValue": {"type": "string"},
+                "selector": {"type": "object"},
+                "includeInactive": {"type": "boolean", "default": False},
+                "maxDepth": {"type": "integer", "default": 12, "minimum": 1},
+                "maxNodes": {"type": "integer", "default": 500, "minimum": 1},
+                "timeoutMs": {"type": "integer", "default": 30000, "minimum": 1000}
+            },
+            "required": ["projectRoot", "selector"]
+        }
+    },
+    "unity_ui_get_text": {
+        "bridgeOperation": "unity.ui.get_text",
+        "description": (
+            "Return the semantic text of the single node a selector matches. Zero matches fail as ui_node_not_found, "
+            "several fail as selector_ambiguous unless allowMany is set, and a node without text fails as "
+            "ui_text_unavailable. An empty string is valid text and is distinguished from missing text."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "projectRoot": {"type": "string"},
+                "targetKind": {
+                    "type": "string",
+                    "enum": ["active_scene", "game_object_path", "game_object_name"],
+                    "default": "active_scene"
+                },
+                "targetValue": {"type": "string"},
+                "selector": {"type": "object"},
+                "allowMany": {"type": "boolean", "default": False},
+                "includeInactive": {"type": "boolean", "default": False},
+                "maxDepth": {"type": "integer", "default": 12, "minimum": 1},
+                "maxNodes": {"type": "integer", "default": 500, "minimum": 1},
+                "timeoutMs": {"type": "integer", "default": 30000, "minimum": 1000}
+            },
+            "required": ["projectRoot", "selector"]
+        }
+    },
+    "unity_ui_get_bounds": {
+        "bridgeOperation": "unity.ui.get_bounds",
+        "description": (
+            "Return the screen-space bounds of the single node a selector matches, so a failed reference-comparison "
+            "region can be tied to a concrete rect. A node without a RectTransform fails as ui_bounds_unavailable."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "projectRoot": {"type": "string"},
+                "targetKind": {
+                    "type": "string",
+                    "enum": ["active_scene", "game_object_path", "game_object_name"],
+                    "default": "active_scene"
+                },
+                "targetValue": {"type": "string"},
+                "selector": {"type": "object"},
+                "allowMany": {"type": "boolean", "default": False},
+                "includeInactive": {"type": "boolean", "default": False},
+                "maxDepth": {"type": "integer", "default": 12, "minimum": 1},
+                "maxNodes": {"type": "integer", "default": 500, "minimum": 1},
+                "timeoutMs": {"type": "integer", "default": 30000, "minimum": 1000}
+            },
+            "required": ["projectRoot", "selector"]
         }
     },
     "unity_package_install_test_framework": {

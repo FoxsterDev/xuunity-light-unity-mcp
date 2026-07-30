@@ -16,11 +16,29 @@ import server
 import server_batch_orchestrator
 import server_ui_reference_png as png
 from server_core import ToolInvocationError
+from server_summary_scenario import build_project_defined_hook_summary
+from server_ui_fixture import UI_FIXTURE_SCHEMA_VERSION, validate_ui_fixture
 from server_ui_reference_compare import compare_ui_reference
 from server_ui_reference_manifest import Rect, UI_REFERENCE_SCHEMA_VERSION, union_area
 from server_ui_reference_registry import register_ui_reference, validate_ui_reference
 
 VISUAL_ONLY_ACCEPTANCE = {"visual": "required", "semantic": "not_required", "interaction": "not_required"}
+
+
+def fixture_block(**overrides) -> dict:
+    block = {
+        "schema_version": UI_FIXTURE_SCHEMA_VERSION,
+        "fixture_id": "popup.available",
+        "state_id": "available_with_timer",
+        "data_source": "fixture",
+        "clock": {"frozen": True, "value_utc": "2026-01-01T00:00:00Z"},
+        "locale": {"id": "en", "pinned": True},
+        "viewport": {"width": 240, "height": 480},
+        "safe_area": "full_screen",
+        "ready": {"predicate": "popup_visible_and_idle", "satisfied": True, "waited_ms": 120, "timeout_ms": 5000},
+    }
+    block.update(overrides)
+    return block
 
 
 def solid_image(width: int, height: int, color: tuple[int, int, int, int]) -> png.RgbaImage:
@@ -193,6 +211,37 @@ class UiReferenceTestCase(unittest.TestCase):
 
     def stability_capture(self, image: png.RgbaImage, name: str = "stability") -> str:
         return str(write_image(self.captures / f"{name}.png", image))
+
+    def scenario_result(
+        self,
+        fixture: dict | None,
+        *,
+        name: str = "scenario-result",
+        step_status: str = "passed",
+        run_id: str = "run-1",
+    ) -> str:
+        payload_json = json.dumps({"outcome": "fixture_established", **({"ui_fixture": fixture} if fixture else {})})
+        path = self.captures / f"{name}.json"
+        path.write_text(
+            json.dumps(
+                {
+                    "run_id": run_id,
+                    "scenario_name": "establish_popup_available",
+                    "status": "passed",
+                    "steps": [
+                        {
+                            "stepId": "establish_fixture",
+                            "kind": "project_defined_hook",
+                            "hookName": "example.ui.fixture",
+                            "status": step_status,
+                            "payload_json": payload_json,
+                        }
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        return str(path)
 
 
 class PngCodecTest(UiReferenceTestCase):
@@ -576,21 +625,30 @@ class ComparisonVerdictTest(UiReferenceTestCase):
         stability = self.stability_capture(expected)
         without_evidence = self.compare(expected, stability_image=stability)
         self.assertFalse(without_evidence["decision_ready"])
-        self.assertIn("fixture_establishment_unreported", without_evidence["decision_readiness_gaps"])
+        self.assertIn("fixture_evidence_absent", without_evidence["decision_readiness_gaps"])
+        self.assertEqual("not_reported", without_evidence["visual_determinism"])
 
-        with_evidence = self.compare(
+        caller_asserted = self.compare(
             expected,
             stability_image=stability,
-            fixture_evidence={
-                "fixture": "popup.available",
-                "data_source": "fixture",
-                "clock_frozen": True,
-                "established": True,
-            },
-            comparison_id="with-fixture",
+            fixture_evidence=fixture_block(),
+            comparison_id="caller-asserted",
         )
-        self.assertTrue(with_evidence["decision_ready"])
-        self.assertEqual([], with_evidence["decision_readiness_gaps"])
+        self.assertFalse(caller_asserted["decision_ready"])
+        self.assertIn("fixture_evidence_not_receipt_backed", caller_asserted["decision_readiness_gaps"])
+        self.assertEqual("unproven", caller_asserted["visual_determinism"])
+
+        receipt_backed = self.compare(
+            expected,
+            stability_image=stability,
+            fixture_result_path=self.scenario_result(fixture_block()),
+            comparison_id="receipt-backed",
+        )
+        self.assertTrue(receipt_backed["decision_ready"])
+        self.assertEqual([], receipt_backed["decision_readiness_gaps"])
+        self.assertEqual("proven", receipt_backed["visual_determinism"])
+        self.assertEqual("scenario_result", receipt_backed["fixture"]["evidence_source"])
+        self.assertEqual("run-1", receipt_backed["fixture"]["receipt"]["run_id"])
 
     def test_required_semantic_lane_keeps_a_visual_pass_pending(self) -> None:
         expected, _ = self.build_reference(
@@ -767,6 +825,197 @@ class McpToolSurfaceTest(UiReferenceTestCase):
         )
         self.assertTrue(missing["is_error"])
         self.assertEqual("ui_reference_not_registered", missing["payload"]["error"]["code"])
+
+
+class UiFixtureContractTest(UiReferenceTestCase):
+    def validate(self, **overrides) -> dict:
+        payload = {
+            "project_root": self.project_root,
+            "workspace": self.workspace,
+        }
+        payload.update(overrides)
+        return validate_ui_fixture(**payload)
+
+    def test_receipt_backed_fixture_proves_visual_determinism(self) -> None:
+        result = self.validate(fixture_result_path=self.scenario_result(fixture_block()))
+
+        self.assertTrue(result["succeeded"])
+        self.assertEqual("proven", result["visual_determinism"])
+        self.assertTrue(result["established"])
+        self.assertEqual([], result["fixture"]["determinism_gaps"])
+        receipt = result["fixture"]["receipt"]
+        self.assertEqual("establish_fixture", receipt["step_id"])
+        self.assertEqual("example.ui.fixture", receipt["hook_name"])
+        self.assertEqual(64, len(receipt["sha256"]))
+
+    def test_caller_asserted_evidence_is_never_receipt_backed(self) -> None:
+        result = self.validate(fixture_evidence=fixture_block())
+
+        self.assertFalse(result["succeeded"])
+        self.assertEqual("unproven", result["visual_determinism"])
+        self.assertTrue(result["established"])
+        self.assertEqual(["evidence_not_receipt_backed"], result["fixture"]["determinism_gaps"])
+        self.assertIn("fixtureResultPath", " ".join(result["next_actions"]))
+
+    def test_absent_evidence_reports_the_contract_instead_of_a_verdict(self) -> None:
+        for supplied in (None, {}):
+            with self.subTest(supplied=supplied):
+                result = self.validate(fixture_evidence=supplied)
+                self.assertEqual("not_reported", result["visual_determinism"])
+                self.assertEqual("absent", result["fixture"]["proof_status"])
+                self.assertEqual(UI_FIXTURE_SCHEMA_VERSION, result["contract"]["schema_version"])
+                self.assertIn("ui_fixture", result["contract"]["example"])
+
+    def test_live_data_needs_a_recorded_payload_hash(self) -> None:
+        live = self.validate(
+            fixture_result_path=self.scenario_result(fixture_block(data_source="live"), name="live")
+        )
+        self.assertEqual("unproven", live["visual_determinism"])
+        self.assertIn("live_data_without_payload_hash", live["fixture"]["determinism_gaps"])
+
+        pinned = self.validate(
+            fixture_result_path=self.scenario_result(
+                fixture_block(data_source="live", payload_hash="sha256:" + "a" * 64),
+                name="live-pinned",
+            )
+        )
+        self.assertEqual("proven", pinned["visual_determinism"])
+
+    def test_mixed_data_follows_the_same_rule_as_live(self) -> None:
+        result = self.validate(
+            fixture_result_path=self.scenario_result(fixture_block(data_source="mixed"), name="mixed")
+        )
+        self.assertIn("live_data_without_payload_hash", result["fixture"]["determinism_gaps"])
+
+    def test_unfrozen_clock_and_unpinned_locale_are_reported_separately(self) -> None:
+        result = self.validate(
+            fixture_result_path=self.scenario_result(
+                fixture_block(clock={"frozen": False}, locale={"id": "en", "pinned": False}),
+                name="drifting",
+            )
+        )
+        gaps = result["fixture"]["determinism_gaps"]
+        self.assertIn("clock_not_frozen", gaps)
+        self.assertIn("locale_not_pinned", gaps)
+        self.assertTrue(result["established"])
+        self.assertEqual("unproven", result["visual_determinism"])
+
+    def test_ready_predicate_timeout_means_the_fixture_was_not_established(self) -> None:
+        result = self.validate(
+            fixture_result_path=self.scenario_result(
+                fixture_block(
+                    ready={"predicate": "popup_visible", "satisfied": False, "waited_ms": 5000, "timeout_ms": 5000}
+                ),
+                name="timeout",
+            )
+        )
+        self.assertFalse(result["established"])
+        self.assertTrue(result["fixture"]["ready"]["timed_out"])
+        self.assertIn("ready_predicate_timed_out", result["fixture"]["determinism_gaps"])
+
+    def test_failed_hook_step_cannot_establish_a_fixture(self) -> None:
+        result = self.validate(
+            fixture_result_path=self.scenario_result(fixture_block(), name="failed", step_status="failed")
+        )
+        self.assertFalse(result["established"])
+        self.assertIn("hook_step_failed", result["fixture"]["determinism_gaps"])
+
+    def test_unsupported_schema_version_is_an_invalid_report(self) -> None:
+        result = self.validate(
+            fixture_result_path=self.scenario_result(
+                fixture_block(schema_version="xuunity.ui-fixture.v0"), name="old-schema"
+            )
+        )
+        self.assertEqual("invalid", result["fixture"]["proof_status"])
+        self.assertIn("unsupported_or_missing_schema_version", result["fixture"]["validation_errors"])
+        self.assertFalse(result["established"])
+
+    def test_fixture_and_viewport_mismatch_against_the_reference_are_reported(self) -> None:
+        result = self.validate(
+            fixture_result_path=self.scenario_result(fixture_block(), name="mismatch"),
+            declared_fixture="popup.locked",
+            declared_viewport={"width": 1080, "height": 2400},
+        )
+        gaps = result["fixture"]["determinism_gaps"]
+        self.assertIn("fixture_id_mismatch", gaps)
+        self.assertIn("viewport_mismatch", gaps)
+
+    def test_result_without_a_ui_fixture_block_is_absent_not_invalid(self) -> None:
+        result = self.validate(fixture_result_path=self.scenario_result(None, name="silent"))
+        self.assertEqual("absent", result["fixture"]["proof_status"])
+        self.assertEqual("not_reported", result["visual_determinism"])
+        self.assertEqual("run-1", result["fixture"]["receipt"]["run_id"])
+
+    def test_missing_result_file_is_a_typed_error(self) -> None:
+        with self.assertRaises(ToolInvocationError) as caught:
+            self.validate(fixture_result_path=str(self.captures / "nope.json"))
+        self.assertEqual("ui_fixture_result_not_found", caught.exception.code)
+
+    def test_scenario_hook_summary_surfaces_the_fixture_report(self) -> None:
+        summary = build_project_defined_hook_summary(
+            [
+                {
+                    "stepId": "establish_fixture",
+                    "kind": "project_defined_hook",
+                    "hookName": "example.ui.fixture",
+                    "status": "passed",
+                    "payload_json": json.dumps({"outcome": "ok", "ui_fixture": fixture_block()}),
+                }
+            ]
+        )
+        reported = summary["hooks"][0]["ui_fixture"]
+        self.assertEqual("popup.available", reported["fixture_id"])
+        self.assertEqual("available_with_timer", reported["state_id"])
+        self.assertTrue(reported["established"])
+        self.assertEqual("valid", reported["proof_status"])
+
+    def test_scaffolded_fixture_hook_ships_unsatisfied_so_it_fails_closed(self) -> None:
+        from server_project_actions import scaffold_project_hook
+
+        result = scaffold_project_hook(
+            hook_name="example.ui.fixture",
+            action_id="establish_popup_available",
+            class_name="ExampleUiFixtureHook",
+            namespace="Example.Project.Editor",
+            output_dir=self.captures / "scaffold",
+            ui_fixture=True,
+        )
+        files = {item["path"]: item["content"] for item in result["files"]}
+        self.assertIn('public string schema_version = "xuunity.ui-fixture.v1";', files["ExampleUiFixtureHook.cs"])
+        self.assertIn("public UiFixture ui_fixture = new UiFixture();", files["ExampleUiFixtureHook.cs"])
+        self.assertIn("- ui_fixture", files["project_actions.fragment.yaml"])
+        self.assertIn("visual_determinism=unproven", files["ACTIVATION_CHECKLIST.md"])
+
+        unfilled = self.validate(
+            fixture_evidence={
+                "schema_version": UI_FIXTURE_SCHEMA_VERSION,
+                "fixture_id": "",
+                "data_source": "fixture",
+                "clock": {"frozen": False},
+                "locale": {"id": "", "pinned": False},
+                "ready": {"predicate": "", "satisfied": False},
+            }
+        )
+        self.assertEqual("unproven", unfilled["visual_determinism"])
+        self.assertFalse(unfilled["established"])
+
+    def test_fixture_tool_is_exposed_and_fails_closed(self) -> None:
+        response = server.handle_json_rpc_message(
+            {"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}},
+            {"initialized": True, "protocolVersion": server.PROTOCOL_VERSION},
+        )
+        self.assertIn("unity_ui_fixture_validate", [tool["name"] for tool in response["result"]["tools"]])
+
+        result = server_batch_orchestrator.call_tool(
+            "unity_ui_fixture_validate",
+            {
+                "projectRoot": str(self.project_root),
+                "fixtureResultPath": self.scenario_result(fixture_block(clock={"frozen": False}), name="tool"),
+                "workspaceRoot": str(self.workspace),
+            },
+        )
+        self.assertTrue(bool(result.get("isError")))
+        self.assertEqual("unproven", (result.get("structuredContent") or {})["visual_determinism"])
 
 
 if __name__ == "__main__":

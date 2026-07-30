@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from server_bridge_runtime import build_bridge_stabilization_summary
+from server_ui_fixture import extract_ui_fixture_block, normalize_ui_fixture_evidence
 
 
 def truncate_text(value: Any, max_length: int = 240) -> str:
@@ -167,6 +168,10 @@ def build_project_defined_hook_summary(steps: list[Any]) -> dict[str, Any]:
         if mutation_delta:
             hook_summary["mutation_delta"] = mutation_delta
 
+        ui_fixture = _extract_ui_fixture_summary(payload, raw_step)
+        if ui_fixture:
+            hook_summary["ui_fixture"] = ui_fixture
+
         console_tail_payload = _parse_json_string(raw_step.get("terminal_console_tail_payload_json"))
         if console_tail_payload:
             entries = console_tail_payload.get("entries")
@@ -187,6 +192,29 @@ def build_project_defined_hook_summary(steps: list[Any]) -> dict[str, Any]:
         "hook_count": len(hooks),
         "all_hooks_succeeded": bool(hooks) and all(str(item.get("status") or "") == "passed" for item in hooks),
         "hooks": hooks,
+    }
+
+
+def _extract_ui_fixture_summary(payload: dict[str, Any], step: dict[str, Any]) -> dict[str, Any]:
+    raw = extract_ui_fixture_block(payload)
+    if raw is None:
+        return {}
+
+    record = normalize_ui_fixture_evidence(
+        raw,
+        evidence_source="hook_payload",
+        receipt={"step_status": str(step.get("status") or "")},
+    )
+    return {
+        "schema_version": record["schema_version"],
+        "proof_status": record["proof_status"],
+        "fixture_id": record["fixture_id"],
+        "state_id": record["state_id"],
+        "data_source": record["data_source"],
+        "established": record["established"],
+        "visual_determinism": record["visual_determinism"],
+        "determinism_gaps": record["determinism_gaps"],
+        "validation_errors": record["validation_errors"],
     }
 
 

@@ -1,0 +1,27 @@
+{
+  "name": "com.xuunity.light-mcp.Editor.Ugui",
+  "rootNamespace": "XUUnity.LightMcp.Editor.Ugui",
+  "references": [
+    "com.xuunity.light-mcp.Editor",
+    "UnityEngine.UI"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [
+    "XUUNITY_LIGHT_MCP_UGUI_CAPABILITY"
+  ],
+  "versionDefines": [
+    {
+      "name": "com.unity.ugui",
+      "expression": "1.0.0",
+      "define": "XUUNITY_LIGHT_MCP_UGUI_CAPABILITY"
+    }
+  ],
+  "noEngineReferences": false
+}

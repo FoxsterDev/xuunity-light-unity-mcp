@@ -17,6 +17,10 @@ namespace XUUnity.LightMcp.Editor.Core
         public const string PlayModeCapability = "playmode_control";
         public const string GameViewCapability = "game_view_reflection";
         public const string SdkAndroidResolverCapability = "sdk_android_resolver";
+        public const string UiReadCapability = "ui_read";
+        public const string UiRenderCapability = "ui_render";
+        public const string UiInteractionCapability = "ui_interaction";
+        public const string PrefabMutationCapability = "prefab_mutation";
 
         static readonly HashSet<string> UngatedOperations = new(StringComparer.Ordinal)
         {
@@ -45,6 +49,16 @@ namespace XUUnity.LightMcp.Editor.Core
             { "unity.scene.snapshot", CoreCapability },
             { "unity.scene.open", CoreCapability },
             { "unity.scene.assert", CoreCapability },
+            { "unity.prefab.snapshot", CoreCapability },
+            { "unity.prefab.validate", CoreCapability },
+            { "unity.prefab.mutate", PrefabMutationCapability },
+            { "unity.prefab.render", UiRenderCapability },
+            { "unity.ui.click", UiInteractionCapability },
+            { "unity.ui.tree_snapshot", UiReadCapability },
+            { "unity.ui.query", UiReadCapability },
+            { "unity.ui.exists", UiReadCapability },
+            { "unity.ui.get_text", UiReadCapability },
+            { "unity.ui.get_bounds", UiReadCapability },
             { "unity.scenario.validate", CoreCapability },
             { "unity.scenario.run", CoreCapability },
             { "unity.scenario.result", CoreCapability },

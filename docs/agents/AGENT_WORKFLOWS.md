@@ -98,6 +98,17 @@ Use these MCP tools from compatible clients:
 - `unity_ui_reference_register`
 - `unity_ui_reference_validate`
 - `unity_ui_reference_compare`
+- `unity_ui_fixture_validate`
+- `unity_prefab_snapshot`
+- `unity_prefab_validate`
+- `unity_ui_tree_snapshot`
+- `unity_ui_query`
+- `unity_ui_exists`
+- `unity_ui_get_text`
+- `unity_ui_get_bounds`
+- `unity_prefab_render`
+- `unity_prefab_mutate`
+- `unity_ui_click`
 - `unity_edm4u_resolve`
 - `unity_sdk_android_resolve`
 - `unity_sdk_dependency_verify`

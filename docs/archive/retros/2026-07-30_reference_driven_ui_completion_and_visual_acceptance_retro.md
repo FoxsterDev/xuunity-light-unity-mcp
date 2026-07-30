@@ -2,10 +2,12 @@
 
 Date: `2026-07-30`
 
-Status: `active public retro — P0.1 shipped 2026-07-30; fixture, semantic, and render slices remain`
+Status: `implemented public retro — every P0/P1/P2 slice shipped 2026-07-30`
 
 Implementation: [`XUUNITY_MCP_REFERENCE_DRIVEN_UI_ACCEPTANCE_DESIGN_2026-07-30.md`](../../architecture/designs/XUUNITY_MCP_REFERENCE_DRIVEN_UI_ACCEPTANCE_DESIGN_2026-07-30.md)
-carries the delivered P0.1 slice (reference contract + comparator) and the remaining
+carries the full delivered slice set (reference contract + comparator, fixture
+readiness contract, uGUI semantic tree + prefab validation, region/node stitching,
+isolated render, guarded mutation, guarded click, device lane) and the residual
 delivery order. One correction to this retro's framing: acceptance is deliberately
 **not** pixel equality. The Game View resolution in Play mode is switchable and will
 differ from a supplied reference, so the comparator scores human-visible similarity —

@@ -715,6 +715,7 @@ def scaffold_project_hook(
     namespace: str,
     output_dir: Path,
     mutating: bool = False,
+    ui_fixture: bool = False,
     write_files: bool = False,
 ) -> dict[str, Any]:
     hook_name = hook_name.strip()
@@ -743,11 +744,13 @@ def scaffold_project_hook(
             class_name=class_name,
             namespace=namespace,
             mutating=mutating,
+            ui_fixture=ui_fixture,
         ),
         "project_actions.fragment.yaml": render_project_actions_fragment(
             hook_name=hook_name,
             action_id=action_id,
             mutating=mutating,
+            ui_fixture=ui_fixture,
         ),
         f"{scenario_name}.json": render_project_hook_activation_scenario(
             scenario_name=scenario_name,
@@ -760,6 +763,7 @@ def scaffold_project_hook(
             class_name=class_name,
             scenario_name=scenario_name,
             mutating=mutating,
+            ui_fixture=ui_fixture,
         ),
     }
 
@@ -779,6 +783,7 @@ def scaffold_project_hook(
         "class_name": class_name,
         "namespace": namespace,
         "mutating": mutating,
+        "ui_fixture": ui_fixture,
         "output_dir": str(output_dir),
         "write_files": write_files,
         "written_paths": written_paths,
@@ -808,6 +813,7 @@ def render_project_hook_class(
     class_name: str,
     namespace: str,
     mutating: bool = False,
+    ui_fixture: bool = False,
 ) -> str:
     mutation_delta_field = "            public MutationDelta mutation_delta;\n" if mutating else ""
     mutation_delta_type = "" if not mutating else """
@@ -822,6 +828,55 @@ def render_project_hook_class(
             public int added_count;
             public int removed_count;
             public int changed_count;
+        }
+
+"""
+    ui_fixture_field = "            public UiFixture ui_fixture = new UiFixture();\n" if ui_fixture else ""
+    ui_fixture_type = "" if not ui_fixture else """
+        [Serializable]
+        private sealed class UiFixtureClock
+        {
+            public bool frozen;
+            public string value_utc = "";
+        }
+
+        [Serializable]
+        private sealed class UiFixtureLocale
+        {
+            public string id = "";
+            public bool pinned;
+        }
+
+        [Serializable]
+        private sealed class UiFixtureViewport
+        {
+            public int width;
+            public int height;
+        }
+
+        [Serializable]
+        private sealed class UiFixtureReady
+        {
+            public string predicate = "";
+            public bool satisfied;
+            public int waited_ms;
+            public int timeout_ms;
+            public bool timed_out;
+        }
+
+        [Serializable]
+        private sealed class UiFixture
+        {
+            public string schema_version = "xuunity.ui-fixture.v1";
+            public string fixture_id = "";
+            public string state_id = "";
+            public string data_source = "fixture";
+            public string payload_hash = "";
+            public string safe_area = "full_screen";
+            public UiFixtureClock clock = new UiFixtureClock();
+            public UiFixtureLocale locale = new UiFixtureLocale();
+            public UiFixtureViewport viewport = new UiFixtureViewport();
+            public UiFixtureReady ready = new UiFixtureReady();
         }
 
 """
@@ -846,9 +901,9 @@ namespace {namespace}
             public string outcome = "";
             public string executed_at_utc = "";
             public string[] available_actions = Array.Empty<string>();
-{mutation_delta_field}        }}
+{mutation_delta_field}{ui_fixture_field}        }}
 
-{mutation_delta_type}        public string HookName => "{hook_name}";
+{mutation_delta_type}{ui_fixture_type}        public string HookName => "{hook_name}";
 
         public XUUnityLightMcpScenarioHookResult Execute(string payloadJson)
         {{
@@ -905,9 +960,17 @@ namespace {namespace}
 """
 
 
-def render_project_actions_fragment(*, hook_name: str, action_id: str, mutating: bool) -> str:
+def render_project_actions_fragment(
+    *,
+    hook_name: str,
+    action_id: str,
+    mutating: bool,
+    ui_fixture: bool = False,
+) -> str:
     mutates = "[project_specific_state]" if mutating else "[]"
     mutation_evidence = "    - mutation_delta\n" if mutating else ""
+    ui_fixture_evidence = "    - ui_fixture\n" if ui_fixture else ""
+    ui_fixture_validation = "    - ui_fixture_contract\n" if ui_fixture else ""
     return f"""# Merge this action into <HostOutput>/Projects/<Project>/Operations/XUUnityLightUnityMcp/project_actions.yaml.
 {action_id}:
   hookName: {hook_name}
@@ -916,9 +979,9 @@ def render_project_actions_fragment(*, hook_name: str, action_id: str, mutating:
   evidence:
     - outcome
     - available_actions
-{mutation_evidence}  validationModes:
+{mutation_evidence}{ui_fixture_evidence}  validationModes:
     - project_action_contract
-"""
+{ui_fixture_validation}"""
 
 
 def render_project_hook_activation_scenario(*, scenario_name: str, action_id: str, mutating: bool) -> str:
@@ -945,11 +1008,27 @@ def render_project_hook_activation_checklist(
     class_name: str,
     scenario_name: str,
     mutating: bool,
+    ui_fixture: bool = False,
 ) -> str:
     mutating_note = (
         "- This action declares mutations. Keep a non-mutating list/preflight action nearby, require explicit approval before real mutation, and populate `mutation_delta` with measured before/after/added/removed/changed counts. The scaffold leaves it null so placeholder zeros cannot be trusted.\n"
         if mutating
         else "- This activation action is non-mutating; keep it as the first validation path for the hook.\n"
+    )
+    ui_fixture_note = (
+        (
+            "- This action reports a `ui_fixture` block (`xuunity.ui-fixture.v1`). Fill in the real fixture id, "
+            "semantic state id, frozen clock, pinned locale, resolved viewport, and ready-predicate evidence from "
+            "the code that establishes the state. The scaffold ships it unsatisfied, so it validates as "
+            "`visual_determinism=unproven` until the project makes it true.\n"
+            "- If the state renders live data, record an immutable `payload_hash` for the rendered response; "
+            "without it the capture is not reproducible and the comparison is never decision-ready.\n"
+            "- Check the report with `ui-fixture-validate --fixture-result-path <scenario result>`, then pass the "
+            "same result to `ui-reference-compare --fixture-result-path` so the fixture evidence is a receipt "
+            "rather than a caller assertion.\n"
+        )
+        if ui_fixture
+        else ""
     )
     return f"""# Project Hook Activation Checklist
 
@@ -966,7 +1045,7 @@ Scenario: `{scenario_name}`
 - Run `project-action-list --project-root <ProjectRoot>` and confirm `{action_id}` resolves to `{hook_name}`.
 - Validate `{scenario_name}.json` with `request-scenario-validate`.
 - Run the activation scenario and inspect `request-scenario-result-summary`.
-{mutating_note}- If the hook fans out across projects, preflight all targets before mutating the first one.
+{mutating_note}{ui_fixture_note}- If the hook fans out across projects, preflight all targets before mutating the first one.
 - Keep project-specific paths, product names, and private evidence out of public MCP docs.
 """
 

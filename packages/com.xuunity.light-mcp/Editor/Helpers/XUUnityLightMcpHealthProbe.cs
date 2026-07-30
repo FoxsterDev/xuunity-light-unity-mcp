@@ -47,7 +47,17 @@ namespace XUUnity.LightMcp.Editor.Helpers
                 BuildBuildPlayerCapability(),
                 BuildPlayModeCapability(),
                 BuildGameViewCapability(),
-                BuildSdkAndroidResolverCapability()
+                BuildSdkAndroidResolverCapability(),
+                BuildUiReadCapability(),
+                BuildPrefabMutationCapability(),
+                BuildOptionalUguiCapability(
+                    XUUnityLightMcpCapabilityRegistry.UiRenderCapability,
+                    "unity.prefab.render",
+                    "isolated prefab rendering"),
+                BuildOptionalUguiCapability(
+                    XUUnityLightMcpCapabilityRegistry.UiInteractionCapability,
+                    "unity.ui.click",
+                    "guarded semantic interaction")
             };
 
             var supportedOperations = new List<string>();
@@ -156,7 +166,8 @@ namespace XUUnity.LightMcp.Editor.Helpers
                    string.Equals(report.unity_version, Application.unityVersion, StringComparison.Ordinal) &&
                    string.Equals(report.project_root, XUUnityLightMcpFileIpcPaths.ProjectRootPath, StringComparison.Ordinal) &&
                    TestFrameworkDependencyStateMatches(report) &&
-                   SdkAndroidResolverDependencyStateMatches(report);
+                   SdkAndroidResolverDependencyStateMatches(report) &&
+                   UiReadBackendStateMatches(report);
         }
 
         static bool SdkAndroidResolverDependencyStateMatches(XUUnityLightMcpCapabilitiesReport report)
@@ -179,6 +190,33 @@ namespace XUUnity.LightMcp.Editor.Helpers
                 {
                     return capability.supported == currentlySupported;
                 }
+            }
+
+            return false;
+        }
+
+        static bool UiReadBackendStateMatches(XUUnityLightMcpCapabilitiesReport report)
+        {
+            if (report.capabilities == null)
+            {
+                return false;
+            }
+
+            var expectedStatus = XUUnityLightMcpUiComponentReaderRegistry.HasReaders
+                ? "supported"
+                : "supported_partial";
+            foreach (var capability in report.capabilities)
+            {
+                if (capability == null
+                    || !string.Equals(
+                        capability.capability_id,
+                        XUUnityLightMcpCapabilityRegistry.UiReadCapability,
+                        StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                return string.Equals(capability.status, expectedStatus, StringComparison.Ordinal);
             }
 
             return false;
@@ -223,6 +261,71 @@ namespace XUUnity.LightMcp.Editor.Helpers
             return sawTestCapability;
         }
 
+        static XUUnityLightMcpCapabilityRecord BuildPrefabMutationCapability()
+        {
+            return new XUUnityLightMcpCapabilityRecord
+            {
+                capability_id = XUUnityLightMcpCapabilityRegistry.PrefabMutationCapability,
+                adapter_id = "unity_prefab_transaction_v1",
+                supported = true,
+                status = "supported",
+                reason = "",
+                recommended_action = "Preview every transaction before approving it; a failed operation discards the whole batch.",
+                operations = new List<string> { "unity.prefab.mutate" }
+            };
+        }
+
+        static XUUnityLightMcpCapabilityRecord BuildOptionalUguiCapability(
+            string capabilityId,
+            string operationName,
+            string label)
+        {
+            var registered = XUUnityLightMcpCapabilityRegistry.BuildRegisteredCapabilityOrNull(capabilityId);
+            if (registered != null)
+            {
+                return registered;
+            }
+
+            return new XUUnityLightMcpCapabilityRecord
+            {
+                capability_id = capabilityId,
+                adapter_id = "unity_ugui_unavailable",
+                supported = false,
+                status = "disabled_missing_dependency",
+                reason = $"com.unity.ugui is not installed, so {label} is unavailable.",
+                dependency = "com.unity.ugui",
+                recommended_action = "Install com.unity.ugui so the optional uGUI module compiles.",
+                operations = new List<string> { operationName }
+            };
+        }
+
+        static XUUnityLightMcpCapabilityRecord BuildUiReadCapability()
+        {
+            var backends = XUUnityLightMcpUiComponentReaderRegistry.BackendIds();
+            var hasReaders = backends.Count > 0;
+            return new XUUnityLightMcpCapabilityRecord
+            {
+                capability_id = XUUnityLightMcpCapabilityRegistry.UiReadCapability,
+                adapter_id = "unity_ugui_read_v1",
+                supported = true,
+                status = hasReaders ? "supported" : "supported_partial",
+                reason = hasReaders
+                    ? ""
+                    : "No uGUI component reader is registered; nodes report hierarchy, bounds, and canvas state only.",
+                recommended_action = hasReaders
+                    ? ""
+                    : "Install com.unity.ugui so the optional uGUI and TextMeshPro readers compile.",
+                operations = new List<string>
+                {
+                    "unity.ui.tree_snapshot",
+                    "unity.ui.query",
+                    "unity.ui.exists",
+                    "unity.ui.get_text",
+                    "unity.ui.get_bounds"
+                }
+            };
+        }
+
         static XUUnityLightMcpCapabilityRecord BuildCoreCapability()
         {
             return new XUUnityLightMcpCapabilityRecord
@@ -244,6 +347,8 @@ namespace XUUnity.LightMcp.Editor.Helpers
                     "unity.scene.snapshot",
                     "unity.scene.open",
                     "unity.scene.assert",
+                    "unity.prefab.snapshot",
+                    "unity.prefab.validate",
                     "unity.scenario.validate",
                     "unity.scenario.run",
                     "unity.scenario.result"

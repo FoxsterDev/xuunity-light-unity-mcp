@@ -121,6 +121,7 @@ from server_batch_orchestrator import (
     call_unity_ui_reference_register_tool,
     call_unity_ui_reference_validate_tool,
     call_unity_ui_reference_compare_tool,
+    call_unity_ui_fixture_validate_tool,
     build_project_discovery_report,
     build_request_final_status,
     enrich_tool_invocation_error_with_discovery,

@@ -319,6 +319,7 @@ from server_cli_project_commands import (
     cmd_request_scenario_run,
     cmd_request_scenario_run_and_wait,
     cmd_request_scenario_validate,
+    cmd_ui_fixture_validate,
     cmd_ui_reference_compare,
     cmd_ui_reference_register,
     cmd_ui_reference_validate,
@@ -1245,4 +1246,5 @@ wrap_globals_with_proxies(globals(), [
     "call_unity_ui_reference_register_tool",
     "call_unity_ui_reference_validate_tool",
     "call_unity_ui_reference_compare_tool",
+    "call_unity_ui_fixture_validate_tool",
 ])

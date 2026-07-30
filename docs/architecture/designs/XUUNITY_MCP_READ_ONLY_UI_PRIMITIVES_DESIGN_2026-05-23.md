@@ -1,7 +1,7 @@
 # XUUnity MCP Read-Only UI Primitives Design
 
 Date: `2026-05-23`
-Status: design
+Status: `uGUI backend implemented 2026-07-30` (see [`XUUNITY_MCP_REFERENCE_DRIVEN_UI_ACCEPTANCE_DESIGN_2026-07-30.md`](XUUNITY_MCP_REFERENCE_DRIVEN_UI_ACCEPTANCE_DESIGN_2026-07-30.md) for the shipped surface and its two deliberate deviations: uGUI ahead of UI Toolkit, and a flat node list instead of nested `children`. UI Toolkit remains unimplemented.)
 Scope: `Operations/XUUnityLightUnityMcp`
 Origin: transferred from `Modules/AIReferenceWatch` reference-first downstream design
 

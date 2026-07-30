@@ -121,7 +121,7 @@
       "request-scenario-run-and-wait",
       "batch-compile"
     ],
-    "root_command_count": 71,
+    "root_command_count": 72,
     "root_commands": [
       "setup-plan",
       "setup-apply",
@@ -160,6 +160,7 @@
       "ui-reference-register",
       "ui-reference-validate",
       "ui-reference-compare",
+      "ui-fixture-validate",
       "request-install-test-framework",
       "request-edm4u-resolve",
       "request-sdk-android-resolve",
@@ -197,8 +198,8 @@
     ]
   },
   "mcp_tools_list": {
-    "sha256": "ff1e5e8fc7263f912b67d3167b95d4f65232282af709dc0beaa6f76572f75279",
-    "tool_count": 50,
+    "sha256": "0282fba516ef93ceb1c0cc1098f4778f9f7d8f5c6b64549350d1ac7150866134",
+    "tool_count": 61,
     "tool_names": [
       "xuunity_setup_plan",
       "xuunity_setup_apply",
@@ -221,6 +222,17 @@
       "unity_ui_reference_register",
       "unity_ui_reference_validate",
       "unity_ui_reference_compare",
+      "unity_ui_fixture_validate",
+      "unity_prefab_snapshot",
+      "unity_prefab_validate",
+      "unity_prefab_render",
+      "unity_prefab_mutate",
+      "unity_ui_click",
+      "unity_ui_tree_snapshot",
+      "unity_ui_query",
+      "unity_ui_exists",
+      "unity_ui_get_text",
+      "unity_ui_get_bounds",
       "unity_package_install_test_framework",
       "unity_edm4u_resolve",
       "unity_sdk_android_resolve",

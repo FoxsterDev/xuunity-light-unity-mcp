@@ -23,6 +23,73 @@
   A passing verdict requires proven capture stability, and required semantic or
   interaction lanes that no tool can yet evaluate keep the reference pending instead
   of reporting acceptance.
+- Added the `xuunity.ui-fixture.v1` readiness contract plus `unity_ui_fixture_validate`
+  and the `ui-fixture-validate` host command. A project hook reports `ui_fixture`
+  (fixture and semantic state id, frozen clock, pinned locale, data source, resolved
+  viewport/safe-area, and ready-predicate evidence) inside its payload; the host
+  validates it, surfaces it in scenario hook summaries, and derives
+  `visual_determinism`. Live or mixed data without a recorded immutable payload hash,
+  an unfrozen clock, or an unpinned locale downgrade a comparison automatically
+  instead of by convention.
+- `unity_ui_reference_compare` / `ui-reference-compare` accept `fixtureResultPath`, so
+  fixture evidence is read from the scenario result the editor wrote, with a hashed
+  receipt naming the run, step, and hook. Caller-supplied `fixtureEvidence` is still
+  accepted but is never receipt-backed and can no longer make a comparison
+  `decision_ready`. `project-hook-scaffold --ui-fixture` generates a compliant hook
+  that ships unsatisfied so it fails closed until the project fills it in.
+- Added the read-only uGUI and prefab inspection surface (`xuunity.ui.read.v1`):
+  `unity_prefab_snapshot`, `unity_prefab_validate`, `unity_ui_tree_snapshot`,
+  `unity_ui_query`, `unity_ui_exists`, `unity_ui_get_text`, and `unity_ui_get_bounds`.
+  Nodes carry a stable-within-snapshot path, active state, components, effective
+  CanvasGroup alpha, raycast blocking, canvas sort order, screen-space bounds, and —
+  where a backend reader is present — text, resolved font/material, interactability,
+  and clip state. Every response reports `proof_class`, truncation, and ambiguity
+  instead of hiding them, and no answer is ever derived from a screenshot or OCR.
+- `unity_prefab_validate` reports typed pre-PlayMode defects: `missing_script_guid`,
+  `serialized_reference_missing_component`, `serialized_reference_type_mismatch`,
+  `missing_prefab_instance`, and opt-in `serialized_reference_unassigned`. Lanes that
+  need an unavailable backend are listed in `lanes_not_evaluated` rather than passing
+  silently.
+- The uGUI and TextMeshPro readers ship as constraint-gated satellite assemblies
+  (`com.xuunity.light-mcp.Editor.Ugui` / `.Tmp`), so the core editor assembly keeps
+  zero package references and a project without `com.unity.ugui` still compiles — it
+  simply reports the UI surface as `semantic_ui_partial` with the reason.
+- `unity_ui_reference_compare` accepts `uiSnapshotPath` and stitches every failed
+  region to the UI nodes whose bounds cover it, converting Unity's bottom-left screen
+  pixels to top-left reference pixels with the transform recorded in the payload. Each
+  failed region gains `explained_by` (ranked candidate nodes, per-node suspicions, a
+  `likely_cause`, and a plain-language summary), so "region body is 0.59 similar"
+  becomes "'Canvas/Body' overlaps this region and its font asset did not resolve". A
+  region no node covers is reported as its own finding.
+- The semantic acceptance lane is now real: when a snapshot is supplied, the
+  reference's declared `requiredUi` selectors are checked against it and the lane
+  reports `passed`/`failed` with typed failures (`ui_node_not_found`,
+  `selector_ambiguous`, `ui_text_mismatch`, `ui_node_not_interactable`,
+  `ui_node_not_visible`). A required-lane failure fails the reference even when the
+  pixels match.
+- Added `unity_prefab_render` (P1.2): renders a prefab in an isolated preview scene
+  under a controlled Canvas at the declared viewport and safe area without booting the
+  application, and returns both the PNG and the `ui.read.v1` snapshot it rendered, in
+  render-pixel space, ready to feed straight back into `unity_ui_reference_compare`.
+- Added `unity_prefab_mutate` (P2.1): a typed, atomic prefab transaction through the
+  Editor API — `set_serialized_field`, `set_rect_transform`, `set_canvas_group`,
+  `set_active`, `delete_child`, `create_child_from_template`, `add_component`,
+  `remove_component`. It previews by default, requires `approve` plus
+  `previewOnly=false` to write, supports an `expectedSha256` precondition, re-validates
+  bindings after mutating and discards the batch if validation fails, emits a
+  reversible inverse patch, refuses ambiguous selectors and non-allowlisted components,
+  and excludes object-reference fields so a component can never be swapped for another
+  type.
+- Added `unity_ui_click` (P2.2): one guarded semantic click delivered through the
+  EventSystem to a unique selector, never a coordinate click. It requires explicit
+  `approve=true` and `action="click"`, refuses ambiguous, hidden, non-interactable,
+  raycast-transparent, and handler-less targets, and records the matched node, the
+  delivery mechanism, and before/after snapshot signatures.
+- Added the device acceptance lane (P2.3): `captureLane` (`game_view` | `device`) plus
+  a `device` descriptor recording model, OS, resolution, orientation, safe-area insets,
+  and build revision. A Game View comparison reports the device lane as
+  `not_evaluated` and is never presented as device parity; a device capture with an
+  incomplete descriptor blocks that lane instead of passing it.
 
 ## 0.3.48
 

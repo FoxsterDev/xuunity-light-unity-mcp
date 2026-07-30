@@ -97,6 +97,17 @@ Unity MCP implementations when the user wants safe production validation.
 | UI reference | `unity_ui_reference_register` | `Supported` | Registers a supplied design reference as a `ui-reference.v1` acceptance contract with viewport, regions, declared masks, tolerance profile, and acceptance lanes. |
 | UI reference | `unity_ui_reference_validate` | `Supported` | Validates a registered reference (schema, expected-image hash, viewport agreement, region geometry, mask policy) and reports same-aspect capture resolutions. |
 | UI reference | `unity_ui_reference_compare` | `Supported` | Compares a Game View capture against a reference on a resolution-independent similarity grid and publishes actual/overlay/diff/metrics artifacts with a `reference_acceptance` verdict. |
+| UI reference | `unity_ui_fixture_validate` | `Supported` | Validates a `ui-fixture.v1` readiness report (fixture and state id, frozen clock, pinned locale, data source, viewport, ready predicate) and derives `visual_determinism`; live data without a recorded payload hash is downgraded to `unproven`. |
+| Prefab read | `unity_prefab_snapshot` | `Supported` | Reads a prefab asset hierarchy as normalized `ui.read.v1` nodes without opening it for editing. |
+| Prefab read | `unity_prefab_validate` | `Supported` | Reports typed pre-PlayMode defects (missing script GUID, missing or mistyped serialized reference, missing nested prefab) and lists lanes it could not evaluate. |
+| UI read | `unity_ui_tree_snapshot` | `Supported` | Snapshots the live uGUI hierarchy with paths, active state, effective CanvasGroup alpha, canvas order, screen bounds, and text/font/material where a backend reader is present. |
+| UI read | `unity_ui_query` | `Supported` | Returns nodes matching an AND-combined selector (name, type, path, text, visibility, interactability) and reports ambiguity. |
+| UI read | `unity_ui_exists` | `Supported` | Existence check over the same selector model; reports match count and ambiguity, never answers from a screenshot. |
+| UI read | `unity_ui_get_text` | `Supported` | Returns the semantic text of a single matched node; zero, ambiguous, and text-less matches are distinct typed failures. |
+| UI read | `unity_ui_get_bounds` | `Supported` | Returns the screen-space rect of a single matched node so a failed comparison region maps to concrete geometry. |
+| UI render | `unity_prefab_render` | `Supported` | Renders a prefab in an isolated preview scene at the declared viewport and safe area without booting the app, returning the PNG plus the snapshot it rendered. Requires com.unity.ugui. |
+| UI mutation | `unity_prefab_mutate` | `Supported` | Typed atomic prefab transaction through the Editor API; previews by default, re-validates bindings, rolls the whole batch back on any failure, and emits a reversible inverse patch. |
+| UI interaction | `unity_ui_click` | `Supported` | One guarded EventSystem click to a unique selector; refuses ambiguous, hidden, disabled, raycast-transparent, and handler-less targets. Requires com.unity.ugui. |
 | Maintenance | `unity_maintenance_prune` | `Supported` | Prunes stale request, scenario, capture, and optional log artifacts. |
 
 ## Host-Side Helper Commands

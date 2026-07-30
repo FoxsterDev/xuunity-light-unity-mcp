@@ -313,6 +313,7 @@ def build_parser() -> argparse.ArgumentParser:
     project_hook_scaffold_cmd.add_argument("--namespace", default="Example.Project.Editor")
     project_hook_scaffold_cmd.add_argument("--output-dir", required=True)
     project_hook_scaffold_cmd.add_argument("--mutating", action="store_true")
+    project_hook_scaffold_cmd.add_argument("--ui-fixture", action="store_true")
     project_hook_scaffold_cmd.add_argument("--write", action="store_true")
     project_hook_scaffold_cmd.set_defaults(func_name="cmd_project_hook_scaffold")
 
@@ -409,9 +410,27 @@ def build_parser() -> argparse.ArgumentParser:
         "--tolerance-profile", default="", choices=["", "strict", "balanced", "lenient"]
     )
     ui_reference_compare_cmd.add_argument("--fixture-evidence-json", default="")
+    ui_reference_compare_cmd.add_argument("--fixture-result-path", default="")
+    ui_reference_compare_cmd.add_argument("--ui-snapshot-path", default="")
+    ui_reference_compare_cmd.add_argument(
+        "--capture-lane", default="game_view", choices=["game_view", "device"]
+    )
+    ui_reference_compare_cmd.add_argument("--device-json", default="")
     ui_reference_compare_cmd.add_argument("--category", default="UIReference")
     ui_reference_compare_cmd.add_argument("--workspace-root", default="")
     ui_reference_compare_cmd.set_defaults(func_name="cmd_ui_reference_compare")
+
+    ui_fixture_validate_cmd = sub.add_parser(
+        "ui-fixture-validate",
+        help="Validate a ui-fixture.v1 readiness report before trusting a visual comparison.",
+    )
+    ui_fixture_validate_cmd.add_argument("--project-root", required=True)
+    ui_fixture_validate_cmd.add_argument("--fixture-result-path", default="")
+    ui_fixture_validate_cmd.add_argument("--fixture-evidence-json", default="")
+    ui_fixture_validate_cmd.add_argument("--declared-fixture", default="")
+    ui_fixture_validate_cmd.add_argument("--declared-viewport-json", default="")
+    ui_fixture_validate_cmd.add_argument("--workspace-root", default="")
+    ui_fixture_validate_cmd.set_defaults(func_name="cmd_ui_fixture_validate")
 
     install_tf_bridge_cmd = sub.add_parser(
         "request-install-test-framework",

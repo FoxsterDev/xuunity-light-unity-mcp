@@ -1,0 +1,38 @@
+{
+    "name": "com.xuunity.light-mcp.Editor.Ugui.Tests",
+    "rootNamespace": "XUUnity.LightMcp.Tests.EditModeUgui",
+    "references": [
+        "com.xuunity.light-mcp.Editor",
+        "com.xuunity.light-mcp.Editor.Ugui",
+        "UnityEngine.UI"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "optionalUnityReferences": [
+        "TestAssemblies"
+    ],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "UNITY_INCLUDE_TESTS",
+        "XUUNITY_LIGHT_MCP_TESTS_CAPABILITY",
+        "XUUNITY_LIGHT_MCP_UGUI_CAPABILITY"
+    ],
+    "versionDefines": [
+        {
+            "name": "com.unity.test-framework",
+            "expression": "1.1.33",
+            "define": "XUUNITY_LIGHT_MCP_TESTS_CAPABILITY"
+        },
+        {
+            "name": "com.unity.ugui",
+            "expression": "1.0.0",
+            "define": "XUUNITY_LIGHT_MCP_UGUI_CAPABILITY"
+        }
+    ],
+    "noEngineReferences": false
+}

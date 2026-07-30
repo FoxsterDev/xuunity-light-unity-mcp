@@ -6,6 +6,8 @@ from typing import Any
 
 from server_artifact_registry import register_artifact, repo_relative_path
 from server_core import write_json
+from server_ui_device_lane import device_lane_state, device_lane_warnings
+from server_ui_fixture import fixture_next_actions
 from server_ui_reference_artifacts import COMPARISON_SCHEMA_VERSION
 
 
@@ -107,22 +109,33 @@ def finalize_comparison(
 
     visual_verdict = str(result.get("visual_verdict") or "blocked")
     acceptance_policy = dict(manifest.get("acceptance") or {})
+    semantic = dict(result.get("semantic_lane") or {})
+    capture_lane = str(result.get("capture_lane") or "game_view")
+    device_context = dict(result.get("device_context") or {})
     lanes = {
         "visual": {
             "requirement": str(acceptance_policy.get("visual") or "required"),
             "status": visual_verdict,
             "evidence": "resolution_independent_similarity_comparison",
+            "capture_lane": capture_lane,
         },
         "semantic": {
             "requirement": str(acceptance_policy.get("semantic") or "required"),
-            "status": "not_evaluated",
-            "evidence": "no_semantic_ui_tree_in_this_slice",
+            "status": str(semantic.get("status") or "not_evaluated"),
+            "evidence": str(semantic.get("evidence") or "no_semantic_ui_tree_supplied"),
+            "checked": int(semantic.get("checked") or 0),
+            "failures": list(semantic.get("failures") or []),
         },
         "interaction": {
             "requirement": str(acceptance_policy.get("interaction") or "required"),
             "status": "not_evaluated",
-            "evidence": "no_guarded_ui_interaction_in_this_slice",
+            "evidence": "guarded_interaction_is_reported_by_unity_ui_click_not_by_comparison",
         },
+        "device": device_lane_state(
+            capture_lane=capture_lane,
+            acceptance_policy=acceptance_policy,
+            device_context=device_context,
+        ),
     }
     result["acceptance_lanes"] = lanes
 
@@ -132,10 +145,15 @@ def finalize_comparison(
         for lane, state in lanes.items()
         if lane != "visual" and state["requirement"] == "required" and state["status"] == "not_evaluated"
     ]
+    failed_lanes = [
+        lane
+        for lane, state in lanes.items()
+        if lane != "visual" and state["requirement"] == "required" and state["status"] == "failed"
+    ]
 
     if visual_verdict == "blocked":
         acceptance = "blocked"
-    elif visual_verdict == "failed":
+    elif visual_verdict == "failed" or failed_lanes:
         acceptance = "failed"
     elif owner == "human":
         acceptance = "pending_manual_style"
@@ -144,6 +162,16 @@ def finalize_comparison(
     else:
         acceptance = "passed"
 
+    result["failed_lanes"] = failed_lanes
+    if failed_lanes and visual_verdict != "failed":
+        for failure in lanes["semantic"]["failures"]:
+            result["failure_reasons"].append(
+                f"Required UI '{failure.get('id')}' failed the semantic lane as {failure.get('code')}."
+            )
+    result["warnings"].extend(
+        device_lane_warnings(capture_lane=capture_lane, device_context=device_context)
+    )
+
     result["reference_acceptance"] = acceptance
     result["pending_lanes"] = pending_lanes
 
@@ -151,14 +179,24 @@ def finalize_comparison(
     stability_status = str((result.get("capture_stability") or {}).get("status") or "unproven")
     if stability_status != "proven":
         readiness_gaps.append(f"capture_stability_{stability_status}")
-    if not str((result.get("fixture") or {}).get("declared") or ""):
+    fixture = dict(result.get("fixture") or {})
+    if not str(fixture.get("declared_fixture") or ""):
         readiness_gaps.append("fixture_undeclared")
-    elif not bool((result.get("fixture") or {}).get("established")):
-        readiness_gaps.append("fixture_establishment_unreported")
+    readiness_gaps.extend(f"fixture_{code}" for code in list(fixture.get("determinism_gaps") or []))
     if acceptance == "blocked":
         readiness_gaps.append("visual_lane_blocked")
     result["decision_ready"] = not readiness_gaps
     result["decision_readiness_gaps"] = readiness_gaps
+    if fixture.get("visual_determinism") == "unproven":
+        result["warnings"].append(
+            {
+                "code": "visual_determinism_unproven",
+                "message": (
+                    "The captured UI state is not proven reproducible: "
+                    + "; ".join(str(item) for item in list(fixture.get("messages") or [])[:3])
+                ),
+            }
+        )
 
     if owner == "human":
         result["warnings"].append(
@@ -256,9 +294,7 @@ def _next_actions(result: dict[str, Any]) -> list[str]:
         first_failed = str(result.get("first_failed_region") or "")
         if first_failed:
             actions.append(f"Inspect region '{first_failed}' in diff.png and overlay.png first.")
-        actions.append(
-            "A similarity score cannot say why a region failed; use semantic UI inspection once available."
-        )
+        actions.extend(_semantic_explanation_actions(result, first_failed))
         actions.append(
             "If the difference is intended styling latitude, widen the tolerance profile deliberately "
             "instead of ignoring the verdict."
@@ -271,5 +307,28 @@ def _next_actions(result: dict[str, Any]) -> list[str]:
     if acceptance == "pending_manual_style":
         actions.append(
             "Record which regions remain human-owned; reference acceptance stays pending manual styling."
+        )
+    actions.extend(fixture_next_actions(dict(result.get("fixture") or {})))
+    return actions
+
+
+def _semantic_explanation_actions(result: dict[str, Any], first_failed: str) -> list[str]:
+    explanations = dict(result.get("semantic_explanations") or {})
+    if not explanations.get("available"):
+        return [
+            "A similarity score cannot say why a region failed; pass uiSnapshotPath from "
+            "unity_ui_tree_snapshot so failed regions are mapped to the nodes that cover them."
+        ]
+
+    per_region = dict(explanations.get("regions") or {})
+    explanation = per_region.get(first_failed) or next(iter(per_region.values()), {})
+    summary = str(explanation.get("summary") or "")
+    actions: list[str] = []
+    if summary:
+        actions.append(summary)
+    likely_node = str(explanation.get("likely_cause_node") or "")
+    if likely_node:
+        actions.append(
+            f"Inspect '{likely_node}' with unity_ui_query before changing the reference or the tolerance."
         )
     return actions

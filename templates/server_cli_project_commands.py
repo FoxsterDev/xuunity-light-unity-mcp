@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from server_cli_shared import *
 
+from server_ui_fixture import validate_ui_fixture
 from server_ui_reference_compare import compare_ui_reference
 from server_ui_reference_registry import register_ui_reference, validate_ui_reference
 
@@ -38,6 +39,7 @@ def cmd_project_hook_scaffold(args):
         namespace=args.namespace,
         output_dir=Path(args.output_dir).expanduser().resolve(),
         mutating=bool(args.mutating),
+        ui_fixture=bool(args.ui_fixture),
         write_files=bool(args.write),
     )
     print_json(result)
@@ -340,9 +342,32 @@ def cmd_ui_reference_compare(args):
         fixture_evidence=load_optional_json_object(
             args.fixture_evidence_json, "ui_reference_fixture_evidence_invalid"
         ),
+        fixture_result_path=args.fixture_result_path,
+        ui_snapshot_path=args.ui_snapshot_path,
+        capture_lane=args.capture_lane,
+        device=load_optional_json_object(args.device_json, "ui_reference_device_invalid") or None,
         category=args.category,
         workspace_root=args.workspace_root,
     )
     print_json(payload)
     if payload.get("reference_acceptance") != "passed":
+        raise SystemExit(1)
+
+
+def cmd_ui_fixture_validate(args):
+    project_root = ensure_project_root(args.project_root)
+    payload = validate_ui_fixture(
+        project_root=project_root,
+        workspace=resolve_workspace_root(project_root, args.workspace_root),
+        fixture_evidence=load_optional_json_object(
+            args.fixture_evidence_json, "ui_fixture_evidence_invalid"
+        ),
+        fixture_result_path=args.fixture_result_path,
+        declared_fixture=args.declared_fixture,
+        declared_viewport=load_optional_json_object(
+            args.declared_viewport_json, "ui_fixture_viewport_invalid"
+        ),
+    )
+    print_json(payload)
+    if not bool(payload.get("succeeded")):
         raise SystemExit(1)

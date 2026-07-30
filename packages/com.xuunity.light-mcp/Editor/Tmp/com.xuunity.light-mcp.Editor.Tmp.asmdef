@@ -1,0 +1,32 @@
+{
+  "name": "com.xuunity.light-mcp.Editor.Tmp",
+  "rootNamespace": "XUUnity.LightMcp.Editor.Tmp",
+  "references": [
+    "com.xuunity.light-mcp.Editor",
+    "Unity.TextMeshPro"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [
+    "XUUNITY_LIGHT_MCP_TMP_CAPABILITY"
+  ],
+  "versionDefines": [
+    {
+      "name": "com.unity.ugui",
+      "expression": "2.0.0",
+      "define": "XUUNITY_LIGHT_MCP_TMP_CAPABILITY"
+    },
+    {
+      "name": "com.unity.textmeshpro",
+      "expression": "3.0.0",
+      "define": "XUUNITY_LIGHT_MCP_TMP_CAPABILITY"
+    }
+  ],
+  "noEngineReferences": false
+}

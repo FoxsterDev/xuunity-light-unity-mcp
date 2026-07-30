@@ -22,6 +22,9 @@ from server_ui_reference_artifacts import (
     COMPARISON_SCHEMA_VERSION,
     emit_comparison_artifacts,
 )
+from server_ui_device_lane import normalize_device_context
+from server_ui_fixture import resolve_ui_fixture_evidence
+from server_ui_region_explain import evaluate_semantic_lane, explain_regions, load_ui_snapshot
 from server_ui_reference_verdict import finalize_comparison, score_visual_verdict
 from server_ui_reference_policy import validate_manifest
 from server_ui_reference_png import RgbaImage, read_png
@@ -49,6 +52,10 @@ def compare_ui_reference(
     include_expected_copy: bool = False,
     comparison_id: str = "",
     fixture_evidence: dict[str, Any] | None = None,
+    fixture_result_path: str = "",
+    ui_snapshot_path: str = "",
+    capture_lane: str = "game_view",
+    device: dict[str, Any] | None = None,
     tolerance_profile: str = "",
     category: str = DEFAULT_REFERENCE_CATEGORY,
     workspace_root: str = "",
@@ -73,7 +80,20 @@ def compare_ui_reference(
         manifest=manifest,
         manifest_path=loaded["manifest_path"],
         comparison_id=comparison_id,
-        fixture_evidence=fixture_evidence,
+        fixture=resolve_ui_fixture_evidence(
+            workspace=workspace,
+            fixture_evidence=fixture_evidence,
+            fixture_result_path=fixture_result_path,
+            declared_fixture=str(manifest.get("fixture") or ""),
+            declared_viewport=dict(manifest.get("viewport") or {}),
+        ),
+        capture_lane=capture_lane,
+        device=device,
+    )
+    snapshot = load_ui_snapshot(ui_snapshot_path, workspace) if str(ui_snapshot_path or "").strip() else None
+    result["semantic_lane"] = evaluate_semantic_lane(
+        snapshot=snapshot,
+        required_ui=list(manifest.get("required_ui") or []),
     )
     result["manifest_validation"] = {
         "valid": validation["valid"],
@@ -274,6 +294,21 @@ def compare_ui_reference(
     result["failure_reasons"] = failure_reasons
     result["first_failed_region"] = first_failed_region
 
+    if snapshot is not None:
+        result["semantic_explanations"] = explain_regions(
+            snapshot=snapshot,
+            regions=region_results,
+            reference_viewport={"width": reference_width, "height": reference_height},
+            actual_viewport={"width": actual.width, "height": actual.height},
+        )
+        _attach_region_explanations(region_results, result["semantic_explanations"])
+    else:
+        result["semantic_explanations"] = {
+            "available": False,
+            "reason": "no_ui_snapshot_supplied",
+            "regions": {},
+        }
+
     if emit_artifacts:
         result["artifacts"] = emit_comparison_artifacts(
             reference_dir=reference_dir,
@@ -310,14 +345,33 @@ def compare_ui_reference(
     )
 
 
+def _attach_region_explanations(
+    regions: list[dict[str, Any]],
+    explanations: dict[str, Any],
+) -> None:
+    per_region = dict(explanations.get("regions") or {})
+    for region in regions:
+        explanation = per_region.get(str(region.get("region_id") or ""))
+        if explanation:
+            region["explained_by"] = explanation
+
+
 def _new_result(
     *,
     manifest: dict[str, Any],
     manifest_path: str,
     comparison_id: str,
-    fixture_evidence: dict[str, Any] | None,
+    fixture: dict[str, Any],
+    capture_lane: str,
+    device: dict[str, Any] | None,
 ) -> dict[str, Any]:
-    evidence = dict(fixture_evidence or {})
+    lane = str(capture_lane or "game_view").strip().lower()
+    if lane not in ("game_view", "device"):
+        raise ToolInvocationError(
+            "ui_reference_capture_lane_invalid",
+            f"captureLane must be 'game_view' or 'device', not '{lane}'.",
+            {"capture_lane": lane},
+        )
     return {
         "schema_version": COMPARISON_SCHEMA_VERSION,
         "reference_schema_version": UI_REFERENCE_SCHEMA_VERSION,
@@ -326,14 +380,10 @@ def _new_result(
         "reference_id": str(manifest.get("reference_id") or ""),
         "manifest_path": manifest_path,
         "proof_class": "visual_only",
-        "fixture": {
-            "declared": str(manifest.get("fixture") or ""),
-            "reported": str(evidence.get("fixture") or ""),
-            "data_source": str(evidence.get("data_source") or ""),
-            "clock_frozen": bool(evidence.get("clock_frozen", False)),
-            "locale": str(evidence.get("locale") or ""),
-            "established": bool(evidence.get("established", False)),
-        },
+        "fixture": fixture,
+        "visual_determinism": str(fixture.get("visual_determinism") or ""),
+        "capture_lane": lane,
+        "device_context": normalize_device_context(device) if lane == "device" else {},
         "owner": str(manifest.get("owner") or "agent"),
         "acceptance_policy": dict(manifest.get("acceptance") or {}),
         "warnings": [],

@@ -1,7 +1,7 @@
 # XUUnity MCP Reference-Driven UI Acceptance Design
 
 Date: `2026-07-30`
-Status: `P0.1 implemented and host-validated; P0.2 / P1.x / P2.x planned`
+Status: `P0.1, P0.2, P1.1, P1.2, P1.3, P2.1, P2.2, P2.3 implemented and validated`
 Scope: `Operations/XUUnityLightUnityMcp`
 Source: [`2026-07-30_reference_driven_ui_completion_and_visual_acceptance_retro.md`](../../archive/retros/2026-07-30_reference_driven_ui_completion_and_visual_acceptance_retro.md)
 
@@ -120,6 +120,9 @@ Modules, one responsibility each and all under the repo's 700-line review line:
 | `server_ui_reference_artifacts.py` | overlay, diff heat map, metrics publishing |
 | `server_ui_reference_verdict.py` | scoring, acceptance lanes, decision readiness, next actions |
 | `server_ui_reference_compare.py` | orchestration and capture stability |
+| `server_ui_fixture.py` | fixture readiness contract, receipt extraction, determinism verdict (P0.2) |
+| `server_ui_region_explain.py` | failed-region to node stitching, coordinate transform, semantic lane (P1.3) |
+| `server_ui_device_lane.py` | device context normalization and the device acceptance lane (P2.3) |
 
 ### Verdict vocabulary
 
@@ -134,8 +137,227 @@ Modules, one responsibility each and all under the repo's 700-line review line:
 | `pending_manual_style` | `owner: human`. Manual styling is a handoff state and is never auto-promoted to acceptance. |
 
 `decision_ready` is reported separately and is false while capture stability is
-unproven or the fixture was not reported as established, so a verdict that is
+unproven or the fixture evidence has any determinism gap, so a verdict that is
 correct today but not reproducible cannot be filed as durable evidence.
+
+## Delivered surface (P0.2): the fixture readiness contract
+
+A similarity score answers "does this capture look like the reference". It cannot
+answer "would the same capture happen again". P0.2 adds the second question as a
+separate, project-owned contract.
+
+### Envelope
+
+`xuunity.ui-fixture.v1` is emitted by a project hook inside its normal payload,
+exactly as `xuunity.mutation-delta.v1` already is:
+
+```json
+{
+  "ui_fixture": {
+    "schema_version": "xuunity.ui-fixture.v1",
+    "fixture_id": "example_popup_available",
+    "state_id": "available_with_timer",
+    "data_source": "fixture",
+    "payload_hash": "",
+    "clock": { "frozen": true, "value_utc": "2026-01-01T00:00:00Z" },
+    "locale": { "id": "en", "pinned": true },
+    "viewport": { "width": 1080, "height": 2400 },
+    "safe_area": "full_screen",
+    "ready": { "predicate": "popup_visible_and_idle", "satisfied": true, "waited_ms": 240, "timeout_ms": 5000 }
+  }
+}
+```
+
+The base MCP owns the envelope and the safety rules; projects own their fixtures.
+`project-hook-scaffold --ui-fixture` generates a compliant hook whose block ships
+**unsatisfied**, so a scaffold that was never filled in validates as `unproven`
+rather than silently reporting readiness.
+
+### Two independent verdicts
+
+| Field | Question | False when |
+| --- | --- | --- |
+| `established` | Did the fixture actually reach the state before the capture? | schema invalid, ready predicate unsatisfied or timed out, or the reporting hook step failed |
+| `visual_determinism` | Would the same capture happen again? | anything above, plus live/mixed data without a recorded payload hash, unfrozen clock, unpinned locale, fixture or viewport mismatch against the reference, or caller-asserted evidence |
+
+A fixture can be established and still not deterministic — that is the common
+real case (the screen was right, but a live response or a running clock means the
+next capture may differ). The two are reported separately so the operator sees
+which one is missing.
+
+### Evidence has to be a receipt
+
+`compare` accepts fixture evidence two ways, and they are not equivalent:
+
+- `fixtureResultPath` — a scenario result JSON the editor wrote. The host reads the
+  `ui_fixture` block out of the hook step and records a receipt: result path,
+  SHA-256, run id, scenario name, step id, hook name, step status. This is the
+  only path that can reach `visual_determinism: proven`.
+- `fixtureEvidence` — an inline block supplied by the caller. Accepted for
+  authoring a hook before a scenario exists, but permanently carries
+  `evidence_not_receipt_backed` and can never make a comparison `decision_ready`.
+
+That distinction is the point of the slice: before P0.2 a caller could assert
+`established: true` and buy decision readiness with a dict literal.
+
+### Where it surfaces
+
+| Surface | Behaviour |
+| --- | --- |
+| `unity_ui_fixture_validate` / `ui-fixture-validate` | Validates a report from a scenario result or an inline block; returns the contract itself when no evidence is supplied, so a project can implement the envelope without reading the source. |
+| `unity_ui_reference_compare` | Every determinism gap becomes a `fixture_*` entry in `decision_readiness_gaps`, plus a `visual_determinism_unproven` warning and concrete next actions. |
+| Scenario hook summaries | `project_defined_hook_summary.hooks[].ui_fixture` reports fixture id, state id, data source, `established`, and the gaps, next to the existing `mutation_delta`. |
+
+## Delivered surface (P1.1): semantic uGUI and prefab read
+
+The comparator can say *a region differs*. It cannot say *why*. P1.1 adds the
+read-only semantic surface that answers the second question, on the envelope
+already specified in
+[`XUUNITY_MCP_READ_ONLY_UI_PRIMITIVES_DESIGN_2026-05-23.md`](XUUNITY_MCP_READ_ONLY_UI_PRIMITIVES_DESIGN_2026-05-23.md)
+(`schemaVersion: xuunity.ui.read.v1`, `proofClass`, normalized nodes, AND-combined
+selectors, explicit ambiguity and truncation).
+
+| Tool | Purpose |
+| --- | --- |
+| `unity_prefab_snapshot` | Prefab asset hierarchy as normalized nodes, loaded read-only through `AssetDatabase`. |
+| `unity_prefab_validate` | Typed pre-PlayMode defects, so a broken binding is caught before it becomes a blank region in a capture. |
+| `unity_ui_tree_snapshot` | Live uGUI hierarchy of the active scene or a named subtree. |
+| `unity_ui_query` / `unity_ui_exists` / `unity_ui_get_text` / `unity_ui_get_bounds` | Selector-driven reads over that same node model. |
+
+### Two deviations from the 2026-05-23 design, both deliberate
+
+1. **uGUI first, UI Toolkit later.** The originating incident and the whole
+   reference-acceptance loop are uGUI. Phase 1 there proposed UI Toolkit first;
+   this ships the phase-2 backend first because it is the one that unblocks the
+   acceptance question.
+2. **Flat node list, not nested `children`.** `JsonUtility` — the serializer every
+   operation in this package uses — cannot serialize a self-referencing type. Nodes
+   therefore carry `path`, `parent_path`, `depth`, `sibling_index`, and
+   `child_count`; the tree is reconstructable by the host and truncation stays
+   explicit per node (`children_truncated`). A repo test pins this so the shape is
+   not "fixed" back into a recursion that would silently truncate at depth 7.
+
+### Optional backends without a package dependency
+
+The core editor assembly declares **zero** package references, and the design has
+to keep it that way: a project without `com.unity.ugui` must still compile the MCP.
+So component-level detail comes through a registry seam
+(`IXUUnityLightMcpUiComponentReader`) filled by two constraint-gated satellite
+assemblies, using the pattern the Test Framework module already established here:
+
+| Assembly | Gate | Adds |
+| --- | --- | --- |
+| `com.xuunity.light-mcp.Editor` | none | hierarchy, active state, CanvasGroup alpha chain, raycast blocking, canvas order, screen bounds, prefab defects |
+| `…Editor.Ugui` | `com.unity.ugui` | `Text`/`InputField` text, resolved font, `materialForRendering`, `Selectable.IsInteractable`, `Graphic` alpha, `RectMask2D` clip state |
+| `…Editor.Tmp` | `com.unity.ugui ≥ 2.0.0` or `com.unity.textmeshpro ≥ 3.0.0` | `TMP_Text` text, resolved font asset and shared material, TMP alpha |
+
+When no reader is registered the surface does not fail — it reports
+`proof_class: semantic_ui_partial`, a `ui_component_details_unavailable` warning
+with the remedy, and `lanes_not_evaluated: [unresolved_font_or_material]` on
+prefab validation. Degraded evidence is labelled, never disguised as complete.
+
+## Delivered surface (P1.3): joining the visual and semantic lanes
+
+P0.1 could say *this region differs*; P1.1 could say *this node's font did not
+resolve*. Nothing joined them. `compare` now takes `uiSnapshotPath` and stitches
+the two automatically.
+
+### The transform is the whole risk
+
+Unity's screen bounds are **bottom-left origin, in capture pixels**. Reference
+regions are **top-left origin, in reference-viewport pixels**. Getting that wrong
+produces confident, precisely wrong explanations — worse than none. The mapping is
+therefore explicit, recorded in `coordinate_transform` on every payload, and pinned
+by tests that assert a bottom-left node lands bottom-left and a top-of-screen node
+lands at `y = 0`:
+
+```
+ref_x = x * reference_width / capture_width
+ref_y = (capture_height - (y + height)) * reference_height / capture_height
+```
+
+The capture viewport is read from the snapshot itself (`target.capture_width/height`,
+added in P1.3), not assumed. If the snapshot was taken at a different resolution than
+the compared capture, that is a warning, not a silent rescale; if the snapshot records
+no viewport, the fallback is stated as `ui_snapshot_viewport_assumed`; and a prefab
+snapshot with no screen bounds refuses to stitch rather than inventing geometry.
+
+### What a failed region now returns
+
+Each failed region gains `explained_by`: candidate nodes ranked by defect count then
+coverage, each with `region_coverage`, `node_coverage`, and a `suspicions` list drawn
+from `missing_script_component`, `font_unresolved`, `material_unresolved`,
+`empty_text`, `inactive`, `alpha_zero`, `fully_clipped`, `partially_clipped`. The
+highest-priority suspicion becomes `likely_cause`, and the summary is plain language:
+
+> `'Canvas/Body' overlaps this region and its font asset did not resolve.`
+
+Two negative cases matter as much as the positive one. **No node covers the region** →
+"the screen renders nothing where the reference expects content", which is itself the
+finding. **Every covering node is healthy** → "the difference is visual (wrong sprite,
+colour, or layout), not a broken binding", which stops the operator hunting for a
+binding bug that does not exist.
+
+### The semantic lane stops being a placeholder
+
+With a snapshot present, the reference's declared `required_ui` selectors are checked
+against it, so `acceptance_lanes.semantic` reports `passed`/`failed` with typed
+failures instead of a permanent `not_evaluated`. A required-lane failure fails the
+reference **even when the pixels match** — a screen can be pixel-correct and still be
+missing the component the design requires.
+
+## Delivered surface (P1.2): isolated prefab render
+
+`unity_prefab_render` opens a preview scene (`EditorSceneManager.NewPreviewScene`),
+builds a controlled Canvas and orthographic camera sized to the declared viewport,
+applies safe-area insets as a RectTransform inset, instantiates the prefab, forces a
+layout rebuild, renders to a `RenderTexture`, and writes a PNG — with no application
+boot and no change to any open scene. Everything is created `HideAndDontSave` and torn
+down in a `finally`, and the preview scene is always closed.
+
+Because the canvas is `ScreenSpaceCamera` against that camera, the snapshot returned
+alongside the PNG is already in **render-pixel space at the declared viewport**, so it
+feeds straight into `compare`'s `uiSnapshotPath` with the transform reduced to
+identity. That is the loop the retro asked for: render → compare → explain, in
+seconds, without a 30–45 s boot.
+
+## Delivered surface (P2.1): guarded prefab mutation
+
+`unity_prefab_mutate` is a typed transaction, never raw YAML. It loads prefab contents
+through `PrefabUtility.LoadPrefabContents`, applies the operations in order, and only
+then decides whether anything is written.
+
+| Guardrail | Behaviour |
+| --- | --- |
+| Preview by default | `previewOnly` defaults true, and `approve=false` forces preview regardless — the delta is returned without touching the asset. |
+| Atomic | Any failing operation aborts the batch; the asset is byte-identical afterwards (asserted by test). |
+| Re-validated | The mutated contents are run through the P1.1 prefab validator; failed bindings discard the batch instead of saving. |
+| Reversible | An inverse patch (`xuunity.prefab-mutation-patch.v1`) with before-values and the pre-mutation hash is emitted. |
+| Stale-safe | An optional `expectedSha256` precondition refuses a transaction built against an older version of the file. |
+| Unambiguous | A selector matching more than one object is refused, never resolved by "first match". |
+| Type-safe | Object-reference fields are out of scope entirely, so no operation can swap a component for a different type. |
+| Allowlisted | `add_component`/`remove_component` only touch a layout allowlist plus whatever the caller explicitly allows for that transaction. |
+
+## Delivered surface (P2.2): guarded semantic interaction
+
+`unity_ui_click` requires `approve=true` and the explicit action `click`, resolves a
+**unique** selector, and delivers through `ExecuteEvents` on the EventSystem. It
+refuses — before delivering anything — an ambiguous selector, a hidden target, a
+non-interactable target, a target whose CanvasGroup does not block raycasts, and a
+target with no `IPointerClickHandler` in its ancestry. The response records the matched
+node, the handler that received the event, the delivery mechanism, and before/after
+snapshot signatures so a state change is evidence rather than assumption. Coordinate
+clicks and OS automation are not offered.
+
+## Delivered surface (P2.3): device lane
+
+`captureLane` is `game_view` or `device`. A device capture must declare model, OS,
+resolution, orientation, and build revision; an incomplete descriptor **blocks** the
+device lane rather than passing it, and a missing safe-area declaration is warned
+because notch differences would otherwise be indistinguishable from layout defects.
+A Game View comparison always reports `acceptance_lanes.device` as `not_evaluated`
+with the reason — Game View parity is structurally incapable of claiming device
+parity.
 
 ### Guardrails implemented from the retro
 
@@ -153,10 +375,13 @@ correct today but not reproducible cannot be filed as durable evidence.
 
 ## Validation evidence
 
-- `python3 -m unittest discover -s tests`: **517 passed**, 13 platform skips
-  (macOS host, 2026-07-30). 41 of those are the new
+- `python3 -m unittest discover -s tests`: **532 passed**, 13 platform skips
+  (macOS host, 2026-07-30). 56 of those are the new
   `tests/test_ui_reference_acceptance.py`, covering the retro's acceptance matrix
-  plus scale invariance, tolerance profiles, and layout findings.
+  plus scale invariance, tolerance profiles, layout findings, and the P0.2 fixture
+  contract (receipt versus assertion, live-data downgrade, ready-predicate timeout,
+  failed hook step, schema rejection, scenario-summary surfacing, scaffold
+  fail-closed).
 - Production-scale check (synthetic 1440x3200 popup, host timing):
   - same design captured at 1080x2400 -> `passed`, global similarity `0.997`,
     per-region 0.98-1.00, 0.7 s including artifact rendering;
@@ -166,21 +391,56 @@ correct today but not reproducible cannot be filed as durable evidence.
   - `comparison_not_comparable` for a 240x420 capture against a 240x480
     reference, with `1440x3200 / 1080x2400 / 720x1600` recommended.
 - Parity baselines (`tests/fixtures/server_parity_baseline.json`) regenerated for
-  the three new tools and three new CLI commands.
+  the eleven new tools and four new CLI commands.
+- P1.1 was validated in a real editor, not only by compile. Two throwaway Unity
+  `6000.0.58f2` projects mount the package by path:
+  - **with `com.unity.ugui`**: all three assemblies compile; `-runTests -testPlatform
+    EditMode` over the package self-test category reports **47 passed, 0 failed**,
+    including 17 new UI-read tests (canvas hierarchy and paths, screen bounds,
+    CanvasGroup alpha, explicit truncation, typed target-not-found, selector
+    ambiguity, prefab pass/blocked/invalid-path, unassigned-reference opt-in) and 6
+    uGUI reader tests (text, resolved font/material, non-interactable `Selectable`,
+    alpha-0 graphic, `get_text`, text and interactability selectors).
+  - **without `com.unity.ugui`**: only `com.xuunity.light-mcp.Editor.dll` is built,
+    the two satellite assemblies are skipped by their define constraints, and the
+    import exits with zero compile errors.
+- That editor run earned its keep twice: it caught `internal` seam types being
+  invisible to the satellite assemblies (fixed with `InternalsVisibleTo`), and an
+  ordering bug where component readers ran before the alpha/bounds pass, so a
+  fully transparent `Graphic` reported `effective_alpha: 1.0` and clip detection
+  never saw bounds. Both were invisible to static review.
+- P1.2/P1.3/P2.x were validated the same way. The package self-test suite is now
+  **70 EditMode tests, all passing** in Unity `6000.0.58f2` with uGUI and TMP, and
+  the core-only project without `com.unity.ugui` still imports with zero compile
+  errors and only `com.xuunity.light-mcp.Editor.dll` built.
+- Rendered pixel content is verified, not assumed: the render test decodes its own
+  PNG and asserts the prefab's blue `Image` dominates the centre pixel. Under
+  `-nographics` there is no graphics device, so that test declares itself ignored
+  rather than passing vacuously; it was run separately **with** a graphics device
+  (11/11 passed) to prove the pixels are real.
+- Host side: **575 tests passing**, including 26 that pin the region/node coordinate
+  transform, the semantic lane verdicts, and the device lane, plus 17 cross-language
+  contract tests that hold the Python/C# seam (every declared `bridgeOperation`
+  resolves to a registered editor operation, the uGUI-only operations are owned by
+  the constraint-gated assembly, mutation never reaches for raw YAML or object
+  references, and the click path keeps all seven refusals).
 
 ## Remaining slices, in delivery order
 
 | Order | Slice | Status | Done when |
 | --- | --- | --- | --- |
-| 2 | P0.2 UI fixture contract | planned | A project action/scenario can report `ui_fixture` evidence (fixture id, frozen clock, locale, data source, viewport) that `compare` consumes; live data downgrades decision readiness automatically instead of by convention. |
-| 3 | P1.1 prefab validation + uGUI semantic tree | planned | `unity.prefab.validate` fails a missing/obsolete script GUID or an unassignable serialized reference before PlayMode; `unity.ui.tree_snapshot` answers visibility, bounds, text, resolved font/material, and interactability so a failed region can be explained. |
-| 4 | P1.2 isolated prefab/Canvas render | planned | A prefab renders at the declared viewport in seconds without app boot and returns the same evidence schema. |
-| 5 | P2.1 guarded prefab mutation | planned | Typed patch with preview, atomic Editor apply, binding validation, reversible delta. |
-| 6 | P2.2 guarded interaction + P2.3 device lane | planned | Close/CTA paths and device captures carry independent pass/fail evidence. |
+| 2 | P0.2 UI fixture contract | shipped 2026-07-30 | A project action/scenario reports `ui_fixture` evidence that `compare` reads from the editor-written scenario result; live data, a running clock, an unpinned locale, or caller-asserted evidence downgrade decision readiness automatically instead of by convention. |
+| 3 | P1.1 prefab validation + uGUI semantic tree | shipped 2026-07-30 | `unity.prefab.validate` fails a missing/obsolete script GUID or an unassignable serialized reference before PlayMode; `unity.ui.tree_snapshot` answers visibility, bounds, text, resolved font/material, and interactability so a failed region can be explained. |
+| 4 | P1.3 region/node stitching + semantic lane | shipped 2026-07-30 | A failed region names the nodes covering it and the likely cause; declared `requiredUi` selectors decide the semantic lane instead of a permanent `not_evaluated`. |
+| 5 | P1.2 isolated prefab/Canvas render | shipped 2026-07-30 | A prefab renders at the declared viewport in seconds without app boot, in an isolated preview scene, and returns the same evidence schema plus its own snapshot. |
+| 6 | P2.1 guarded prefab mutation | shipped 2026-07-30 | Typed transaction with preview-by-default, atomic Editor apply, post-mutation binding validation, rollback on any failure, and a reversible inverse patch. |
+| 7 | P2.2 guarded interaction | shipped 2026-07-30 | `unity.ui.click` delivers once through the EventSystem to a unique selector and refuses ambiguous, hidden, disabled, raycast-transparent, and handler-less targets. |
+| 8 | P2.3 device lane | shipped 2026-07-30 | A device capture is a separate lane carrying model/OS/resolution/orientation/safe-area/build revision; Game View parity never claims device parity. |
 
-P1.1 is what turns a failed region from "these cells differ" into "the Body
-`TMP_Text` is active but its font asset did not resolve", which is the diagnosis
-the originating incident actually needed.
+P1.1 produced that diagnosis; P1.3 joins it to the comparator automatically, so a
+failed region arrives already named. The originating incident is now answerable
+end to end: render the prefab in isolation, compare it against the reference,
+and read which node explains the failing region — without booting the app.
 
 ## Post-implementation self-review
 

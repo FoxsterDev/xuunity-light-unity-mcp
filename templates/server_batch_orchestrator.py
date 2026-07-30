@@ -237,8 +237,9 @@ from server_runtime_config import (
     resolve_operation_lifecycle_policy_overrides,
 )
 from server_artifact_probe import load_artifact_probe_config, run_artifact_probe
-from server_artifact_registry import register_artifact, write_artifact_report
+from server_artifact_registry import register_artifact, resolve_workspace_root, write_artifact_report
 from server_sdk_diff_guard import run_sdk_generated_diff_guard
+from server_ui_fixture import validate_ui_fixture
 from server_ui_reference_compare import compare_ui_reference
 from server_ui_reference_manifest import DEFAULT_REFERENCE_CATEGORY as UI_REFERENCE_DEFAULT_CATEGORY
 from server_ui_reference_registry import register_ui_reference, validate_ui_reference
@@ -2139,6 +2140,10 @@ def call_unity_ui_reference_compare_tool(arguments: dict[str, Any]) -> dict[str,
             include_expected_copy=_optional_bool_arg(arguments, "includeExpectedCopy", False),
             comparison_id=_optional_string_arg(arguments, "comparisonId"),
             fixture_evidence=_optional_object_arg(arguments, "fixtureEvidence"),
+            fixture_result_path=_optional_string_arg(arguments, "fixtureResultPath"),
+            ui_snapshot_path=_optional_string_arg(arguments, "uiSnapshotPath"),
+            capture_lane=_optional_string_arg(arguments, "captureLane") or "game_view",
+            device=_optional_object_arg(arguments, "device"),
             tolerance_profile=_optional_string_arg(arguments, "toleranceProfile"),
             category=_optional_string_arg(arguments, "category") or UI_REFERENCE_DEFAULT_CATEGORY,
             workspace_root=_optional_string_arg(arguments, "workspaceRoot"),
@@ -2146,6 +2151,26 @@ def call_unity_ui_reference_compare_tool(arguments: dict[str, Any]) -> dict[str,
     except ToolInvocationError as exc:
         return mcp_json_result(build_tool_error_payload(exc), is_error=True)
     return mcp_json_result(payload, is_error=payload.get("reference_acceptance") != "passed")
+
+
+def call_unity_ui_fixture_validate_tool(arguments: dict[str, Any]) -> dict[str, Any]:
+    project_root_value = arguments.get("projectRoot")
+    if not isinstance(project_root_value, str) or not project_root_value.strip():
+        raise JsonRpcError(-32602, "projectRoot is required.")
+
+    try:
+        project_root = ensure_project_root(project_root_value)
+        payload = validate_ui_fixture(
+            project_root=project_root,
+            workspace=resolve_workspace_root(project_root, _optional_string_arg(arguments, "workspaceRoot")),
+            fixture_evidence=_optional_object_arg(arguments, "fixtureEvidence"),
+            fixture_result_path=_optional_string_arg(arguments, "fixtureResultPath"),
+            declared_fixture=_optional_string_arg(arguments, "declaredFixture"),
+            declared_viewport=_optional_object_arg(arguments, "declaredViewport"),
+        )
+    except ToolInvocationError as exc:
+        return mcp_json_result(build_tool_error_payload(exc), is_error=True)
+    return mcp_json_result(payload, is_error=not bool(payload.get("succeeded")))
 
 
 def call_unity_artifact_register_tool(arguments: dict[str, Any]) -> dict[str, Any]:
@@ -2326,6 +2351,7 @@ def call_tool(name: str, arguments: dict[str, Any] | None) -> dict[str, Any]:
             "unity_ui_reference_register": call_unity_ui_reference_register_tool,
             "unity_ui_reference_validate": call_unity_ui_reference_validate_tool,
             "unity_ui_reference_compare": call_unity_ui_reference_compare_tool,
+            "unity_ui_fixture_validate": call_unity_ui_fixture_validate_tool,
         },
         tool_invocation_error_type=ToolInvocationError,
         ensure_project_root=ensure_project_root,
@@ -2675,5 +2701,6 @@ wrap_globals_with_proxies(globals(), [
     "call_unity_ui_reference_register_tool",
     "call_unity_ui_reference_validate_tool",
     "call_unity_ui_reference_compare_tool",
+    "call_unity_ui_fixture_validate_tool",
 ])
 time = TimeProxy()
