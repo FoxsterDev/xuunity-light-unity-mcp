@@ -177,6 +177,27 @@ namespace XUUnity.LightMcp.Editor.Helpers
                         AddIssue(payload, "error", actionErrorCode, actionErrorMessage, stepId, index);
                     }
                     break;
+                case XUUnityLightMcpUiRead.InteractionStepKind:
+                    if (string.IsNullOrWhiteSpace(step.interactionId))
+                    {
+                        AddIssue(payload, "error", "missing_interaction_id",
+                            $"{XUUnityLightMcpUiRead.InteractionStepKind} requires interactionId.", stepId, index);
+                    }
+
+                    if (!step.approve)
+                    {
+                        AddIssue(payload, "error", "ui_click_approval_required",
+                            $"{XUUnityLightMcpUiRead.InteractionStepKind} requires approve=true; it delivers a real pointer click.",
+                            stepId, index);
+                    }
+
+                    if (XUUnityLightMcpUiSelectorMatcher.IsEmpty(step.selector))
+                    {
+                        AddIssue(payload, "error", "ui_selector_invalid",
+                            $"{XUUnityLightMcpUiRead.InteractionStepKind} requires a selector with at least one constraint.",
+                            stepId, index);
+                    }
+                    break;
                 case "project_defined_hook":
                     if (string.IsNullOrWhiteSpace(step.hookName))
                     {

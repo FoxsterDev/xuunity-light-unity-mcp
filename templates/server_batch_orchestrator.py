@@ -240,7 +240,10 @@ from server_artifact_probe import load_artifact_probe_config, run_artifact_probe
 from server_artifact_registry import register_artifact, resolve_workspace_root, write_artifact_report
 from server_sdk_diff_guard import run_sdk_generated_diff_guard
 from server_ui_fixture import validate_ui_fixture
+from server_ui_interaction import validate_ui_interactions
 from server_ui_reference_compare import compare_ui_reference
+from server_ui_vision_packet import build_vision_packet, submit_vision_review
+from server_ui_vision_sheet import DEFAULT_MAX_PANEL_HEIGHT as VISION_DEFAULT_MAX_PANEL_HEIGHT
 from server_ui_reference_manifest import DEFAULT_REFERENCE_CATEGORY as UI_REFERENCE_DEFAULT_CATEGORY
 from server_ui_reference_registry import register_ui_reference, validate_ui_reference
 
@@ -293,7 +296,7 @@ from server_batch_recovery import (
 PROTOCOL_VERSION = "2025-06-18"
 SERVER_INFO = {
     "name": "xuunity-mcp",
-    "version": "0.3.48",
+    "version": "0.3.49",
 }
 
 # === Block A: Registry & Discovery Helpers ===
@@ -1880,6 +1883,15 @@ def _optional_bool_arg(arguments: dict[str, Any], name: str, default: bool) -> b
     return value
 
 
+def _optional_int_arg(arguments: dict[str, Any], name: str, default: int) -> int:
+    value = arguments.get(name)
+    if value is None:
+        return default
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise JsonRpcError(-32602, f"{name} must be an integer when provided.")
+    return value
+
+
 def call_xuunity_setup_plan_tool(arguments: dict[str, Any]) -> dict[str, Any]:
     include_test_framework = _optional_string_arg(arguments, "includeTestFramework") or "auto"
     if include_test_framework not in {"auto", "yes", "no"}:
@@ -2084,6 +2096,8 @@ def call_unity_ui_reference_register_tool(arguments: dict[str, Any]) -> dict[str
             regions=_optional_object_list_arg(arguments, "regions"),
             dynamic_masks=_optional_object_list_arg(arguments, "dynamicMasks"),
             required_ui=_optional_object_list_arg(arguments, "requiredUi"),
+            required_interactions=_optional_object_list_arg(arguments, "requiredInteractions"),
+            vision_policy=_optional_object_arg(arguments, "visionPolicy"),
             thresholds=_optional_object_arg(arguments, "thresholds"),
             tolerance_profile=_optional_string_arg(arguments, "toleranceProfile") or "balanced",
             scale_policy=_optional_string_arg(arguments, "scalePolicy") or "aspect_scale",
@@ -2142,6 +2156,9 @@ def call_unity_ui_reference_compare_tool(arguments: dict[str, Any]) -> dict[str,
             fixture_evidence=_optional_object_arg(arguments, "fixtureEvidence"),
             fixture_result_path=_optional_string_arg(arguments, "fixtureResultPath"),
             ui_snapshot_path=_optional_string_arg(arguments, "uiSnapshotPath"),
+            interaction_result_path=_optional_string_arg(arguments, "interactionResultPath"),
+            interaction_evidence=_optional_object_list_arg(arguments, "interactionEvidence"),
+            vision_review_paths=_optional_string_list_arg(arguments, "visionReviewPaths"),
             capture_lane=_optional_string_arg(arguments, "captureLane") or "game_view",
             device=_optional_object_arg(arguments, "device"),
             tolerance_profile=_optional_string_arg(arguments, "toleranceProfile"),
@@ -2167,6 +2184,76 @@ def call_unity_ui_fixture_validate_tool(arguments: dict[str, Any]) -> dict[str, 
             fixture_result_path=_optional_string_arg(arguments, "fixtureResultPath"),
             declared_fixture=_optional_string_arg(arguments, "declaredFixture"),
             declared_viewport=_optional_object_arg(arguments, "declaredViewport"),
+        )
+    except ToolInvocationError as exc:
+        return mcp_json_result(build_tool_error_payload(exc), is_error=True)
+    return mcp_json_result(payload, is_error=not bool(payload.get("succeeded")))
+
+
+def call_unity_ui_vision_packet_tool(arguments: dict[str, Any]) -> dict[str, Any]:
+    project_root_value = arguments.get("projectRoot")
+    if not isinstance(project_root_value, str) or not project_root_value.strip():
+        raise JsonRpcError(-32602, "projectRoot is required.")
+
+    actual_image = arguments.get("actualImage")
+    if not isinstance(actual_image, str) or not actual_image.strip():
+        raise JsonRpcError(-32602, "actualImage is required.")
+
+    try:
+        project_root = ensure_project_root(project_root_value)
+        payload = build_vision_packet(
+            project_root=project_root,
+            actual_image=actual_image,
+            reference_id=_optional_string_arg(arguments, "referenceId"),
+            manifest_path=_optional_string_arg(arguments, "manifestPath"),
+            comparison_path=_optional_string_arg(arguments, "comparisonPath"),
+            comparison_id=_optional_string_arg(arguments, "comparisonId"),
+            include_numeric_evidence=_optional_bool_arg(arguments, "includeNumericEvidence", False),
+            max_panel_height=_optional_int_arg(arguments, "maxPanelHeight", VISION_DEFAULT_MAX_PANEL_HEIGHT),
+            category=_optional_string_arg(arguments, "category") or UI_REFERENCE_DEFAULT_CATEGORY,
+            workspace_root=_optional_string_arg(arguments, "workspaceRoot"),
+        )
+    except ToolInvocationError as exc:
+        return mcp_json_result(build_tool_error_payload(exc), is_error=True)
+    return mcp_json_result(payload, is_error=False)
+
+
+def call_unity_ui_vision_submit_tool(arguments: dict[str, Any]) -> dict[str, Any]:
+    project_root_value = arguments.get("projectRoot")
+    if not isinstance(project_root_value, str) or not project_root_value.strip():
+        raise JsonRpcError(-32602, "projectRoot is required.")
+
+    packet_path = arguments.get("packetPath")
+    if not isinstance(packet_path, str) or not packet_path.strip():
+        raise JsonRpcError(-32602, "packetPath is required.")
+
+    try:
+        project_root = ensure_project_root(project_root_value)
+        payload = submit_vision_review(
+            project_root=project_root,
+            packet_path=packet_path,
+            review=_optional_object_arg(arguments, "review"),
+            review_path=_optional_string_arg(arguments, "reviewPath"),
+            workspace_root=_optional_string_arg(arguments, "workspaceRoot"),
+        )
+    except ToolInvocationError as exc:
+        return mcp_json_result(build_tool_error_payload(exc), is_error=True)
+    return mcp_json_result(payload, is_error=not bool(payload.get("succeeded")))
+
+
+def call_unity_ui_interaction_validate_tool(arguments: dict[str, Any]) -> dict[str, Any]:
+    project_root_value = arguments.get("projectRoot")
+    if not isinstance(project_root_value, str) or not project_root_value.strip():
+        raise JsonRpcError(-32602, "projectRoot is required.")
+
+    try:
+        project_root = ensure_project_root(project_root_value)
+        payload = validate_ui_interactions(
+            project_root=project_root,
+            workspace=resolve_workspace_root(project_root, _optional_string_arg(arguments, "workspaceRoot")),
+            interaction_result_path=_optional_string_arg(arguments, "interactionResultPath"),
+            interaction_evidence=_optional_object_list_arg(arguments, "interactionEvidence"),
+            required_interactions=_optional_object_list_arg(arguments, "requiredInteractions"),
         )
     except ToolInvocationError as exc:
         return mcp_json_result(build_tool_error_payload(exc), is_error=True)
@@ -2352,6 +2439,9 @@ def call_tool(name: str, arguments: dict[str, Any] | None) -> dict[str, Any]:
             "unity_ui_reference_validate": call_unity_ui_reference_validate_tool,
             "unity_ui_reference_compare": call_unity_ui_reference_compare_tool,
             "unity_ui_fixture_validate": call_unity_ui_fixture_validate_tool,
+            "unity_ui_vision_packet": call_unity_ui_vision_packet_tool,
+            "unity_ui_vision_submit": call_unity_ui_vision_submit_tool,
+            "unity_ui_interaction_validate": call_unity_ui_interaction_validate_tool,
         },
         tool_invocation_error_type=ToolInvocationError,
         ensure_project_root=ensure_project_root,
@@ -2702,5 +2792,8 @@ wrap_globals_with_proxies(globals(), [
     "call_unity_ui_reference_validate_tool",
     "call_unity_ui_reference_compare_tool",
     "call_unity_ui_fixture_validate_tool",
+    "call_unity_ui_vision_packet_tool",
+    "call_unity_ui_vision_submit_tool",
+    "call_unity_ui_interaction_validate_tool",
 ])
 time = TimeProxy()

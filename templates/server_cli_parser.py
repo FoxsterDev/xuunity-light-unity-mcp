@@ -367,6 +367,8 @@ def build_parser() -> argparse.ArgumentParser:
     ui_reference_register_cmd.add_argument("--regions-json", default="")
     ui_reference_register_cmd.add_argument("--dynamic-masks-json", default="")
     ui_reference_register_cmd.add_argument("--required-ui-json", default="")
+    ui_reference_register_cmd.add_argument("--required-interactions-json", default="")
+    ui_reference_register_cmd.add_argument("--vision-policy-json", default="")
     ui_reference_register_cmd.add_argument("--thresholds-json", default="")
     ui_reference_register_cmd.add_argument(
         "--tolerance-profile", default="balanced", choices=["strict", "balanced", "lenient"]
@@ -412,6 +414,9 @@ def build_parser() -> argparse.ArgumentParser:
     ui_reference_compare_cmd.add_argument("--fixture-evidence-json", default="")
     ui_reference_compare_cmd.add_argument("--fixture-result-path", default="")
     ui_reference_compare_cmd.add_argument("--ui-snapshot-path", default="")
+    ui_reference_compare_cmd.add_argument("--interaction-result-path", default="")
+    ui_reference_compare_cmd.add_argument("--interaction-evidence-json", default="")
+    ui_reference_compare_cmd.add_argument("--vision-review-path", action="append", default=[])
     ui_reference_compare_cmd.add_argument(
         "--capture-lane", default="game_view", choices=["game_view", "device"]
     )
@@ -431,6 +436,44 @@ def build_parser() -> argparse.ArgumentParser:
     ui_fixture_validate_cmd.add_argument("--declared-viewport-json", default="")
     ui_fixture_validate_cmd.add_argument("--workspace-root", default="")
     ui_fixture_validate_cmd.set_defaults(func_name="cmd_ui_fixture_validate")
+
+    ui_vision_packet_cmd = sub.add_parser(
+        "ui-vision-packet",
+        help="Build a side-by-side review sheet and rubric so a multimodal judge can rule on style similarity.",
+    )
+    ui_vision_packet_cmd.add_argument("--project-root", required=True)
+    ui_vision_packet_cmd.add_argument("--reference-id", default="")
+    ui_vision_packet_cmd.add_argument("--manifest-path", default="")
+    ui_vision_packet_cmd.add_argument("--actual-image", required=True)
+    ui_vision_packet_cmd.add_argument("--comparison-path", default="")
+    ui_vision_packet_cmd.add_argument("--comparison-id", default="")
+    ui_vision_packet_cmd.add_argument("--include-numeric-evidence", action="store_true")
+    ui_vision_packet_cmd.add_argument("--max-panel-height", type=int, default=1024)
+    ui_vision_packet_cmd.add_argument("--category", default="UIReference")
+    ui_vision_packet_cmd.add_argument("--workspace-root", default="")
+    ui_vision_packet_cmd.set_defaults(func_name="cmd_ui_vision_packet")
+
+    ui_vision_submit_cmd = sub.add_parser(
+        "ui-vision-submit",
+        help="Record a rubric judgement against a vision packet and report the resulting vision lane.",
+    )
+    ui_vision_submit_cmd.add_argument("--project-root", required=True)
+    ui_vision_submit_cmd.add_argument("--packet-path", required=True)
+    ui_vision_submit_cmd.add_argument("--review-json", default="")
+    ui_vision_submit_cmd.add_argument("--review-path", default="")
+    ui_vision_submit_cmd.add_argument("--workspace-root", default="")
+    ui_vision_submit_cmd.set_defaults(func_name="cmd_ui_vision_submit")
+
+    ui_interaction_validate_cmd = sub.add_parser(
+        "ui-interaction-validate",
+        help="Validate ui-interaction.v1 evidence from a scenario result; Edit-mode delivery blocks the lane.",
+    )
+    ui_interaction_validate_cmd.add_argument("--project-root", required=True)
+    ui_interaction_validate_cmd.add_argument("--interaction-result-path", default="")
+    ui_interaction_validate_cmd.add_argument("--interaction-evidence-json", default="")
+    ui_interaction_validate_cmd.add_argument("--required-interactions-json", default="")
+    ui_interaction_validate_cmd.add_argument("--workspace-root", default="")
+    ui_interaction_validate_cmd.set_defaults(func_name="cmd_ui_interaction_validate")
 
     install_tf_bridge_cmd = sub.add_parser(
         "request-install-test-framework",

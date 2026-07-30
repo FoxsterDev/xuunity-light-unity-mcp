@@ -4,8 +4,10 @@ from __future__ import annotations
 from server_cli_shared import *
 
 from server_ui_fixture import validate_ui_fixture
+from server_ui_interaction import validate_ui_interactions
 from server_ui_reference_compare import compare_ui_reference
 from server_ui_reference_registry import register_ui_reference, validate_ui_reference
+from server_ui_vision_packet import build_vision_packet, submit_vision_review
 
 def cmd_project_action_list(args):
     project_root = ensure_project_root(args.project_root)
@@ -299,6 +301,11 @@ def cmd_ui_reference_register(args):
         regions=load_optional_json_object_list(args.regions_json, "ui_reference_region_invalid"),
         dynamic_masks=load_optional_json_object_list(args.dynamic_masks_json, "ui_reference_mask_invalid"),
         required_ui=load_optional_json_object_list(args.required_ui_json, "ui_reference_required_ui_invalid"),
+        required_interactions=load_optional_json_object_list(
+            args.required_interactions_json, "ui_reference_required_interaction_invalid"
+        ),
+        vision_policy=load_optional_json_object(args.vision_policy_json, "ui_reference_vision_policy_invalid")
+        or None,
         thresholds=load_optional_json_object(args.thresholds_json, "ui_reference_threshold_invalid") or None,
         tolerance_profile=args.tolerance_profile,
         scale_policy=args.scale_policy,
@@ -344,6 +351,11 @@ def cmd_ui_reference_compare(args):
         ),
         fixture_result_path=args.fixture_result_path,
         ui_snapshot_path=args.ui_snapshot_path,
+        interaction_result_path=args.interaction_result_path,
+        interaction_evidence=load_optional_json_object_list(
+            args.interaction_evidence_json, "ui_reference_interaction_evidence_invalid"
+        ),
+        vision_review_paths=list(args.vision_review_path or []),
         capture_lane=args.capture_lane,
         device=load_optional_json_object(args.device_json, "ui_reference_device_invalid") or None,
         category=args.category,
@@ -366,6 +378,55 @@ def cmd_ui_fixture_validate(args):
         declared_fixture=args.declared_fixture,
         declared_viewport=load_optional_json_object(
             args.declared_viewport_json, "ui_fixture_viewport_invalid"
+        ),
+    )
+    print_json(payload)
+    if not bool(payload.get("succeeded")):
+        raise SystemExit(1)
+
+
+def cmd_ui_vision_packet(args):
+    project_root = ensure_project_root(args.project_root)
+    payload = build_vision_packet(
+        project_root=project_root,
+        actual_image=args.actual_image,
+        reference_id=args.reference_id,
+        manifest_path=args.manifest_path,
+        comparison_path=args.comparison_path,
+        comparison_id=args.comparison_id,
+        include_numeric_evidence=bool(args.include_numeric_evidence),
+        max_panel_height=int(args.max_panel_height),
+        category=args.category,
+        workspace_root=args.workspace_root,
+    )
+    print_json(payload)
+
+
+def cmd_ui_vision_submit(args):
+    project_root = ensure_project_root(args.project_root)
+    payload = submit_vision_review(
+        project_root=project_root,
+        packet_path=args.packet_path,
+        review=load_optional_json_object(args.review_json, "ui_vision_review_invalid"),
+        review_path=args.review_path,
+        workspace_root=args.workspace_root,
+    )
+    print_json(payload)
+    if not bool(payload.get("succeeded")):
+        raise SystemExit(1)
+
+
+def cmd_ui_interaction_validate(args):
+    project_root = ensure_project_root(args.project_root)
+    payload = validate_ui_interactions(
+        project_root=project_root,
+        workspace=resolve_workspace_root(project_root, args.workspace_root),
+        interaction_result_path=args.interaction_result_path,
+        interaction_evidence=load_optional_json_object_list(
+            args.interaction_evidence_json, "ui_interaction_evidence_invalid"
+        ),
+        required_interactions=load_optional_json_object_list(
+            args.required_interactions_json, "ui_reference_required_interaction_invalid"
         ),
     )
     print_json(payload)

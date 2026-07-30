@@ -99,6 +99,9 @@ Use these MCP tools from compatible clients:
 - `unity_ui_reference_validate`
 - `unity_ui_reference_compare`
 - `unity_ui_fixture_validate`
+- `unity_ui_vision_packet`
+- `unity_ui_vision_submit`
+- `unity_ui_interaction_validate`
 - `unity_prefab_snapshot`
 - `unity_prefab_validate`
 - `unity_ui_tree_snapshot`
@@ -236,7 +239,7 @@ Minimum evidence object:
   "workflowId": "post_change_validation",
   "projectRoot": "$PROJECT_ROOT",
   "unityVersion": "6000.0.58f2",
-  "packageVersion": "0.3.48",
+  "packageVersion": "0.3.49",
   "packageSourceMode": "git",
   "verdict": "pass",
   "checks": [

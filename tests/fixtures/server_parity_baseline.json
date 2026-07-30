@@ -121,7 +121,7 @@
       "request-scenario-run-and-wait",
       "batch-compile"
     ],
-    "root_command_count": 72,
+    "root_command_count": 75,
     "root_commands": [
       "setup-plan",
       "setup-apply",
@@ -161,6 +161,9 @@
       "ui-reference-validate",
       "ui-reference-compare",
       "ui-fixture-validate",
+      "ui-vision-packet",
+      "ui-vision-submit",
+      "ui-interaction-validate",
       "request-install-test-framework",
       "request-edm4u-resolve",
       "request-sdk-android-resolve",
@@ -198,8 +201,8 @@
     ]
   },
   "mcp_tools_list": {
-    "sha256": "0282fba516ef93ceb1c0cc1098f4778f9f7d8f5c6b64549350d1ac7150866134",
-    "tool_count": 61,
+    "sha256": "309167aa6dc5664958dfe88afb211d500012aa27ce1e2de8b0918e1eae7a090e",
+    "tool_count": 64,
     "tool_names": [
       "xuunity_setup_plan",
       "xuunity_setup_apply",
@@ -223,6 +226,9 @@
       "unity_ui_reference_validate",
       "unity_ui_reference_compare",
       "unity_ui_fixture_validate",
+      "unity_ui_vision_packet",
+      "unity_ui_vision_submit",
+      "unity_ui_interaction_validate",
       "unity_prefab_snapshot",
       "unity_prefab_validate",
       "unity_prefab_render",

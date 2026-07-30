@@ -1,7 +1,7 @@
 # XUUnity MCP Reference-Driven UI Acceptance Design
 
 Date: `2026-07-30`
-Status: `P0.1, P0.2, P1.1, P1.2, P1.3, P2.1, P2.2, P2.3 implemented and validated`
+Status: `P0.1, P0.2, P1.1, P1.2, P1.3, P2.1, P2.2, P2.3, P3.1, P3.2 implemented and validated`
 Scope: `Operations/XUUnityLightUnityMcp`
 Source: [`2026-07-30_reference_driven_ui_completion_and_visual_acceptance_retro.md`](../../archive/retros/2026-07-30_reference_driven_ui_completion_and_visual_acceptance_retro.md)
 
@@ -359,13 +359,102 @@ A Game View comparison always reports `acceptance_lanes.device` as `not_evaluate
 with the reason — Game View parity is structurally incapable of claiming device
 parity.
 
+## Delivered surface (P3.1): the AI-vision lane
+
+A cell-similarity score is blind to whole classes of "wrong screen". It cannot see a
+placeholder icon in the right place at the right average colour, a different type family
+at the same weight, or a mirrored arrangement whose cells average out. So acceptance
+gained a fourth lane where a multimodal judge answers the question the grid cannot:
+**is this recognisably the same screen, in style, placement, and size?**
+
+`unity_ui_vision_packet` renders one side-by-side sheet — reference left, candidate right,
+scaled to a shared panel height so a resolution difference is not read as a design
+difference — and outlines the failed regions on both panels. It ships the rubric with it.
+`unity_ui_vision_submit` records the judgement and returns the lane.
+
+Four properties make this evidence rather than an opinion:
+
+1. **Bound to one image pair.** `packet_hash` covers both image digests, the reference id,
+   and the bar. Change either capture and every prior review is rejected as
+   `vision_packet_stale` — a review cannot silently outlive what it judged.
+2. **The arithmetic is checked.** Every required criterion needs a score *and* a one-line
+   observation, and the overall score is clamped to `worst_required + 1`. A judge cannot
+   claim a strong overall while scoring layout as wrong.
+3. **Provenance is recorded.** `judge.role` is `authoring_agent`, `independent_agent`, or
+   `human`. A self-review is stored and counted but permanently flagged
+   `vision_review_self_reviewed_only`; the agent that wrote the UI is not independent
+   evidence that the UI is right.
+4. **Not anchored.** Numeric scores are withheld from the packet by default. Failed regions
+   are marked so the judge knows where to look, but a judge told "the grid said 94%" is
+   measurably less useful than one who looked first.
+
+The bar moves with the same profile dial as the numeric comparison (`strict`/`balanced`/
+`lenient`) and can be overridden per reference through `vision_policy`, including waiving a
+criterion — `typography` is legitimately out of scope when the fonts differ by design. **No
+profile requires the top score.** Pixel equality is not the acceptance bar in this lane
+either, by construction.
+
+### Disagreement is the most useful output
+
+The two lanes measure different things, so their disagreement carries information neither
+carries alone:
+
+| Grid | Review | Verdict | Signal |
+| --- | --- | --- | --- |
+| passed | failed | `failed` | `vision_contradicts_similarity` — trust the review; the grid cannot see this class of defect |
+| failed | passed | `failed` | `similarity_may_be_over_strict` — with a named looser profile that would have passed |
+
+The second row is the one that matters for a standing constraint of this design: the
+acceptance bar must be adjustable and sane. When a judge says the screen is recognisably
+right and the number says otherwise, the tool now names the profile that matches the
+observed similarity instead of leaving the operator to guess — and says to change it on the
+reference deliberately, not per comparison.
+
+## Delivered surface (P3.2): interaction lane from a Play-mode receipt
+
+P2.2 delivered a guarded click, but the comparison verdict still hardcoded
+`interaction: not_evaluated`, because a click delivered from the Edit-mode operation proves
+handler wiring, not a running user path. The lane is now real, and it is fed the same way
+the fixture lane is: by a receipt the editor wrote.
+
+A new scenario step kind `ui_click` delivers the click inside a Play-mode scenario and emits
+a `xuunity.ui-interaction.v1` block into the step payload. The step lives in the core
+assembly and reaches `unity.ui.click` **by operation name**, so a project without
+`com.unity.ugui` gets a clear unavailable-operation failure rather than a compile break. It
+requires `interactionId` and `approve=true` in the scenario JSON, so the guard is visible in
+the artifact a reviewer reads.
+
+`required_interactions` on the reference declares what must be proven
+(`[{id, selector, expect:{delivered, state_changed}}]`), and `interactionResultPath` on the
+comparison reads the receipt — defaulting to `fixtureResultPath`, so **one Play-mode run can
+establish the fixture and prove the interactions**.
+
+The distinction that gives the lane its value:
+
+- delivered in Play mode, expectations met → lane `passed`;
+- delivered in Edit mode → lane **`blocked`**, never `passed`. `runtime_proven` is false and
+  the reason says why. Blocking is the honest verdict: the wiring works, the user path is
+  unproven;
+- refused, undelivered, or delivered with no state change → lane `failed`, because that is
+  evidence of a broken path rather than a missing measurement.
+
+### An optional lane that ran and failed still fails
+
+Adding two lanes exposed a latent looseness: `failed_lanes` only counted lanes marked
+`required`, so an `optional` lane that was actually evaluated and failed was silently
+ignored. That conflates two different questions. `optional` now means "you do not have to
+run it"; it does not mean "its failures do not count". Only `not_required` opts a lane out of
+the verdict. The vision lane defaults to `optional` for exactly this reason — the host cannot
+summon a judge, so it must not block, but a review that was submitted and failed is a real
+failure.
+
 ### Guardrails implemented from the retro
 
 1. No score for a non-comparable capture — refusal plus recommended resolutions.
 2. Masks require an id, a rect, and a stated reason; total mask area is capped at
    25% of the viewport and 50% of any required region, audited in every payload.
-3. Visual score is never semantic proof: `acceptance_lanes` always reports
-   semantic and interaction as `not_evaluated` with the reason.
+3. Visual score is never semantic proof: `acceptance_lanes` reports each lane's own
+   status and reason, and an unevaluated required lane keeps acceptance out of `passed`.
 4. A pass requires proven capture stability (two captures of the same frozen
    fixture). Waiving it is possible, recorded, and forfeits `decision_ready`.
 5. The supplied reference is copied byte-for-byte and hash-pinned; a later edit
@@ -425,6 +514,36 @@ parity.
   the constraint-gated assembly, mutation never reaches for raw YAML or object
   references, and the click path keeps all seven refusals).
 
+### P3.1/P3.2 validation
+
+- Host: **634 tests passing**, 13 platform skips. 59 are the new
+  `tests/test_ui_vision_and_interaction.py`: the rubric clamp, per-profile bars, packet
+  staleness, judge provenance and self-review flagging, judge disagreement, the sheet
+  geometry (reference left, shared panel height, markers on both panels, decodable PNG with
+  each panel's own colour at its centre), the interaction contract's edit-mode downgrade,
+  the lane verdicts, and a packet -> judge -> submit -> compare round trip over real files.
+- The round-trip test earned its keep immediately: storing the *normalized* review made it
+  fail re-normalization on the next comparison, because the normalized record carries
+  `contract_version` and not `schema_version`. Every submitted review was silently invalid
+  as soon as it was read back. Fixed by storing a canonical submission block alongside the
+  evaluated record, with an idempotency test pinning it. Unit tests on the normalizer alone
+  would never have found this.
+- Editor: validated on **two Unity versions**, same result on both — `2021.3.45f2` and
+  `6000.0.58f2`, **78 EditMode tests, 77 passed, 0 failed**, 1 correctly ignored (the pixel
+  test declaring itself unrunnable without a graphics device). Seven of those are the new
+  `ui_click` scenario-step tests: validator refusals for a missing id / missing approval /
+  empty selector, the step's own approval refusal, the emitted `ui_interaction` receipt with
+  differing before/after signatures, the `edit` play-mode report, the no-state-change
+  failure, and refusal pass-through.
+- Run separately **with** a graphics device: 11/11 render/click tests passed.
+- Core-only project without `com.unity.ugui`: **zero compile errors**, only
+  `com.xuunity.light-mcp.Editor.dll` built. The `ui_click` step handler lives in the core
+  assembly and reaches the click by operation name, so the satellite gating still holds.
+- Cross-language contract tests were extended to hold the new seam: the interaction schema
+  version and step-kind string must match between `XUUnityLightMcpUiRead` and the host
+  scenario schema, the step must be dispatched *and* validated in the editor package, and
+  approval must be required in both layers.
+
 ## Remaining slices, in delivery order
 
 | Order | Slice | Status | Done when |
@@ -436,6 +555,8 @@ parity.
 | 6 | P2.1 guarded prefab mutation | shipped 2026-07-30 | Typed transaction with preview-by-default, atomic Editor apply, post-mutation binding validation, rollback on any failure, and a reversible inverse patch. |
 | 7 | P2.2 guarded interaction | shipped 2026-07-30 | `unity.ui.click` delivers once through the EventSystem to a unique selector and refuses ambiguous, hidden, disabled, raycast-transparent, and handler-less targets. |
 | 8 | P2.3 device lane | shipped 2026-07-30 | A device capture is a separate lane carrying model/OS/resolution/orientation/safe-area/build revision; Game View parity never claims device parity. |
+| 9 | P3.1 AI-vision lane | shipped 2026-07-30 | A multimodal judge rules on style/placement/size against a side-by-side sheet under a checked rubric, bound to one image pair, with judge role recorded; disagreement with the grid names which lane to trust and, when the number is the stricter one, which profile matches. |
+| 10 | P3.2 Play-mode interaction lane | shipped 2026-07-30 | A `ui_click` scenario step delivers the click in Play mode and writes a `ui-interaction.v1` receipt; `required_interactions` decides the lane, and Edit-mode delivery blocks it instead of passing. |
 
 P1.1 produced that diagnosis; P1.3 joins it to the comparator automatically, so a
 failed region arrives already named. The originating incident is now answerable

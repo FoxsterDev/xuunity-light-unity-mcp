@@ -13,8 +13,16 @@ EXPECTED_IMAGE_FILE_NAME = "expected.png"
 
 ORIENTATIONS = ("portrait", "landscape", "square")
 OWNERS = ("agent", "human")
-LANES = ("visual", "semantic", "interaction")
+LANES = ("visual", "semantic", "interaction", "vision")
 LANE_REQUIREMENTS = ("required", "optional", "not_required")
+# The host cannot summon a multimodal judge on its own, so an unreviewed vision lane must not
+# block. A review that was actually submitted and failed still fails the comparison.
+DEFAULT_LANE_REQUIREMENTS = {
+    "visual": "required",
+    "semantic": "required",
+    "interaction": "required",
+    "vision": "optional",
+}
 
 SCALE_POLICIES = ("aspect_scale", "strict", "stretch")
 
@@ -292,11 +300,24 @@ def normalize_owner(owner: str) -> str:
 
 
 def normalize_acceptance(acceptance: dict[str, Any] | None) -> dict[str, Any]:
-    resolved = {"visual": "required", "semantic": "required", "interaction": "required"}
+    resolved = dict(DEFAULT_LANE_REQUIREMENTS)
     for key, value in (acceptance or {}).items():
         if str(key) in LANES:
             resolved[str(key)] = str(value)
     return resolved
+
+
+def normalize_required_interactions(required: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
+    normalized: list[dict[str, Any]] = []
+    for entry in required or []:
+        if not isinstance(entry, dict):
+            raise ToolInvocationError(
+                "ui_reference_required_interaction_invalid",
+                "required_interactions entries must be objects with an id and a selector.",
+                {"entry": entry},
+            )
+        normalized.append({key: value for key, value in entry.items()})
+    return normalized
 
 
 def rect_from_mapping(value: Any) -> Rect | None:

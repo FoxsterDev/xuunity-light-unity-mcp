@@ -24,7 +24,10 @@ from server_ui_reference_artifacts import (
 )
 from server_ui_device_lane import normalize_device_context
 from server_ui_fixture import resolve_ui_fixture_evidence
+from server_ui_interaction import evaluate_interaction_lane, resolve_ui_interaction_evidence
 from server_ui_region_explain import evaluate_semantic_lane, explain_regions, load_ui_snapshot
+from server_ui_vision_packet import collect_vision_reviews
+from server_ui_vision_review import evaluate_vision_lane, packet_hash, read_vision_reviews, resolve_vision_policy
 from server_ui_reference_verdict import finalize_comparison, score_visual_verdict
 from server_ui_reference_policy import validate_manifest
 from server_ui_reference_png import RgbaImage, read_png
@@ -54,6 +57,9 @@ def compare_ui_reference(
     fixture_evidence: dict[str, Any] | None = None,
     fixture_result_path: str = "",
     ui_snapshot_path: str = "",
+    interaction_result_path: str = "",
+    interaction_evidence: list[dict[str, Any]] | dict[str, Any] | None = None,
+    vision_review_paths: list[str] | None = None,
     capture_lane: str = "game_view",
     device: dict[str, Any] | None = None,
     tolerance_profile: str = "",
@@ -95,6 +101,19 @@ def compare_ui_reference(
         snapshot=snapshot,
         required_ui=list(manifest.get("required_ui") or []),
     )
+    # One Play-mode scenario run can establish the fixture and exercise the interactions, so the
+    # interaction receipt defaults to the same result file the fixture came from.
+    interactions = resolve_ui_interaction_evidence(
+        workspace=workspace,
+        interaction_result_path=str(interaction_result_path or "").strip() or fixture_result_path,
+        interaction_evidence=interaction_evidence,
+    )
+    result["interactions"] = interactions
+    result["interaction_lane"] = evaluate_interaction_lane(
+        interactions=interactions,
+        required_interactions=list(manifest.get("required_interactions") or []),
+        requirement=str((manifest.get("acceptance") or {}).get("interaction") or "required"),
+    )
     result["manifest_validation"] = {
         "valid": validation["valid"],
         "errors": validation["errors"],
@@ -123,6 +142,15 @@ def compare_ui_reference(
     actual = read_png(actual_path, source="actual")
     result["actual_image"] = _image_record(actual_path, actual)
     result["expected_image"] = _image_record(expected_path, expected)
+    result["vision_lane"] = _resolve_vision_lane(
+        manifest=manifest,
+        reference_dir=reference_dir,
+        workspace=workspace,
+        comparison_id=str(result["comparison_id"]),
+        expected_sha256=str(result["expected_image"]["sha256"]),
+        actual_sha256=str(result["actual_image"]["sha256"]),
+        vision_review_paths=vision_review_paths,
+    )
 
     tolerances = resolve_tolerances(manifest)
     result["tolerance_profile"] = str(manifest.get("tolerance_profile") or DEFAULT_TOLERANCE_PROFILE)
@@ -343,6 +371,43 @@ def compare_ui_reference(
         register_in_artifact_registry=register_in_artifact_registry,
         emit_artifacts=emit_artifacts,
     )
+
+
+def _resolve_vision_lane(
+    *,
+    manifest: dict[str, Any],
+    reference_dir: Path,
+    workspace: Path,
+    comparison_id: str,
+    expected_sha256: str,
+    actual_sha256: str,
+    vision_review_paths: list[str] | None,
+) -> dict[str, Any]:
+    policy = resolve_vision_policy(manifest)
+    expected_hash = packet_hash(
+        reference_id=str(manifest.get("reference_id") or ""),
+        expected_sha256=expected_sha256,
+        actual_sha256=actual_sha256,
+        policy=policy,
+    )
+    explicit = [str(item) for item in (vision_review_paths or []) if str(item or "").strip()]
+    reviews = (
+        read_vision_reviews(explicit, workspace, policy=policy, expected_hash=expected_hash)
+        if explicit
+        else collect_vision_reviews(
+            reference_dir=reference_dir,
+            comparison_id=comparison_id,
+            policy=policy,
+            expected_hash=expected_hash,
+        )
+    )
+    lane = evaluate_vision_lane(
+        reviews=reviews,
+        policy=policy,
+        requirement=str((manifest.get("acceptance") or {}).get("vision") or "optional"),
+    )
+    lane["packet_hash"] = expected_hash
+    return lane
 
 
 def _attach_region_explanations(

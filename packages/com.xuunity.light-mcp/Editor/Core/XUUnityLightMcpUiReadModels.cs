@@ -6,6 +6,8 @@ namespace XUUnity.LightMcp.Editor.Core
     internal static class XUUnityLightMcpUiRead
     {
         public const string SchemaVersion = "xuunity.ui.read.v1";
+        public const string InteractionSchemaVersion = "xuunity.ui-interaction.v1";
+        public const string InteractionStepKind = "ui_click";
 
         public const string ProofSemanticTree = "semantic_ui_tree";
         public const string ProofSemanticPartial = "semantic_ui_partial";
@@ -262,11 +264,41 @@ namespace XUUnity.LightMcp.Editor.Core
         public string delivered_to_path = "";
         public string delivery_mechanism = "";
         public bool state_changed;
+        public string playmode_state = "";
         public XUUnityLightMcpUiClickSnapshotRef before_snapshot = new();
         public XUUnityLightMcpUiClickSnapshotRef after_snapshot = new();
         public List<XUUnityLightMcpUiDiagnostic> warnings = new();
         public List<XUUnityLightMcpUiDiagnostic> errors = new();
         public string validation_evidence = "unity_mcp";
+    }
+
+    [Serializable]
+    internal sealed class XUUnityLightMcpUiInteractionBlock
+    {
+        public string schema_version = XUUnityLightMcpUiRead.InteractionSchemaVersion;
+        public string interaction_id = "";
+        public string action = "click";
+        public XUUnityLightMcpUiSelectorArgs selector = new();
+        public bool delivered;
+        public string delivery_mechanism = "";
+        public string target_path = "";
+        public string target_component = "";
+        public string handler_path = "";
+        public bool state_changed;
+        public string before_signature = "";
+        public string after_signature = "";
+        public string playmode_state = "";
+        public string refusal_code = "";
+    }
+
+    [Serializable]
+    internal sealed class XUUnityLightMcpUiInteractionStepPayload
+    {
+        public XUUnityLightMcpUiInteractionBlock ui_interaction = new();
+        public bool expect_state_change = true;
+        public bool met_expectations;
+        public string click_status = "";
+        public string click_error = "";
     }
 
     [Serializable]

@@ -64,6 +64,8 @@ namespace XUUnity.LightMcp.Editor.Helpers
                     return ProcessGameViewConfigureStep(step, stepResult);
                 case "project_action":
                     return ProcessProjectActionStep(step, stepResult);
+                case XUUnityLightMcpUiRead.InteractionStepKind:
+                    return XUUnityLightMcpScenarioUiInteractionStepHandler.ProcessUiClickStep(step, stepResult);
                 case "project_defined_hook":
                     return ProcessProjectDefinedHookStep(step, stepResult);
                 case "project_defined_hook_poll_until":

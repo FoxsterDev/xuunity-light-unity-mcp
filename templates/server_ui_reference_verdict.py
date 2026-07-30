@@ -8,7 +8,9 @@ from server_artifact_registry import register_artifact, repo_relative_path
 from server_core import write_json
 from server_ui_device_lane import device_lane_state, device_lane_warnings
 from server_ui_fixture import fixture_next_actions
+from server_ui_interaction import interaction_next_actions
 from server_ui_reference_artifacts import COMPARISON_SCHEMA_VERSION
+from server_ui_vision_review import analyze_lane_disagreement, vision_next_actions
 
 
 def score_visual_verdict(
@@ -126,11 +128,16 @@ def finalize_comparison(
             "checked": int(semantic.get("checked") or 0),
             "failures": list(semantic.get("failures") or []),
         },
-        "interaction": {
-            "requirement": str(acceptance_policy.get("interaction") or "required"),
-            "status": "not_evaluated",
-            "evidence": "guarded_interaction_is_reported_by_unity_ui_click_not_by_comparison",
-        },
+        "interaction": _lane_with_requirement(
+            result.get("interaction_lane"),
+            requirement=str(acceptance_policy.get("interaction") or "required"),
+            fallback_evidence="no_interaction_evidence_supplied",
+        ),
+        "vision": _lane_with_requirement(
+            result.get("vision_lane"),
+            requirement=str(acceptance_policy.get("vision") or "optional"),
+            fallback_evidence="no_vision_review_supplied",
+        ),
         "device": device_lane_state(
             capture_lane=capture_lane,
             acceptance_policy=acceptance_policy,
@@ -145,16 +152,33 @@ def finalize_comparison(
         for lane, state in lanes.items()
         if lane != "visual" and state["requirement"] == "required" and state["status"] == "not_evaluated"
     ]
+    # An optional lane may be skipped, but a lane that was actually run and failed is a real
+    # failure; only not_required opts out of the verdict entirely.
     failed_lanes = [
         lane
         for lane, state in lanes.items()
-        if lane != "visual" and state["requirement"] == "required" and state["status"] == "failed"
+        if lane != "visual" and state["requirement"] != "not_required" and state["status"] == "failed"
     ]
+    blocked_lanes = [
+        lane
+        for lane, state in lanes.items()
+        if lane != "visual" and state["requirement"] == "required" and state["status"] == "blocked"
+    ]
+
+    result["lane_disagreement"] = analyze_lane_disagreement(
+        visual_verdict=visual_verdict,
+        vision_lane=lanes["vision"],
+        global_metrics=dict(result.get("global") or {}),
+        tolerances=dict(result.get("tolerances") or {}),
+    )
 
     if visual_verdict == "blocked":
         acceptance = "blocked"
     elif visual_verdict == "failed" or failed_lanes:
         acceptance = "failed"
+    elif blocked_lanes:
+        acceptance = "blocked"
+        result["blocked_reason"] = result.get("blocked_reason") or "required_lane_blocked"
     elif owner == "human":
         acceptance = "pending_manual_style"
     elif pending_lanes:
@@ -163,14 +187,18 @@ def finalize_comparison(
         acceptance = "passed"
 
     result["failed_lanes"] = failed_lanes
+    result["blocked_lanes"] = blocked_lanes
     if failed_lanes and visual_verdict != "failed":
-        for failure in lanes["semantic"]["failures"]:
+        result["failure_reasons"].extend(_lane_failure_reasons(lanes, failed_lanes))
+    if blocked_lanes:
+        for lane in blocked_lanes:
             result["failure_reasons"].append(
-                f"Required UI '{failure.get('id')}' failed the semantic lane as {failure.get('code')}."
+                f"The {lane} lane could not decide: {lanes[lane].get('blocked_reason') or 'blocked'}."
             )
     result["warnings"].extend(
         device_lane_warnings(capture_lane=capture_lane, device_context=device_context)
     )
+    result["warnings"].extend(_vision_warnings(lanes["vision"], result["lane_disagreement"]))
 
     result["reference_acceptance"] = acceptance
     result["pending_lanes"] = pending_lanes
@@ -183,8 +211,9 @@ def finalize_comparison(
     if not str(fixture.get("declared_fixture") or ""):
         readiness_gaps.append("fixture_undeclared")
     readiness_gaps.extend(f"fixture_{code}" for code in list(fixture.get("determinism_gaps") or []))
-    if acceptance == "blocked":
+    if visual_verdict == "blocked":
         readiness_gaps.append("visual_lane_blocked")
+    readiness_gaps.extend(f"{lane}_lane_blocked" for lane in blocked_lanes)
     result["decision_ready"] = not readiness_gaps
     result["decision_readiness_gaps"] = readiness_gaps
     if fixture.get("visual_determinism") == "unproven":
@@ -267,6 +296,63 @@ def finalize_comparison(
     return result
 
 
+def _lane_with_requirement(
+    lane: dict[str, Any] | None,
+    *,
+    requirement: str,
+    fallback_evidence: str,
+) -> dict[str, Any]:
+    if not lane:
+        return {"requirement": requirement, "status": "not_evaluated", "evidence": fallback_evidence}
+    return {**lane, "requirement": requirement}
+
+
+def _lane_failure_reasons(lanes: dict[str, Any], failed_lanes: list[str]) -> list[str]:
+    reasons: list[str] = []
+    if "semantic" in failed_lanes:
+        for failure in lanes["semantic"].get("failures") or []:
+            reasons.append(
+                f"Required UI '{failure.get('id')}' failed the semantic lane as {failure.get('code')}."
+            )
+    if "interaction" in failed_lanes:
+        for failure in lanes["interaction"].get("failures") or []:
+            reasons.append(
+                f"Required interaction '{failure.get('id')}' failed: {failure.get('message')}"
+            )
+    if "vision" in failed_lanes:
+        for entry in list(lanes["vision"].get("worst_criteria") or [])[:3]:
+            reasons.append(
+                f"The review scored {entry.get('criterion')} as {entry.get('name')}: {entry.get('observation')}"
+            )
+    return reasons
+
+
+def _vision_warnings(lane: dict[str, Any], disagreement: dict[str, Any]) -> list[dict[str, str]]:
+    warnings: list[dict[str, str]] = []
+    if lane.get("status") in ("passed", "failed") and lane.get("self_reviewed_only"):
+        warnings.append(
+            {
+                "code": "vision_review_self_reviewed_only",
+                "message": (
+                    "Every vision judgement came from the agent that authored the UI. It is recorded "
+                    "as an attested judgement, never as independent proof."
+                ),
+            }
+        )
+    if lane.get("status") in ("passed", "failed") and not lane.get("unanimous", True):
+        warnings.append(
+            {
+                "code": "vision_judges_disagreed",
+                "message": "Judges disagreed on whether this is recognisably the same screen.",
+            }
+        )
+    if disagreement.get("disagree"):
+        warnings.append(
+            {"code": str(disagreement["code"]), "message": str(disagreement["message"])}
+        )
+    return warnings
+
+
 def _next_actions(result: dict[str, Any]) -> list[str]:
     actions: list[str] = []
     acceptance = str(result.get("reference_acceptance") or "")
@@ -308,8 +394,24 @@ def _next_actions(result: dict[str, Any]) -> list[str]:
         actions.append(
             "Record which regions remain human-owned; reference acceptance stays pending manual styling."
         )
+
+    disagreement = dict(result.get("lane_disagreement") or {})
+    if disagreement.get("disagree"):
+        actions.append(str(disagreement.get("message") or ""))
+        suggestion = dict(disagreement.get("suggestion") or {})
+        if suggestion.get("would_pass_global"):
+            actions.append(
+                f"If the review is right, the '{suggestion['tolerance_profile']}' profile "
+                f"({float(suggestion['candidate_global_min_similarity']):.0%} global minimum) matches the "
+                f"observed {float(suggestion['observed_global_similarity']):.1%}; change it on the "
+                "reference deliberately rather than per comparison."
+            )
+
+    lanes = dict(result.get("acceptance_lanes") or {})
+    actions.extend(interaction_next_actions(dict(lanes.get("interaction") or {})))
+    actions.extend(vision_next_actions(dict(lanes.get("vision") or {})))
     actions.extend(fixture_next_actions(dict(result.get("fixture") or {})))
-    return actions
+    return [action for action in actions if action]
 
 
 def _semantic_explanation_actions(result: dict[str, Any], first_failed: str) -> list[str]:

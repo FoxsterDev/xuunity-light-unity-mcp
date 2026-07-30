@@ -1,4 +1,5 @@
 using System;
+using UnityEditor;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
@@ -25,7 +26,8 @@ namespace XUUnity.LightMcp.Editor.Ugui
                 project_root = XUUnityLightMcpFileIpcPaths.ProjectRootPath,
                 generated_at_utc = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ"),
                 requested_action = (args.action ?? "").Trim().ToLowerInvariant(),
-                selector = args.selector
+                selector = args.selector,
+                playmode_state = CurrentPlayModeState()
             };
 
             if (!string.Equals(payload.requested_action, "click", StringComparison.Ordinal))
@@ -188,6 +190,16 @@ namespace XUUnity.LightMcp.Editor.Ugui
             }
 
             return Respond(request, payload);
+        }
+
+        static string CurrentPlayModeState()
+        {
+            if (!EditorApplication.isPlayingOrWillChangePlaymode && !EditorApplication.isPlaying)
+            {
+                return "edit";
+            }
+
+            return EditorApplication.isPaused ? "paused" : "playing";
         }
 
         static XUUnityLightMcpUiClickSnapshotRef Summarize(XUUnityLightMcpUiTreeResult result)

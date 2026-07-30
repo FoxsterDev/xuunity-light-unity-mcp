@@ -22,6 +22,7 @@ from server_ui_reference_manifest import (
     normalize_masks,
     normalize_owner,
     normalize_regions,
+    normalize_required_interactions,
     normalize_required_ui,
     normalize_threshold_overrides,
     positive_int,
@@ -31,6 +32,7 @@ from server_ui_reference_manifest import (
 )
 from server_ui_reference_policy import validate_manifest
 from server_ui_reference_png import read_png
+from server_ui_vision_review import resolve_vision_policy
 
 REFERENCE_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$")
 COMMON_CAPTURE_SCALES = ((1, 1), (3, 4), (2, 3), (1, 2), (1, 3))
@@ -47,6 +49,8 @@ def register_ui_reference(
     regions: list[dict[str, Any]] | None = None,
     dynamic_masks: list[dict[str, Any]] | None = None,
     required_ui: list[dict[str, Any]] | None = None,
+    required_interactions: list[dict[str, Any]] | None = None,
+    vision_policy: dict[str, Any] | None = None,
     thresholds: dict[str, Any] | None = None,
     tolerance_profile: str = DEFAULT_TOLERANCE_PROFILE,
     scale_policy: str = "aspect_scale",
@@ -113,6 +117,8 @@ def register_ui_reference(
         "regions": normalize_regions(regions, resolved_viewport),
         "dynamic_masks": normalize_masks(dynamic_masks),
         "required_ui": normalize_required_ui(required_ui),
+        "required_interactions": normalize_required_interactions(required_interactions),
+        "vision_policy": dict(vision_policy or {}),
         "tolerance_profile": str(tolerance_profile or DEFAULT_TOLERANCE_PROFILE).strip().lower(),
         "scale_policy": str(scale_policy or "aspect_scale").strip().lower(),
         "thresholds": normalize_threshold_overrides(thresholds),
@@ -147,6 +153,10 @@ def register_ui_reference(
         "fixture": manifest["fixture"],
         "owner": manifest["owner"],
         "acceptance": dict(manifest["acceptance"]),
+        "required_interaction_ids": [
+            str(entry.get("id") or "") for entry in manifest["required_interactions"]
+        ],
+        "vision_policy": resolve_vision_policy(manifest),
         "tolerance_profile": manifest["tolerance_profile"],
         "scale_policy": manifest["scale_policy"],
         "resolved_tolerances": resolve_tolerances(manifest),

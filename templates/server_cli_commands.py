@@ -1247,4 +1247,7 @@ wrap_globals_with_proxies(globals(), [
     "call_unity_ui_reference_validate_tool",
     "call_unity_ui_reference_compare_tool",
     "call_unity_ui_fixture_validate_tool",
+    "call_unity_ui_vision_packet_tool",
+    "call_unity_ui_vision_submit_tool",
+    "call_unity_ui_interaction_validate_tool",
 ])

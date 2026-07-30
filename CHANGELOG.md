@@ -2,6 +2,29 @@
 
 ## Unreleased
 
+## 0.3.49
+
+Release tag: `v0.3.49`
+
+Current Git UPM install URL:
+
+```text
+https://github.com/FoxsterDev/xuunity-mcp.git?path=/packages/com.xuunity.light-mcp#v0.3.49
+```
+
+This release adds reference-driven UI acceptance: a supplied design image becomes a
+hash-pinned contract, a Game View or prefab capture is compared against it on a
+resolution-independent similarity grid, and the verdict is decided across four lanes —
+visual, semantic, interaction, and AI vision. Pixel equality is never the bar.
+
+### Changed
+
+- Released `v0.3.49` package metadata, server metadata, package manifests, and Git UPM examples.
+- An acceptance lane marked `optional` that was actually evaluated and failed now fails
+  the comparison. `optional` means the lane may be skipped, not that its failures do not
+  count; only `not_required` opts a lane out of the verdict. This previously let a failing
+  optional semantic lane pass silently.
+
 ### Added
 
 - Added the reference-driven UI acceptance surface: `unity_ui_reference_register`,
@@ -23,20 +46,6 @@
   A passing verdict requires proven capture stability, and required semantic or
   interaction lanes that no tool can yet evaluate keep the reference pending instead
   of reporting acceptance.
-- Added the `xuunity.ui-fixture.v1` readiness contract plus `unity_ui_fixture_validate`
-  and the `ui-fixture-validate` host command. A project hook reports `ui_fixture`
-  (fixture and semantic state id, frozen clock, pinned locale, data source, resolved
-  viewport/safe-area, and ready-predicate evidence) inside its payload; the host
-  validates it, surfaces it in scenario hook summaries, and derives
-  `visual_determinism`. Live or mixed data without a recorded immutable payload hash,
-  an unfrozen clock, or an unpinned locale downgrade a comparison automatically
-  instead of by convention.
-- `unity_ui_reference_compare` / `ui-reference-compare` accept `fixtureResultPath`, so
-  fixture evidence is read from the scenario result the editor wrote, with a hashed
-  receipt naming the run, step, and hook. Caller-supplied `fixtureEvidence` is still
-  accepted but is never receipt-backed and can no longer make a comparison
-  `decision_ready`. `project-hook-scaffold --ui-fixture` generates a compliant hook
-  that ships unsatisfied so it fails closed until the project fills it in.
 - Added the read-only uGUI and prefab inspection surface (`xuunity.ui.read.v1`):
   `unity_prefab_snapshot`, `unity_prefab_validate`, `unity_ui_tree_snapshot`,
   `unity_ui_query`, `unity_ui_exists`, `unity_ui_get_text`, and `unity_ui_get_bounds`.
@@ -67,11 +76,25 @@
   `selector_ambiguous`, `ui_text_mismatch`, `ui_node_not_interactable`,
   `ui_node_not_visible`). A required-lane failure fails the reference even when the
   pixels match.
-- Added `unity_prefab_render` (P1.2): renders a prefab in an isolated preview scene
+- Added the `xuunity.ui-fixture.v1` readiness contract plus `unity_ui_fixture_validate`
+  and the `ui-fixture-validate` host command. A project hook reports `ui_fixture`
+  (fixture and semantic state id, frozen clock, pinned locale, data source, resolved
+  viewport/safe-area, and ready-predicate evidence) inside its payload; the host
+  validates it, surfaces it in scenario hook summaries, and derives
+  `visual_determinism`. Live or mixed data without a recorded immutable payload hash,
+  an unfrozen clock, or an unpinned locale downgrade a comparison automatically
+  instead of by convention.
+- `unity_ui_reference_compare` / `ui-reference-compare` accept `fixtureResultPath`, so
+  fixture evidence is read from the scenario result the editor wrote, with a hashed
+  receipt naming the run, step, and hook. Caller-supplied `fixtureEvidence` is still
+  accepted but is never receipt-backed and can no longer make a comparison
+  `decision_ready`. `project-hook-scaffold --ui-fixture` generates a compliant hook
+  that ships unsatisfied so it fails closed until the project fills it in.
+- Added `unity_prefab_render`: renders a prefab in an isolated preview scene
   under a controlled Canvas at the declared viewport and safe area without booting the
   application, and returns both the PNG and the `ui.read.v1` snapshot it rendered, in
   render-pixel space, ready to feed straight back into `unity_ui_reference_compare`.
-- Added `unity_prefab_mutate` (P2.1): a typed, atomic prefab transaction through the
+- Added `unity_prefab_mutate`: a typed, atomic prefab transaction through the
   Editor API — `set_serialized_field`, `set_rect_transform`, `set_canvas_group`,
   `set_active`, `delete_child`, `create_child_from_template`, `add_component`,
   `remove_component`. It previews by default, requires `approve` plus
@@ -80,16 +103,47 @@
   reversible inverse patch, refuses ambiguous selectors and non-allowlisted components,
   and excludes object-reference fields so a component can never be swapped for another
   type.
-- Added `unity_ui_click` (P2.2): one guarded semantic click delivered through the
+- Added `unity_ui_click`: one guarded semantic click delivered through the
   EventSystem to a unique selector, never a coordinate click. It requires explicit
   `approve=true` and `action="click"`, refuses ambiguous, hidden, non-interactable,
   raycast-transparent, and handler-less targets, and records the matched node, the
   delivery mechanism, and before/after snapshot signatures.
-- Added the device acceptance lane (P2.3): `captureLane` (`game_view` | `device`) plus
+- Added the device acceptance lane: `captureLane` (`game_view` | `device`) plus
   a `device` descriptor recording model, OS, resolution, orientation, safe-area insets,
   and build revision. A Game View comparison reports the device lane as
   `not_evaluated` and is never presented as device parity; a device capture with an
   incomplete descriptor blocks that lane instead of passing it.
+- Added the AI-vision acceptance lane (`xuunity.ui-vision-review.v1`):
+  `unity_ui_vision_packet` / `ui-vision-packet` renders one side-by-side review sheet
+  (reference left, candidate right, scaled to a shared panel height, failed regions
+  outlined on both panels) and ships the rubric with it; `unity_ui_vision_submit` /
+  `ui-vision-submit` records a judgement and returns the lane. This answers what a
+  cell-similarity score cannot: whether the candidate is recognisably the same screen in
+  style, placement, and size. Every required criterion needs a score and a stated
+  observation, the overall score is clamped to the worst required criterion plus one, the
+  review is hash-bound to one exact image pair and expires as `vision_packet_stale` when
+  either image changes, and `judge.role` records whether the judge was the agent that
+  authored the UI. Numeric scores are withheld from the packet by default so the
+  judgement is not anchored to the number the grid already produced. The bar moves with
+  the `strict`/`balanced`/`lenient` profile and can be overridden or have criteria waived
+  per reference through `visionPolicy`; no profile requires the top score.
+- A comparison now reports `lane_disagreement`. Grid-passed with review-failed is
+  `vision_contradicts_similarity` and fails the comparison, because cell similarity cannot
+  see a wrong icon, a different type family at the same weight, or a mirrored arrangement.
+  Grid-failed with review-passed is `similarity_may_be_over_strict` and names the looser
+  tolerance profile that matches the observed similarity, so an over-tight bar is a
+  deliberate reference-level decision rather than a per-comparison override.
+- The interaction lane is real instead of a permanent `not_evaluated`. A new `ui_click`
+  scenario step delivers a guarded click inside a Play-mode scenario and emits a
+  `xuunity.ui-interaction.v1` receipt; `required_interactions` on the reference declares
+  what must be proven, and `unity_ui_reference_compare` reads the receipt from
+  `interactionResultPath`, defaulting to `fixtureResultPath` so one Play-mode run can
+  establish the fixture and prove the interactions. Delivery in Edit mode **blocks** the
+  lane rather than passing it: it proves handler wiring, not a running user path. A
+  refused, undelivered, or effect-free click fails the lane. Added
+  `unity_ui_interaction_validate` / `ui-interaction-validate` for the evidence on its own.
+- `unity_ui_reference_register` / `ui-reference-register` accept `requiredInteractions`
+  and `visionPolicy`, and `acceptance` gained a `vision` lane (default `optional`).
 
 ## 0.3.48
 

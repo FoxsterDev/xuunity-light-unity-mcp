@@ -270,7 +270,7 @@ def read_scenario_ui_fixture(result_path: Path) -> tuple[Any, dict[str, Any]]:
     }
 
     for step in _hook_steps(payload):
-        raw = extract_ui_fixture_block(_step_payload(step))
+        raw = extract_ui_fixture_block(scenario_step_payload(step))
         if raw is None:
             continue
         receipt.update(
@@ -408,7 +408,9 @@ def _hook_steps(payload: dict[str, Any]) -> list[dict[str, Any]]:
     return steps
 
 
-def _step_payload(step: dict[str, Any]) -> dict[str, Any]:
+def scenario_step_payload(step: dict[str, Any]) -> dict[str, Any]:
+    """Shared scenario-result plumbing; the interaction contract reads steps the same way."""
+
     for key in ("payload_json", "payloadJson", "terminal_payload_json"):
         text = str(step.get(key) or "")
         if not text:

@@ -72,6 +72,12 @@ namespace XUUnity.LightMcp.Editor.Core
             public string projectAction = "";
             public string payloadJson = "";
             public bool allowMutating;
+            public string interactionId = "";
+            public string targetKind = "";
+            public string targetValue = "";
+            public bool expectStateChange = true;
+            public bool approve;
+            public XUUnityLightMcpUiSelectorArgs selector = null;
         }
 
         [Serializable]

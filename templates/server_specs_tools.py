@@ -399,6 +399,15 @@ TOOLS: dict[str, dict[str, Any]] = {
                     "items": {"type": "object"},
                     "description": "Semantic expectations [{selector, text, interactable}] for the later semantic lane."
                 },
+                "requiredInteractions": {
+                    "type": "array",
+                    "items": {"type": "object"},
+                    "description": "Interaction expectations [{id, selector, expect:{delivered, state_changed}}] proven by ui_click steps in a Play-mode scenario."
+                },
+                "visionPolicy": {
+                    "type": "object",
+                    "description": "Overrides the profile-derived vision bar: {minCriterion, minOverall, requiredCriteria, judgesRequired, allowSelfReview}. Pixel equality is never the bar; this is how close counts as recognisably the same screen."
+                },
                 "toleranceProfile": {
                     "type": "string",
                     "enum": ["strict", "balanced", "lenient"],
@@ -418,7 +427,7 @@ TOOLS: dict[str, dict[str, Any]] = {
                 "owner": {"type": "string", "enum": ["agent", "human"], "default": "agent"},
                 "acceptance": {
                     "type": "object",
-                    "description": "Per-lane requirement: {visual, semantic, interaction} each required|optional|not_required."
+                    "description": "Per-lane requirement: {visual, semantic, interaction, vision} each required|optional|not_required. vision defaults to optional because the host cannot summon a judge, but a review that was submitted and failed still fails the comparison."
                 },
                 "notes": {"type": "string"},
                 "category": {"type": "string", "default": "UIReference"},
@@ -485,6 +494,20 @@ TOOLS: dict[str, dict[str, Any]] = {
                     "type": "string",
                     "description": "A ui.read.v1 snapshot (from unity_ui_tree_snapshot or unity_prefab_render). Failed regions are mapped to the nodes whose bounds cover them, and declared requiredUi selectors are checked as the semantic lane."
                 },
+                "interactionResultPath": {
+                    "type": "string",
+                    "description": "Scenario result JSON containing ui_click steps. Defaults to fixtureResultPath, so one Play-mode run can establish the fixture and prove the interactions. Edit-mode delivery blocks the interaction lane instead of passing it."
+                },
+                "interactionEvidence": {
+                    "type": "array",
+                    "items": {"type": "object"},
+                    "description": "Caller-asserted ui-interaction.v1 blocks. Accepted, but never receipt-backed."
+                },
+                "visionReviewPaths": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Vision review JSON files. Omit to pick up reviews already stored under this comparison id. A review bound to a different image pair is rejected as stale."
+                },
                 "captureLane": {
                     "type": "string",
                     "enum": ["game_view", "device"],
@@ -527,6 +550,101 @@ TOOLS: dict[str, dict[str, Any]] = {
                 "declaredViewport": {
                     "type": "object",
                     "description": "Reference viewport {width, height} to detect a fixture resolved at another size."
+                },
+                "workspaceRoot": {"type": "string"}
+            },
+            "required": ["projectRoot"]
+        }
+    },
+    "unity_ui_vision_packet": {
+        "description": (
+            "Build a ui-vision-review.v1 packet for a reference/candidate pair: one side-by-side PNG sheet "
+            "with the reference on the left and the candidate on the right at a shared height, failed regions "
+            "outlined on both panels, and the rubric a multimodal judge must fill in. Answers the question a "
+            "cell-similarity score cannot: is this recognisably the same screen in style, placement, and size. "
+            "Numeric scores are withheld from the packet by default so the judgement is not anchored to them. "
+            "The packet is hash-bound to the exact image pair, so a review expires when either image changes."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "projectRoot": {"type": "string"},
+                "referenceId": {"type": "string"},
+                "manifestPath": {"type": "string"},
+                "actualImage": {"type": "string", "description": "Path to the captured PNG under review."},
+                "comparisonPath": {
+                    "type": "string",
+                    "description": "verdict.json from unity_ui_reference_compare. Its failed regions become the outlined attention markers."
+                },
+                "comparisonId": {
+                    "type": "string",
+                    "description": "Stores the packet under this comparison so a later compare picks the review up automatically."
+                },
+                "includeNumericEvidence": {
+                    "type": "boolean",
+                    "default": False,
+                    "description": "Disclose the similarity scores to the judge. Off by default: an anchored judgement is weaker evidence than an independent one."
+                },
+                "maxPanelHeight": {"type": "integer", "default": 1024},
+                "category": {"type": "string", "default": "UIReference"},
+                "workspaceRoot": {"type": "string"}
+            },
+            "required": ["projectRoot", "actualImage"]
+        }
+    },
+    "unity_ui_vision_submit": {
+        "description": (
+            "Record a multimodal judgement against a vision packet and return the resulting vision lane. "
+            "Validates the rubric arithmetic: every required criterion needs a score and a one-line observation, "
+            "and the overall score is clamped to the worst required criterion plus one so a strong overall claim "
+            "cannot outrun a weak part. Records who judged and in what role; a review by the agent that authored "
+            "the UI is stored but flagged as self-review, never as independent proof."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "projectRoot": {"type": "string"},
+                "packetPath": {
+                    "type": "string",
+                    "description": "vision_packet.json emitted by unity_ui_vision_packet."
+                },
+                "review": {
+                    "type": "object",
+                    "description": "The judgement: {schemaVersion, packetHash, judge:{id, role, model}, overall, criteria:{layout, sizing, color, typography, imagery, content}, defects}. Each criterion is {score: 0-4, observation}."
+                },
+                "reviewPath": {
+                    "type": "string",
+                    "description": "Read the judgement from a JSON file instead of passing it inline."
+                },
+                "workspaceRoot": {"type": "string"}
+            },
+            "required": ["projectRoot", "packetPath"]
+        }
+    },
+    "unity_ui_interaction_validate": {
+        "description": (
+            "Validate ui-interaction.v1 evidence from a scenario result: which guarded clicks were delivered, "
+            "whether the UI state changed, and whether delivery happened in Play mode. Edit-mode delivery "
+            "exercises handler wiring, not a running user path, so it blocks the interaction lane instead of "
+            "passing it. Returns the contract itself when no evidence is supplied."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "projectRoot": {"type": "string"},
+                "interactionResultPath": {
+                    "type": "string",
+                    "description": "Scenario result JSON containing ui_click steps."
+                },
+                "interactionEvidence": {
+                    "type": "array",
+                    "items": {"type": "object"},
+                    "description": "Inline ui-interaction.v1 blocks, for authoring before a scenario exists."
+                },
+                "requiredInteractions": {
+                    "type": "array",
+                    "items": {"type": "object"},
+                    "description": "Expectations [{id, selector, expect:{delivered, state_changed}}] to check the evidence against."
                 },
                 "workspaceRoot": {"type": "string"}
             },
