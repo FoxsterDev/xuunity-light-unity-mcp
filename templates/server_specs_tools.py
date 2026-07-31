@@ -1043,6 +1043,20 @@ TOOLS: dict[str, dict[str, Any]] = {
             "required": ["projectRoot", "trackedGeneratedPaths", "expectations"]
         }
     },
+    "unity_sdk_package_restore": {
+        "bridgeOperation": "host.sdk.package_restore",
+        "description": "Open a closed Unity project in batchmode, wait for a stable registered Package Manager graph, record package ids/versions and dependency XML sources, then exit with an authoritative restore receipt.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "projectRoot": {"type": "string"},
+                "unityApp": {"type": "string", "description": "Optional explicit Unity application or executable path."},
+                "stableIdleTicks": {"type": "integer", "default": 2, "minimum": 2, "maximum": 10},
+                "timeoutMs": {"type": "integer", "default": 600000, "minimum": 5000}
+            },
+            "required": ["projectRoot"]
+        }
+    },
     "unity_sdk_dependency_verify": {
         "bridgeOperation": "unity.sdk.dependency.verify",
         "description": "Verify generated SDK dependency artifacts against explicit expectations after package restore, EDM4U resolve, export, or build.",

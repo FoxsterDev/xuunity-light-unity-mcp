@@ -116,6 +116,7 @@ from server_batch_orchestrator import (
     call_unity_license_capabilities_tool,
     call_unity_project_action_list_tool,
     call_unity_project_action_invoke_tool,
+    call_unity_sdk_package_restore_tool,
     call_unity_artifact_register_tool,
     call_unity_artifact_write_report_tool,
     call_unity_ui_reference_register_tool,

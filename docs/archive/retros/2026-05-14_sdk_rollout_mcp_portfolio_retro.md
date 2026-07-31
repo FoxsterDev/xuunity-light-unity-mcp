@@ -1,8 +1,20 @@
 # SDK Rollout MCP Portfolio Retro
 
 Date: `2026-05-14`
-Status: `active public retro — generated-diff P0.1 and typed resolver P0.2b complete in current source; package restore and orchestration remain open`
+Status: `active public retro — generated-diff and typed resolver/package-restore P0 complete in current source; orchestration remains open`
 Source prompt: `./CHAT_RETRO_PROMPT.md`
+
+## Re-Evaluation 2026-07-31
+
+Released `v0.3.49` already closes the later reference-driven UI acceptance
+retro, so that new item is not open work. Current source now completes the next
+SDK trust slice: `unity.sdk.package_restore` / `unity_sdk_package_restore` /
+`request-sdk-package-restore` runs only against a closed project, waits for an
+idle-stable registered Package Manager graph, publishes an atomic receipt with
+package ids/versions and dependency-XML plus manifest/lock hashes, and proves
+the same-project Unity process exited. Missing receipts, timeouts, nonzero
+exits, and unproven closeout stay non-decision-ready. GUI admission, batch EDM4U
+resolve, and portfolio orchestration remain open.
 
 ## Re-Evaluation 2026-07-29
 
@@ -20,8 +32,8 @@ and PlayMode `5/5`, a real callback failure classification, a successful local
 Maven resolve with stable-hash/new-coordinate proof, a development-system
 consumer `14/14` + `5/5`, and a Unity `6000.0` consumer compile `6/6`,
 acceptance `10/10`, contract/lifecycle, and project-action consistency route.
-The remaining coherent work is `unity.sdk.package_restore`, GUI admission,
-batch resolve, and portfolio orchestration.
+The remaining coherent work is GUI admission, batch resolve, and portfolio
+orchestration.
 
 ## Re-Evaluation 2026-07-27
 

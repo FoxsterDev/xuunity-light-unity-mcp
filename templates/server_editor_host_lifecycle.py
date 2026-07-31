@@ -398,11 +398,12 @@ def build_batch_validation_command(
     extra_args: list[str] | None = None,
 ) -> list[str]:
     unity_binary = resolve_unity_executable(unity_app)
-    execute_method = (
-        "XUUnity.LightMcp.Editor.Batch.XUUnityLightMcpBatchTestFrameworkCli.ExecuteFromCommandLine"
-        if action == "editmode-tests"
-        else "XUUnity.LightMcp.Editor.Batch.XUUnityLightMcpBatchValidationCli.ExecuteFromCommandLine"
-    )
+    if action == "editmode-tests":
+        execute_method = "XUUnity.LightMcp.Editor.Batch.XUUnityLightMcpBatchTestFrameworkCli.ExecuteFromCommandLine"
+    elif action == "package-restore":
+        execute_method = "XUUnity.LightMcp.Editor.Batch.XUUnityLightMcpBatchPackageRestoreCli.ExecuteFromCommandLine"
+    else:
+        execute_method = "XUUnity.LightMcp.Editor.Batch.XUUnityLightMcpBatchValidationCli.ExecuteFromCommandLine"
     project_path_str = wsl_to_windows_path(project_root) if is_wsl() else str(project_root)
     log_path_str = wsl_to_windows_path(log_path) if is_wsl() else str(log_path)
     result_path_str = wsl_to_windows_path(result_path) if is_wsl() else str(result_path)

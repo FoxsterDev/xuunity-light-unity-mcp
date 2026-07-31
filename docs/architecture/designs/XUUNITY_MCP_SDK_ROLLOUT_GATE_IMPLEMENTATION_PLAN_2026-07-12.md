@@ -1,7 +1,7 @@
 # XUUnity MCP SDK Rollout Gate — Implementation Plan
 
 Date: `2026-07-12`
-Status: `P0.1 and typed resolver P0.2b complete in current source; package restore and broader orchestration remain open; hardened after adversarial review (§14)`
+Status: `P0.1 and P0.2 complete in current source; broader orchestration remains open; hardened after adversarial review (§14)`
 Baseline: released source line `v0.3.48`
 Elaborates: `XUUNITY_MCP_SDK_ROLLOUT_VALIDATION_DESIGN_2026-05-14.md` (direction) —
 this document turns that direction into a build-ready plan with exact
@@ -554,5 +554,15 @@ then reuses dependency verification for explicit expected coordinates. Only
 that combined proof returns `decision_ready=true`; callback loss/failure,
 missing or unstable output, and missing coordinates fail closed. Fresh proof
 passes current-source Unity `2022.3` EditMode `24/24` and PlayMode `5/5`, plus
-real callback failure and local-Maven success routes. `unity.sdk.package_restore`,
-the GUI pool, `batch-edm4u-resolve`, and portfolio orchestration remain open.
+real callback failure and local-Maven success routes.
+
+Current source completes `unity.sdk.package_restore` as the closed-editor P0.2
+sibling. The host refuses an open or process-unobservable project, launches a
+dedicated batch entrypoint, and accepts success only when Unity publishes an
+atomic, run-bound `xuunity.sdk-package-restore.v1` receipt after the Package Manager list
+request and idle-stable settle. The receipt records registered package ids and
+versions, direct dependencies, dependency-XML hashes, and manifest/lock hashes;
+the host separately records before/after hashes and proves the Unity process
+closed. Timeout, nonzero exit, missing/invalid receipt, or lingering editor
+fails closed. The GUI pool, `batch-edm4u-resolve`, and portfolio orchestration
+remain open.

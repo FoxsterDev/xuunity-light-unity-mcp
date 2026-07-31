@@ -136,8 +136,22 @@ registers the published file as an `sdk_generated_diff_report` artifact. Both
 passing and failed verdicts return `artifact_registered=true` plus a compact
 `artifact_registry` pointer containing the report hash and registry location.
 A failed guard is a validation failure, not a passing resolver request. It does
-not yet prove EDM4U async freshness, perform a package restore, or replace the
-planned portfolio SDK lane.
+not prove EDM4U async freshness or replace the planned portfolio SDK lane.
+
+Before resolver work, run `unity_sdk_package_restore` or:
+
+```bash
+./xuunity_light_unity_mcp.sh request-sdk-package-restore \
+  --project-root "/path/to/UnityProject"
+```
+
+The project must be closed. A passing, run-bound
+`xuunity.sdk-package-restore.v1` receipt records the registered package
+ids/versions, direct dependencies,
+`*Dependencies.xml` paths and hashes, and post-restore manifest/lock hashes.
+Timeout, missing/invalid receipt, nonzero Unity exit, restricted process
+visibility, a same-project editor conflict, or an editor that remains live all
+leave `decision_ready=false`.
 
 For a decision-grade Android resolver verdict, prefer
 `unity_sdk_android_resolve` or

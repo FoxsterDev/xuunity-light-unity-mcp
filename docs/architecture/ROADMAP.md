@@ -104,6 +104,9 @@ Already implemented:
 - mutating `unity_project_action_invoke` results promote a versioned
   before/after/add/remove/change delta and remain non-decision-ready when that
   proof is missing, invalid, or reports destructive removal
+- closed-project SDK package restore through `unity_sdk_package_restore` and
+  `request-sdk-package-restore`, with an idle-stable Package Manager graph,
+  atomic package/dependency receipt, and verified editor-process exit
 - public config-applying project-action build templates for projects whose
   representative build must call project-owned apply/build methods instead of
   raw `unity_build_player`

@@ -507,6 +507,19 @@ def build_parser() -> argparse.ArgumentParser:
     sdk_android_resolve_cmd.add_argument("--timeout-ms", type=int, default=None)
     sdk_android_resolve_cmd.set_defaults(func_name="cmd_request_sdk_android_resolve")
 
+    sdk_package_restore_cmd = sub.add_parser(
+        "request-sdk-package-restore",
+        help="Restore a closed project's Package Manager graph in Unity batchmode and emit an authoritative package receipt.",
+    )
+    sdk_package_restore_cmd.add_argument("--project-root", required=True)
+    sdk_package_restore_cmd.add_argument("--unity-app")
+    sdk_package_restore_cmd.add_argument("--batch-log-path")
+    sdk_package_restore_cmd.add_argument("--result-file")
+    sdk_package_restore_cmd.add_argument("--stable-idle-ticks", type=int, default=2)
+    sdk_package_restore_cmd.add_argument("--timeout-ms", type=int, default=600000)
+    sdk_package_restore_cmd.add_argument("--dry-run", action="store_true")
+    sdk_package_restore_cmd.set_defaults(func_name="cmd_request_sdk_package_restore")
+
     sdk_dependency_verify_cmd = sub.add_parser("request-sdk-dependency-verify", help="Verify generated SDK dependency artifacts from a JSON expectations file through the active bridge transport.")
     sdk_dependency_verify_cmd.add_argument("--project-root", required=True)
     sdk_dependency_verify_cmd.add_argument("--config-file", required=True)

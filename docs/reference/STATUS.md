@@ -1,6 +1,6 @@
 # Status
 
-Date: `2026-07-29`
+Date: `2026-07-31`
 Status: `active public status snapshot`
 
 XUUnity Light Unity MCP is a working same-host Unity Editor automation service
@@ -90,6 +90,12 @@ SDK rollout safety (`v0.3.45` plus current-source hardening):
   callback as completion proof, requires stable SHA-256 generated outputs across
   idle ticks, and verifies explicit expected coordinates before returning
   `trust_class=decision_grade` and `decision_ready=true`.
+- Current source adds closed-project `unity.sdk.package_restore` /
+  `unity_sdk_package_restore` / `request-sdk-package-restore`. Unity batchmode
+  waits for an idle-stable registered package graph, publishes an atomic
+  run-bound `xuunity.sdk-package-restore.v1` receipt with package ids/versions,
+  dependency-XML hashes, and manifest/lock hashes, then exits. Missing receipts,
+  nonzero exits, timeouts, an open project, or unproven exit all fail closed.
 - `unity_sdk_generated_diff_guard` / `sdk-generated-diff-guard` provides the
   generated-file vertical slice of the SDK rollout gate. Git-tracked paths use
   a named Git ref; Git-untracked paths can use an explicit `Library/` capture
@@ -100,8 +106,8 @@ SDK rollout safety (`v0.3.45` plus current-source hardening):
   invalid structured files, and normalization-only XML/Gradle rewrites without
   opening Unity. Current source registers every published pass/fail JSON report
   as an `sdk_generated_diff_report` artifact and returns its hash plus registry
-  pointer. Package restore, GUI admission control, batch resolve, and portfolio
-  orchestration remain separate open slices.
+  pointer. GUI admission control, batch resolve, and portfolio orchestration
+  remain separate open slices.
 
 Implemented Unity-side operations:
 
@@ -237,6 +243,7 @@ Implemented host-side MCP tools and helpers:
 - `artifact-write-report`
 - `artifact-probe`
 - `sdk-generated-diff-guard`
+- `request-sdk-package-restore`
 
 ## Current Validation Evidence
 

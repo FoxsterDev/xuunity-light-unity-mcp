@@ -325,6 +325,7 @@ from server_cli_project_commands import (
     cmd_ui_reference_validate,
 )
 from server_cli_sdk_commands import (
+    cmd_request_sdk_package_restore,
     cmd_sdk_generated_diff_guard,
 )
 from server_cli_batch_commands import (

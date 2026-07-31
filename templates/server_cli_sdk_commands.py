@@ -2,6 +2,23 @@ from __future__ import annotations
 
 from server_cli_shared import *
 from server_sdk_diff_guard import run_sdk_generated_diff_guard
+from server_sdk_package_restore import run_sdk_package_restore
+
+
+def cmd_request_sdk_package_restore(args):
+    project_root = ensure_project_root(args.project_root)
+    payload = run_sdk_package_restore(
+        project_root=project_root,
+        unity_app=args.unity_app,
+        timeout_ms=args.timeout_ms,
+        stable_idle_ticks=args.stable_idle_ticks,
+        log_path=args.batch_log_path,
+        result_path=args.result_file,
+        dry_run=bool(args.dry_run),
+    )
+    print_json(payload)
+    if not bool(payload.get("decision_ready")) and not bool(args.dry_run):
+        raise SystemExit(1)
 
 
 def cmd_sdk_generated_diff_guard(args):

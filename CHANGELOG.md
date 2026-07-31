@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Added
+
+- Added `unity_sdk_package_restore` and `request-sdk-package-restore`, a
+  closed-project Unity batch lane that waits for Package Manager's registered
+  graph to become idle-stable, then atomically records package ids/versions,
+  direct dependencies, dependency-XML hashes, and manifest/lock hashes. The
+  verdict is decision-ready only when Unity publishes a successful run-bound
+  receipt and the same-project editor process is proven closed after exit.
+
 ## 0.3.49
 
 Release tag: `v0.3.49`
