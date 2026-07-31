@@ -21,11 +21,14 @@ from server_ui_reference_manifest import (
     SCORE_THRESHOLD_KEYS,
     TOLERANCE_PROFILES,
     UI_REFERENCE_SCHEMA_VERSION,
+    cell_footprint,
     clip_rect,
+    comparison_grid_dimensions,
     derive_orientation,
     issue,
     positive_int,
     rect_from_mapping,
+    resolve_tolerances,
     union_area,
 )
 
@@ -188,14 +191,19 @@ def validate_manifest(manifest: dict[str, Any], *, reference_dir: Path) -> dict[
     if len(regions) == 1 and bounds.area > 0:
         only_rect = region_rects.get(str(regions[0].get("id") or "")) if isinstance(regions[0], dict) else None
         if only_rect is not None and only_rect.area >= bounds.area:
-            warnings.append(
+            # A single full-screen region reduces acceptance to one whole-screen average, where a
+            # missing element is diluted by the share of the screen it occupied: a missing button
+            # or body paragraph scores above the similarity floor and passes. Localised regions are
+            # what make the verdict mean anything, so this is a refusal, not a note.
+            errors.append(
                 issue(
                     "ui_reference_regions_coarse",
                     (
-                        "Only one full-screen region is declared; a mismatch can be detected but not "
-                        "localized to a UI area."
+                        "Only one full-screen region is declared, so a mismatch cannot be localized "
+                        "and a missing element is averaged away by the rest of the screen. Declare a "
+                        "region per meaningful UI area (card, illustration, title, body, cta)."
                     ),
-                    {},
+                    {"region_id": str(regions[0].get("id") or "")},
                 )
             )
 
@@ -244,7 +252,18 @@ def validate_manifest(manifest: dict[str, Any], *, reference_dir: Path) -> dict[
             )
         )
 
-    mask_audit = build_mask_audit(mask_rects, bounds, region_rects, required_region_ids)
+    mask_columns, mask_rows = comparison_grid_dimensions(
+        manifest.get("viewport") if isinstance(manifest.get("viewport"), dict) else {},
+        resolve_tolerances(manifest),
+    )
+    mask_audit = build_mask_audit(
+        mask_rects,
+        bounds,
+        region_rects,
+        required_region_ids,
+        columns=mask_columns,
+        rows=mask_rows,
+    )
     for violation in mask_audit["violations"]:
         errors.append(
             issue(
@@ -396,6 +415,9 @@ def validate_manifest(manifest: dict[str, Any], *, reference_dir: Path) -> dict[
                 )
             )
 
+    errors.extend(_vision_policy_errors(manifest, issue))
+    warnings.extend(_vision_policy_warnings(manifest, issue))
+
     if not str(manifest.get("fixture") or "").strip():
         warnings.append(
             issue(
@@ -423,8 +445,29 @@ def build_mask_audit(
     bounds: Rect,
     region_rects: dict[str, Rect],
     required_region_ids: Iterable[str],
+    *,
+    columns: int = 0,
+    rows: int = 0,
 ) -> dict[str, Any]:
-    total_masked = union_area(mask_rects)
+    # Charge each mask the area the comparison actually stops looking at, which is its footprint
+    # snapped outward to whole cells, not the pixels it declares.
+    effective_rects = mask_rects
+    if columns > 0 and rows > 0 and bounds.area > 0:
+        effective_rects = [
+            cell_footprint(
+                rect,
+                reference_width=bounds.width,
+                reference_height=bounds.height,
+                columns=columns,
+                rows=rows,
+            )
+            for rect in mask_rects
+        ]
+        effective_rects = [clip_rect(rect, bounds) for rect in effective_rects]
+        effective_rects = [rect for rect in effective_rects if rect.area > 0]
+
+    declared_masked = union_area(mask_rects)
+    total_masked = union_area(effective_rects)
     viewport_area = bounds.area
     total_ratio = (total_masked / viewport_area) if viewport_area else 0.0
     violations: list[dict[str, Any]] = []
@@ -446,17 +489,20 @@ def build_mask_audit(
     region_masking: list[dict[str, Any]] = []
     required_ids = set(required_region_ids)
     for region_id, rect in region_rects.items():
-        clipped = [clip_rect(mask, rect) for mask in mask_rects]
+        clipped = [clip_rect(mask, rect) for mask in effective_rects]
         masked = union_area([entry for entry in clipped if entry.area > 0])
         ratio = (masked / rect.area) if rect.area else 0.0
         region_masking.append(
             {"region_id": region_id, "masked_pixels": masked, "masked_ratio": round(ratio, 6)}
         )
-        if region_id in required_ids and ratio > MASK_POLICY["max_region_mask_ratio"]:
+        # The cap holds for every declared region. Gating it on `required` let a full-card mask
+        # over a non-required region erase the card and still report a clean pass.
+        if ratio > MASK_POLICY["max_region_mask_ratio"]:
+            scope = "required region" if region_id in required_ids else "region"
             violations.append(
                 {
                     "message": (
-                        f"Required region '{region_id}' is {ratio:.1%} masked, above the "
+                        f"{scope.capitalize()} '{region_id}' is {ratio:.1%} masked, above the "
                         f"{MASK_POLICY['max_region_mask_ratio']:.0%} policy limit."
                     ),
                     "region_id": region_id,
@@ -469,8 +515,145 @@ def build_mask_audit(
     return {
         "mask_count": len(mask_rects),
         "masked_pixels": total_masked,
+        "declared_masked_pixels": declared_masked,
         "masked_ratio": round(total_ratio, 6),
         "policy": dict(MASK_POLICY),
+        "accounting": "comparison_cell_footprint",
         "regions": sorted(region_masking, key=lambda item: str(item["region_id"])),
         "violations": violations,
     }
+
+
+VISION_POLICY_KEYS = (
+    "min_criterion",
+    "min_overall",
+    "judges_required",
+    "allow_self_review",
+    "required_criteria",
+)
+VISION_POLICY_INT_KEYS = ("min_criterion", "min_overall", "judges_required")
+
+
+def _vision_policy_errors(manifest: dict[str, Any], issue: Any) -> list[dict[str, Any]]:
+    from server_ui_vision_review import CRITERIA, SCALE_MAX
+
+    raw = manifest.get("vision_policy")
+    if not isinstance(raw, dict):
+        return []
+
+    errors: list[dict[str, Any]] = []
+    for key in VISION_POLICY_INT_KEYS:
+        if key not in raw:
+            continue
+        value = raw.get(key)
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            errors.append(
+                issue(
+                    "ui_reference_vision_policy_invalid",
+                    f"Vision policy '{key}' must be a number.",
+                    {"key": key, "value": value},
+                )
+            )
+            continue
+        number = int(value)
+        limit = SCALE_MAX if key != "judges_required" else 16
+        if not 1 <= number <= limit:
+            errors.append(
+                issue(
+                    "ui_reference_vision_policy_invalid",
+                    (
+                        f"Vision policy '{key}' must be between 1 and {limit}; a floor of 0 would be "
+                        "a bar no review can fail."
+                    ),
+                    {"key": key, "value": value},
+                )
+            )
+
+    if "allow_self_review" in raw and not isinstance(raw.get("allow_self_review"), bool):
+        errors.append(
+            issue(
+                "ui_reference_vision_policy_invalid",
+                "Vision policy 'allow_self_review' must be a boolean.",
+                {"key": "allow_self_review", "value": raw.get("allow_self_review")},
+            )
+        )
+
+    if "required_criteria" in raw:
+        declared = raw.get("required_criteria")
+        if not isinstance(declared, list):
+            errors.append(
+                issue(
+                    "ui_reference_vision_policy_invalid",
+                    "Vision policy 'required_criteria' must be a list of rubric criteria.",
+                    {"key": "required_criteria", "value": declared},
+                )
+            )
+        else:
+            unknown = [str(item) for item in declared if str(item) not in CRITERIA]
+            if unknown:
+                errors.append(
+                    issue(
+                        "ui_reference_vision_policy_invalid",
+                        (
+                            "Vision policy 'required_criteria' names criteria that are not in the "
+                            f"rubric: {', '.join(unknown)}. Known criteria: {', '.join(CRITERIA)}."
+                        ),
+                        {"key": "required_criteria", "unknown": unknown},
+                    )
+                )
+            elif not declared:
+                errors.append(
+                    issue(
+                        "ui_reference_vision_policy_invalid",
+                        (
+                            "Vision policy 'required_criteria' is empty, which waives the whole "
+                            "rubric; omit the key to require every criterion."
+                        ),
+                        {"key": "required_criteria"},
+                    )
+                )
+    return errors
+
+
+def _vision_policy_warnings(manifest: dict[str, Any], issue: Any) -> list[dict[str, Any]]:
+    raw = manifest.get("vision_policy")
+    if not isinstance(raw, dict):
+        return []
+
+    warnings: list[dict[str, Any]] = []
+    for key in raw:
+        name = str(key)
+        if name in VISION_POLICY_KEYS:
+            continue
+        snake = _camel_to_snake(name)
+        if snake in VISION_POLICY_KEYS:
+            warnings.append(
+                issue(
+                    "ui_reference_vision_policy_key_ignored",
+                    (
+                        f"Vision policy key '{name}' is ignored; this contract is snake_case, so "
+                        f"write '{snake}'. As declared it silently keeps the default."
+                    ),
+                    {"key": name, "expected": snake},
+                )
+            )
+        else:
+            warnings.append(
+                issue(
+                    "ui_reference_vision_policy_key_unknown",
+                    f"Vision policy key '{name}' is not recognised and will be ignored.",
+                    {"key": name},
+                )
+            )
+    return warnings
+
+
+def _camel_to_snake(name: str) -> str:
+    out: list[str] = []
+    for char in str(name):
+        if char.isupper():
+            out.append("_")
+            out.append(char.lower())
+        else:
+            out.append(char)
+    return "".join(out)

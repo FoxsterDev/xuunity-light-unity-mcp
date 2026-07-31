@@ -62,43 +62,75 @@ def build_cell_grid(image: RgbaImage, *, columns: int, rows: int) -> CellGrid:
     columns = max(1, min(columns, width))
     rows = max(1, min(rows, height))
 
-    column_bounds = [
-        (
-            column * width // columns,
-            max(column * width // columns + 1, (column + 1) * width // columns),
-        )
-        for column in range(columns)
-    ]
+    # Area weights in exact integer arithmetic. A cell spans source x from c*width/columns to
+    # (c+1)*width/columns; scaling by `columns` makes both the cell edges and the pixel edges
+    # integers, so a pixel straddling a cell boundary contributes to both cells in proportion to
+    # the overlap instead of landing wholly in one of them. Without this the cell means are phase
+    # dependent and the identical design captured at 2x scores as a mismatch.
+    column_spans = _axis_spans(width, columns)
+    row_spans = _axis_spans(height, rows)
+
     cell_count = columns * rows
     sum_r = [0] * cell_count
     sum_g = [0] * cell_count
     sum_b = [0] * cell_count
-    pixel_counts = [0] * cell_count
     stride = width * 4
 
+    row_touch: list[list[tuple[int, int]]] = [[] for _ in range(height)]
+    for row_index, (first, last, weights) in enumerate(row_spans):
+        for offset, weight in enumerate(weights):
+            row_touch[first + offset].append((row_index, weight))
+
     for y in range(height):
-        base = min(rows - 1, y * rows // height) * columns
+        touched = row_touch[y]
+        if not touched:
+            continue
         row = pixels[y * stride : (y + 1) * stride]
         prefix_r = list(accumulate(row[0::4], initial=0))
         prefix_g = list(accumulate(row[1::4], initial=0))
         prefix_b = list(accumulate(row[2::4], initial=0))
-        for column in range(columns):
-            x0, x1 = column_bounds[column]
-            index = base + column
-            sum_r[index] += prefix_r[x1] - prefix_r[x0]
-            sum_g[index] += prefix_g[x1] - prefix_g[x0]
-            sum_b[index] += prefix_b[x1] - prefix_b[x0]
-            pixel_counts[index] += x1 - x0
+        line_r = [0] * columns
+        line_g = [0] * columns
+        line_b = [0] * columns
+        for column, (first, last, weights) in enumerate(column_spans):
+            total_r = 0
+            total_g = 0
+            total_b = 0
+            for offset, weight in enumerate(weights):
+                x = first + offset
+                if weight == columns:
+                    continue
+                total_r += weight * row[x * 4]
+                total_g += weight * row[x * 4 + 1]
+                total_b += weight * row[x * 4 + 2]
+            full_start = first + (1 if weights[0] != columns else 0)
+            full_end = last + 1 - (1 if len(weights) > 1 and weights[-1] != columns else 0)
+            if full_end > full_start:
+                total_r += columns * (prefix_r[full_end] - prefix_r[full_start])
+                total_g += columns * (prefix_g[full_end] - prefix_g[full_start])
+                total_b += columns * (prefix_b[full_end] - prefix_b[full_start])
+            line_r[column] = total_r
+            line_g[column] = total_g
+            line_b[column] = total_b
+        for row_index, row_weight in touched:
+            base = row_index * columns
+            for column in range(columns):
+                index = base + column
+                sum_r[index] += row_weight * line_r[column]
+                sum_g[index] += row_weight * line_g[column]
+                sum_b[index] += row_weight * line_b[column]
 
     red = [0] * cell_count
     green = [0] * cell_count
     blue = [0] * cell_count
     luma = [0] * cell_count
+    # Column weights sum to `width` per cell and row weights to `height`, so the total weight
+    # behind every cell mean is exactly width*height regardless of where the cell edges fall.
+    denominator = max(1, width * height)
     for index in range(cell_count):
-        count = max(1, pixel_counts[index])
-        mean_r = sum_r[index] // count
-        mean_g = sum_g[index] // count
-        mean_b = sum_b[index] // count
+        mean_r = sum_r[index] // denominator
+        mean_g = sum_g[index] // denominator
+        mean_b = sum_b[index] // denominator
         red[index] = mean_r
         green[index] = mean_g
         blue[index] = mean_b
@@ -125,6 +157,25 @@ def build_cell_grid(image: RgbaImage, *, columns: int, rows: int) -> CellGrid:
         source_width=width,
         source_height=height,
     )
+
+
+def _axis_spans(length: int, cells: int) -> list[tuple[int, int, list[int]]]:
+    """Per-cell source range and exact overlap weights, in units of 1/`cells` of a pixel.
+
+    Weights for one cell sum to `length`; a pixel wholly inside a cell weighs `cells`."""
+
+    spans: list[tuple[int, int, list[int]]] = []
+    for index in range(cells):
+        low = index * length
+        high = (index + 1) * length
+        first = low // cells
+        last = (high - 1) // cells
+        weights = [
+            max(0, min(high, (pixel + 1) * cells) - max(low, pixel * cells))
+            for pixel in range(first, last + 1)
+        ]
+        spans.append((first, last, weights))
+    return spans
 
 
 def build_coarse_grid(grid: CellGrid, factor: int) -> CellGrid | None:
@@ -444,21 +495,10 @@ def _content_box(
     mask_rects: list[Rect],
     content_tolerance: float,
 ) -> Rect | None:
-    reds: list[int] = []
-    greens: list[int] = []
-    blues: list[int] = []
-    for cell_y in range(rect.y, rect.bottom):
-        for cell_x in range(rect.x, rect.right):
-            if _cell_in_any(cell_x, cell_y, mask_rects):
-                continue
-            index = cell_y * grid.columns + cell_x
-            reds.append(grid.red[index])
-            greens.append(grid.green[index])
-            blues.append(grid.blue[index])
-    if not reds:
+    background = _background_colour(grid, rect=rect, mask_rects=mask_rects)
+    if background is None:
         return None
 
-    background = (_median(reds), _median(greens), _median(blues))
     min_x = min_y = None
     max_x = max_y = None
     for cell_y in range(rect.y, rect.bottom):
@@ -481,6 +521,104 @@ def _content_box(
     if min_x is None:
         return None
     return Rect(x=min_x, y=min_y, width=max_x - min_x + 1, height=max_y - min_y + 1)
+
+
+def content_coverage(
+    expected: CellGrid,
+    actual: CellGrid,
+    *,
+    rect: Rect,
+    mask_rects: list[Rect],
+    content_tolerance: float,
+) -> dict[str, Any]:
+    """How much of the reference's content the capture still renders, counted in cells.
+
+    Deliberately independent of area. A mismatched-cell fraction dilutes a missing element by the
+    share of the screen it occupied, so a whole missing button or body paragraph can sit inside a
+    coarse region and still score above the similarity floor. Counting content cells does not
+    dilute: content that is absent is absent whatever fraction of the screen it covered."""
+
+    background = _background_colour(expected, rect=rect, mask_rects=mask_rects)
+    if background is None:
+        return {"evaluated": False, "reason": "region_has_no_comparable_cells"}
+
+    expected_cells: list[tuple[int, int]] = []
+    actual_content: set[tuple[int, int]] = set()
+    for cell_y in range(rect.y, rect.bottom):
+        for cell_x in range(rect.x, rect.right):
+            if _cell_in_any(cell_x, cell_y, mask_rects):
+                continue
+            index = cell_y * expected.columns + cell_x
+            if _colour_distance(expected, index, background) > content_tolerance:
+                expected_cells.append((cell_x, cell_y))
+            if _colour_distance(actual, index, background) > content_tolerance:
+                actual_content.add((cell_x, cell_y))
+
+    if not expected_cells:
+        return {"evaluated": False, "reason": "reference_region_has_no_distinct_content"}
+
+    # One cell of slop, matching the neighbourhood tolerance the colour lane already grants, so a
+    # sub-cell shift is not read as deleted content.
+    covered = 0
+    for cell_x, cell_y in expected_cells:
+        if any(
+            (cell_x + dx, cell_y + dy) in actual_content
+            for dy in (-1, 0, 1)
+            for dx in (-1, 0, 1)
+        ):
+            covered += 1
+
+    ratio = covered / len(expected_cells)
+    return {
+        "evaluated": True,
+        "expected_content_cells": len(expected_cells),
+        "rendered_content_cells": covered,
+        "coverage_ratio": round(ratio, 6),
+    }
+
+
+def _background_colour(
+    grid: CellGrid,
+    *,
+    rect: Rect,
+    mask_rects: list[Rect],
+) -> tuple[int, int, int] | None:
+    """The dominant colour of the region, as a colour that actually occurs in it.
+
+    Taking an independent median per channel invents a colour the image never contains — the red
+    of one element with the green of another — against which every real cell reads as content."""
+
+    buckets: dict[tuple[int, int, int], list[int]] = {}
+    for cell_y in range(rect.y, rect.bottom):
+        for cell_x in range(rect.x, rect.right):
+            if _cell_in_any(cell_x, cell_y, mask_rects):
+                continue
+            index = cell_y * grid.columns + cell_x
+            red = grid.red[index]
+            green = grid.green[index]
+            blue = grid.blue[index]
+            key = (red >> 4, green >> 4, blue >> 4)
+            entry = buckets.get(key)
+            if entry is None:
+                buckets[key] = [1, red, green, blue]
+            else:
+                entry[0] += 1
+                entry[1] += red
+                entry[2] += green
+                entry[3] += blue
+    if not buckets:
+        return None
+    dominant = max(buckets.values(), key=lambda entry: entry[0])
+    count = max(1, dominant[0])
+    return (dominant[1] // count, dominant[2] // count, dominant[3] // count)
+
+
+def _colour_distance(grid: CellGrid, index: int, background: tuple[int, int, int]) -> int:
+    return max(
+        abs(grid.red[index] - background[0]),
+        abs(grid.green[index] - background[1]),
+        abs(grid.blue[index] - background[2]),
+    )
 
 
 def cluster_mismatch_cells(

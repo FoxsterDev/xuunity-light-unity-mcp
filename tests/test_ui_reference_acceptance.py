@@ -19,8 +19,14 @@ from server_core import ToolInvocationError
 from server_summary_scenario import build_project_defined_hook_summary
 from server_ui_fixture import UI_FIXTURE_SCHEMA_VERSION, validate_ui_fixture
 from server_ui_reference_compare import compare_ui_reference
-from server_ui_reference_manifest import Rect, UI_REFERENCE_SCHEMA_VERSION, union_area
+from server_ui_reference_manifest import (
+    Rect,
+    TOLERANCE_PROFILES,
+    UI_REFERENCE_SCHEMA_VERSION,
+    union_area,
+)
 from server_ui_reference_registry import register_ui_reference, validate_ui_reference
+from server_ui_reference_verdict import score_visual_verdict
 
 VISUAL_ONLY_ACCEPTANCE = {"visual": "required", "semantic": "not_required", "interaction": "not_required"}
 
@@ -79,6 +85,58 @@ def screen_image() -> png.RgbaImage:
     for index in range(6):
         image = with_rect(image, Rect(48, 266 + index * 18, 140 - index * 6, 8), (40, 40, 60, 255))
     image = with_rect(image, CTA_CONTENT, (40, 120, 220, 255))
+    return image
+
+
+def default_regions(image: png.RgbaImage) -> list[dict]:
+    """Two stacked regions covering the image, so registration satisfies the granularity policy."""
+
+    half = max(1, image.height // 2)
+    return [
+        {"id": "upper", "rect": {"x": 0, "y": 0, "width": image.width, "height": half}},
+        {
+            "id": "lower",
+            "rect": {"x": 0, "y": half, "width": image.width, "height": image.height - half},
+        },
+    ]
+
+
+def screen_image_redrawn(factor: int) -> png.RgbaImage:
+    """The same design drawn at `factor` times the resolution.
+
+    Distinct from resize_nearest on purpose: rescaling the reference bitmap lands content on the
+    same cell boundaries, so it cannot detect a binning phase error. A redraw can, and this is
+    the direction real work uses — a design exported once, captured at the Game View resolution."""
+
+    scale = factor
+    image = solid_image(240 * scale, 480 * scale, (12, 14, 26, 255))
+    image = with_rect(image, Rect(20 * scale, 60 * scale, 200 * scale, 410 * scale), (245, 245, 250, 255))
+    image = with_rect(
+        image,
+        Rect(
+            ILLUSTRATION_CONTENT.x * scale,
+            ILLUSTRATION_CONTENT.y * scale,
+            ILLUSTRATION_CONTENT.width * scale,
+            ILLUSTRATION_CONTENT.height * scale,
+        ),
+        (255, 205, 60, 255),
+    )
+    for index in range(6):
+        image = with_rect(
+            image,
+            Rect(48 * scale, (266 + index * 18) * scale, (140 - index * 6) * scale, 8 * scale),
+            (40, 40, 60, 255),
+        )
+    image = with_rect(
+        image,
+        Rect(
+            CTA_CONTENT.x * scale,
+            CTA_CONTENT.y * scale,
+            CTA_CONTENT.width * scale,
+            CTA_CONTENT.height * scale,
+        ),
+        (40, 120, 220, 255),
+    )
     return image
 
 
@@ -192,6 +250,9 @@ class UiReferenceTestCase(unittest.TestCase):
             "acceptance": dict(VISUAL_ONLY_ACCEPTANCE),
             "workspace_root": str(self.workspace),
             "register_in_artifact_registry": False,
+            # A single full-screen region is refused by policy, so tests that do not care about
+            # region layout still need a localized pair.
+            "regions": default_regions(image),
         }
         payload.update(overrides)
         return register_ui_reference(**payload)
@@ -311,17 +372,30 @@ class ReferenceRegistrationTest(UiReferenceTestCase):
 
         self.assertEqual(UI_REFERENCE_SCHEMA_VERSION, payload["schema_version"])
         self.assertEqual({"width": 40, "height": 90, "orientation": "portrait", "dpi_policy": "reference_pixels"}, payload["viewport"])
-        self.assertEqual(["full_screen"], payload["region_ids"])
+        self.assertEqual(["upper", "lower"], payload["region_ids"])
         self.assertTrue(payload["validation"]["valid"])
 
         manifest = json.loads(Path(payload["manifest_path"]).read_text(encoding="utf-8"))
         expected_bytes = Path(payload["expected_image_path"]).read_bytes()
         self.assertEqual(manifest["expected_image"]["sha256"], payload["expected_image"]["sha256"])
         self.assertEqual(len(expected_bytes), manifest["expected_image"]["size_bytes"])
+
+    def test_a_single_full_screen_region_is_refused(self) -> None:
+        with self.assertRaises(ToolInvocationError) as exc:
+            self.register(
+                solid_image(40, 90, (20, 30, 40, 255)),
+                regions=[{"id": "everything", "rect": {"x": 0, "y": 0, "width": 40, "height": 90}}],
+            )
+        self.assertEqual("ui_reference_manifest_invalid", exc.exception.code)
         self.assertIn(
             "ui_reference_regions_coarse",
-            [warning["code"] for warning in payload["validation"]["warnings"]],
+            [error["code"] for error in exc.exception.details["errors"]],
         )
+
+    def test_declaring_no_regions_is_refused_rather_than_defaulted(self) -> None:
+        with self.assertRaises(ToolInvocationError) as exc:
+            self.register(solid_image(40, 90, (20, 30, 40, 255)), regions=[])
+        self.assertEqual("ui_reference_manifest_invalid", exc.exception.code)
 
     def test_second_registration_requires_explicit_overwrite(self) -> None:
         self.register(solid_image(10, 20, (1, 2, 3, 255)))
@@ -447,6 +521,107 @@ class ComparisonVerdictTest(UiReferenceTestCase):
         )
         overlay = next(item for item in result["artifacts"] if item["role"] == "overlay")
         self.assertEqual("comparison_grid", overlay["render_space"])
+
+    def register_unaligned(self) -> png.RgbaImage:
+        """A reference whose cells do not land on whole pixels: 240px over a 128-cell grid is
+        1.875 px per cell, so content straddles cell boundaries. An evenly-dividing grid hides
+        binning phase errors entirely, which is why the older resolution tests could not see one."""
+
+        expected = screen_image()
+        self.register(
+            expected,
+            regions=[
+                {"id": "illustration", "rect": ILLUSTRATION_REGION.to_mapping(), "weight": 4},
+                {"id": "body", "rect": BODY_REGION.to_mapping(), "weight": 4},
+                {"id": "cta", "rect": CTA_REGION.to_mapping(), "weight": 3},
+            ],
+        )
+        return expected
+
+    def test_the_same_design_redrawn_at_3x_still_passes(self) -> None:
+        self.register_unaligned()
+        redrawn = screen_image_redrawn(3)
+        result = self.compare(
+            redrawn, stability_image=self.stability_capture(redrawn), capture_name="redrawn-3x"
+        )
+
+        self.assertEqual("passed", result["visual_verdict"], result["failure_reasons"])
+        self.assertEqual("passed", result["reference_acceptance"], result["failure_reasons"])
+        # An exact proportional redraw is the same screen, so every cell mean must agree exactly.
+        self.assertEqual(1.0, result["global"]["similarity_score"])
+        for region in result["regions"]:
+            self.assertEqual(1.0, region["similarity_score"], region["region_id"])
+
+    def test_an_exact_upscale_of_the_same_pixels_scores_as_identical(self) -> None:
+        expected = self.register_unaligned()
+        doubled = resize_nearest(expected, expected.width * 2, expected.height * 2)
+        result = self.compare(
+            doubled, stability_image=self.stability_capture(doubled), capture_name="exact-2x"
+        )
+
+        # Area weighting makes an exact pixel-for-pixel upscale indistinguishable from the source.
+        self.assertEqual(1.0, result["global"]["similarity_score"])
+        self.assertEqual("passed", result["visual_verdict"])
+
+    def test_a_missing_element_fails_even_when_similarity_passes(self) -> None:
+        """The defect from the incident this system exists for: copy that does not render.
+
+        A whole-screen similarity score dilutes a missing element by the share of the screen it
+        occupied, so the completeness check has to be independent of area."""
+
+        expected = screen_image()
+        self.register(
+            expected,
+            regions=[
+                {"id": "card", "rect": {"x": 20, "y": 60, "width": 200, "height": 410}, "weight": 4},
+            ],
+        )
+        blanked = expected
+        for index in range(6):
+            blanked = with_rect(
+                blanked, Rect(48, 266 + index * 18, 140 - index * 6, 8), (245, 245, 250, 255)
+            )
+
+        result = self.compare(
+            blanked, stability_image=self.stability_capture(blanked), capture_name="no-body"
+        )
+        card = next(region for region in result["regions"] if region["region_id"] == "card")
+
+        # Colour similarity alone would have passed this capture.
+        self.assertGreaterEqual(float(card["similarity_score"]), float(card["threshold"]))
+        self.assertFalse(card["content_coverage"]["passed"])
+        self.assertLess(float(card["content_coverage"]["coverage_ratio"]), 0.95)
+        self.assertFalse(card["passed"])
+        self.assertEqual("failed", result["visual_verdict"])
+        self.assertEqual("card", result["first_failed_region"])
+        self.assertTrue(
+            any("content" in reason for reason in result["failure_reasons"]),
+            result["failure_reasons"],
+        )
+
+    def test_an_uncomparable_region_is_not_a_pass(self) -> None:
+        """`passed: None` reads as a pass to any caller testing `is not False`."""
+
+        regions = [
+            {
+                "region_id": "cta",
+                "comparable": False,
+                "required": False,
+                "similarity_score": None,
+                "weight": 1.0,
+            }
+        ]
+        verdict, failures, first_failed = score_visual_verdict(
+            global_metrics={"passed": True, "similarity_score": 1.0},
+            regions=regions,
+            tolerances=dict(TOLERANCE_PROFILES["balanced"]),
+        )
+
+        self.assertIs(False, regions[0]["passed"])
+        self.assertTrue(regions[0]["not_comparable"])
+        self.assertEqual("failed", verdict)
+        self.assertEqual("cta", first_failed)
+        self.assertTrue(any("no comparable cells" in reason for reason in failures), failures)
 
     def test_capture_at_higher_resolution_still_passes(self) -> None:
         expected, _ = self.build_reference()

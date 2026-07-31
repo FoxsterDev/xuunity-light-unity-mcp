@@ -25,6 +25,7 @@ for entry in (TEMPLATES_DIR, TESTS_DIR):
         sys.path.insert(0, str(entry))
 
 import server_specs
+from server_core import ToolInvocationError
 from server_ui_reference_compare import compare_ui_reference
 from server_ui_vision_packet import build_vision_packet, submit_vision_review
 from test_ui_reference_acceptance import UiReferenceTestCase, write_image
@@ -147,6 +148,86 @@ class VisionRubricTests(unittest.TestCase):
             expected_packet_hash="abc",
         )
         self.assertEqual("passed", record["verdict"])
+
+
+class VisionPolicyFloorTests(unittest.TestCase):
+    """The bar is caller-authored data, so it needs a floor and validation of its own."""
+
+    def test_a_zero_bar_is_raised_to_the_floor(self) -> None:
+        policy = resolve_vision_policy(
+            {"tolerance_profile": "balanced", "vision_policy": {"min_criterion": 0, "min_overall": 0}}
+        )
+        self.assertEqual(1, policy["min_criterion"])
+        self.assertEqual(1, policy["min_overall"])
+
+    def test_an_all_absent_review_cannot_pass_any_profile(self) -> None:
+        for profile in ("strict", "balanced", "lenient"):
+            policy = resolve_vision_policy(
+                {"tolerance_profile": profile, "vision_policy": {"min_criterion": 0, "min_overall": 0}}
+            )
+            record = normalize_vision_review(
+                review(
+                    overall=0,
+                    criteria={name: {"score": 0, "observation": "absent"} for name in CRITERIA},
+                ),
+                policy=policy,
+                expected_packet_hash="abc",
+            )
+            self.assertEqual("failed", record["verdict"], profile)
+
+    def test_every_criterion_on_the_bare_floor_does_not_pass_balanced(self) -> None:
+        record = normalize_vision_review(
+            review(
+                overall=3,
+                criteria={name: {"score": 2, "observation": "visibly different"} for name in CRITERIA},
+            ),
+            policy=BALANCED,
+            expected_packet_hash="abc",
+        )
+        self.assertEqual(2, record["overall_effective"])
+        self.assertEqual("failed", record["verdict"])
+        self.assertIn("overall_clamped_to_criteria_corroboration", record["warnings"])
+
+    def test_one_weak_criterion_among_strong_ones_still_passes(self) -> None:
+        criteria = {name: {"score": 4, "observation": f"{name} matches"} for name in CRITERIA}
+        criteria["typography"] = {"score": 2, "observation": "font weight differs"}
+        record = normalize_vision_review(
+            review(overall=4, criteria=criteria), policy=BALANCED, expected_packet_hash="abc"
+        )
+        self.assertEqual(3, record["overall_effective"])
+        self.assertEqual("passed", record["verdict"])
+
+    def test_a_case_variant_criterion_key_is_a_duplicate_not_an_overwrite(self) -> None:
+        criteria = {name: {"score": 4, "observation": f"{name} matches"} for name in CRITERIA}
+        criteria["layout"] = {"score": 0, "observation": "CTA absent"}
+        criteria["LAYOUT"] = {"score": 4, "observation": "looks fine to me"}
+        record = normalize_vision_review(
+            review(overall=4, criteria=criteria), policy=BALANCED, expected_packet_hash="abc"
+        )
+        self.assertIn("duplicate_criterion_layout", record["errors"])
+        self.assertFalse(record["valid"])
+
+    def test_an_unknown_criterion_is_an_error_not_a_silent_drop(self) -> None:
+        criteria = {name: {"score": 4, "observation": f"{name} matches"} for name in CRITERIA}
+        criteria["colour"] = {"score": 0, "observation": "wrong palette"}
+        record = normalize_vision_review(
+            review(overall=4, criteria=criteria), policy=BALANCED, expected_packet_hash="abc"
+        )
+        self.assertIn("unknown_criterion_colour", record["errors"])
+        self.assertFalse(record["valid"])
+
+    def test_the_independence_bar_is_inside_the_packet_hash(self) -> None:
+        strict_panel = resolve_vision_policy(
+            {"vision_policy": {"judges_required": 3, "allow_self_review": False}}
+        )
+        lax_panel = resolve_vision_policy(
+            {"vision_policy": {"judges_required": 1, "allow_self_review": True}}
+        )
+        material = {"reference_id": "ref", "expected_sha256": "a" * 64, "actual_sha256": "b" * 64}
+        self.assertNotEqual(
+            packet_hash(policy=strict_panel, **material),
+            packet_hash(policy=lax_panel, **material),
+        )
 
 
 class VisionProvenanceTests(unittest.TestCase):
@@ -550,6 +631,65 @@ class LaneVerdictIntegrationTests(unittest.TestCase):
         self.assertIn("interaction", result["blocked_lanes"])
         self.assertIn("interaction_lane_blocked", result["decision_readiness_gaps"])
 
+    def test_an_optional_lane_that_ran_and_blocked_still_gates_the_verdict(self) -> None:
+        acceptance = dict(DEFAULT_LANE_REQUIREMENTS)
+        acceptance["interaction"] = "optional"
+        result = self.finalize(
+            acceptance=acceptance,
+            interaction_lane={
+                "status": "blocked",
+                "evidence": "",
+                "failures": [],
+                "blocked_reason": "edit_mode_delivery_does_not_prove_a_runtime_user_path",
+            },
+        )
+        self.assertEqual("blocked", result["reference_acceptance"])
+        self.assertIn("interaction", result["blocked_lanes"])
+        self.assertFalse(result["decision_ready"])
+
+    def test_an_optional_vision_lane_blocked_by_a_stale_review_still_gates(self) -> None:
+        result = self.finalize(
+            vision_lane={
+                "status": "blocked",
+                "evidence": "",
+                "worst_criteria": [],
+                "blocked_reason": "invalid_review_submitted",
+            }
+        )
+        self.assertEqual("optional", result["acceptance_lanes"]["vision"]["requirement"])
+        self.assertEqual("blocked", result["reference_acceptance"])
+        self.assertIn("vision", result["blocked_lanes"])
+        self.assertFalse(result["decision_ready"])
+
+    def test_a_not_required_lane_that_blocked_still_opts_out(self) -> None:
+        acceptance = dict(DEFAULT_LANE_REQUIREMENTS)
+        acceptance["interaction"] = "not_required"
+        result = self.finalize(
+            acceptance=acceptance,
+            interaction_lane={
+                "status": "blocked",
+                "evidence": "",
+                "failures": [],
+                "blocked_reason": "edit_mode_delivery_does_not_prove_a_runtime_user_path",
+            },
+        )
+        self.assertEqual([], result["blocked_lanes"])
+        self.assertEqual("passed", result["reference_acceptance"])
+
+    def test_a_self_reviewed_pass_is_not_decision_ready(self) -> None:
+        result = self.finalize(
+            interaction_lane={"status": "passed", "evidence": "", "failures": []},
+            vision_lane={
+                "status": "passed",
+                "evidence": "",
+                "worst_criteria": [],
+                "self_reviewed_only": True,
+            },
+        )
+        self.assertEqual("passed", result["reference_acceptance"])
+        self.assertIn("vision_self_reviewed_only", result["decision_readiness_gaps"])
+        self.assertFalse(result["decision_ready"])
+
     def test_the_over_strict_suggestion_reaches_next_actions(self) -> None:
         result = self.finalize(
             visual_verdict="failed",
@@ -612,6 +752,70 @@ class VisionRoundTripTests(UiReferenceTestCase):
         criteria = [entry["id"] for entry in packet["rubric"]["criteria"]]
         self.assertEqual(list(CRITERIA), criteria)
         self.assertIn("Pixel equality", packet["rubric"]["question"])
+
+    def test_an_invalid_review_is_refused_and_never_stored(self) -> None:
+        packet = self.build_packet()
+        with self.assertRaises(ToolInvocationError) as caught:
+            submit_vision_review(
+                project_root=self.project_root,
+                packet_path=packet["packet_path"],
+                review=self.judgement(packet, packet_hash="stale-hash"),
+                workspace_root=str(self.workspace),
+            )
+        self.assertEqual("ui_vision_review_invalid", caught.exception.code)
+        stored = list(Path(packet["packet_path"]).parent.glob("vision_review.*.json"))
+        self.assertEqual([], stored)
+
+        # The comparison is still decidable; a refused submission left no residue behind.
+        result = compare_ui_reference(
+            project_root=self.project_root,
+            reference_id="popup-available-v1",
+            actual_image=str(self.capture),
+            stability_image=str(self.capture),
+            comparison_id="fixed-comparison",
+            workspace_root=str(self.workspace),
+            register_in_artifact_registry=False,
+        )
+        self.assertEqual("not_evaluated", result["acceptance_lanes"]["vision"]["status"])
+
+    def test_a_second_submission_by_the_same_judge_is_refused(self) -> None:
+        packet = self.build_packet()
+        submit_vision_review(
+            project_root=self.project_root,
+            packet_path=packet["packet_path"],
+            review=self.judgement(
+                packet,
+                overall=1,
+                criteria={name: {"score": 1, "observation": "wrong"} for name in CRITERIA},
+            ),
+            workspace_root=str(self.workspace),
+        )
+        with self.assertRaises(ToolInvocationError) as caught:
+            submit_vision_review(
+                project_root=self.project_root,
+                packet_path=packet["packet_path"],
+                review=self.judgement(packet),
+                workspace_root=str(self.workspace),
+            )
+        self.assertEqual("ui_vision_review_already_submitted", caught.exception.code)
+
+    def test_an_unreadable_review_file_blocks_instead_of_vanishing(self) -> None:
+        packet = self.build_packet()
+        corrupt = Path(packet["packet_path"]).parent / "vision_review.corrupt.json"
+        corrupt.write_text("{not json", encoding="utf-8")
+
+        result = compare_ui_reference(
+            project_root=self.project_root,
+            reference_id="popup-available-v1",
+            actual_image=str(self.capture),
+            stability_image=str(self.capture),
+            comparison_id="fixed-comparison",
+            workspace_root=str(self.workspace),
+            register_in_artifact_registry=False,
+        )
+        lane = result["acceptance_lanes"]["vision"]
+        self.assertEqual("blocked", lane["status"])
+        self.assertEqual("blocked", result["reference_acceptance"])
 
     def test_a_submitted_review_is_picked_up_by_the_next_comparison(self) -> None:
         packet = self.build_packet()

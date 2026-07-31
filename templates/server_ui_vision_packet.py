@@ -199,12 +199,40 @@ def submit_vision_review(
     judge_id = str((record.get("judge") or {}).get("id") or "unattributed")
     safe_judge = "".join(character if character.isalnum() or character in "-_" else "_" for character in judge_id)
     stored_path = output_dir / f"{REVIEW_FILE_PREFIX}.{safe_judge}.json"
+
+    # A review the normalizer has already rejected must not reach the store: once written it is
+    # auto-collected by glob and blocks the comparison with no way to retract it.
+    if not record["valid"]:
+        raise ToolInvocationError(
+            "ui_vision_review_invalid",
+            (
+                f"The submitted review is not a valid {UI_VISION_SCHEMA_VERSION} judgement and was "
+                f"not stored: {', '.join(str(code) for code in record['errors'])}."
+            ),
+            {
+                "packet_path": str(packet_file),
+                "errors": list(record["errors"]),
+                "judge_id": judge_id,
+            },
+        )
+
+    # Overwriting would erase a prior verdict without trace; a re-judgement is a new file.
+    if stored_path.exists():
+        raise ToolInvocationError(
+            "ui_vision_review_already_submitted",
+            (
+                f"Judge '{judge_id}' has already submitted a review for this packet at "
+                f"'{stored_path}'. Delete that file to retract the judgement, or submit under a "
+                "distinct judge id; a silent overwrite would destroy the earlier verdict."
+            ),
+            {"packet_path": str(packet_file), "stored_review_path": str(stored_path)},
+        )
+
     write_json(
         stored_path,
         {
             "schema_version": UI_VISION_SCHEMA_VERSION,
             "vision_review": canonical_submission(record),
-            "evaluated": record,
         },
     )
 
@@ -245,7 +273,26 @@ def _load_sibling_reviews(directory: Path, policy: dict[str, Any], expected_hash
     for path in sorted(directory.glob(f"{REVIEW_FILE_PREFIX}.*.json")):
         try:
             payload = read_json(path)
-        except Exception:
+        except Exception as exc:
+            # Skipping silently would make an unreadable review indistinguishable from no review.
+            reviews.append(
+                {
+                    "contract_version": UI_VISION_SCHEMA_VERSION,
+                    "reported": True,
+                    "valid": False,
+                    "verdict": "blocked",
+                    "errors": ["vision_review_unreadable"],
+                    "warnings": [],
+                    "messages": [f"'{path.name}' could not be read as JSON: {exc}"],
+                    "judge": {},
+                    "criteria": {},
+                    "overall_reported": None,
+                    "overall_effective": None,
+                    "defects": [],
+                    "packet_hash": "",
+                    "source_path": str(path),
+                }
+            )
             continue
         block = payload.get("vision_review") if isinstance(payload, dict) else None
         record = normalize_vision_review(

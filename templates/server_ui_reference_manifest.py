@@ -13,15 +13,18 @@ EXPECTED_IMAGE_FILE_NAME = "expected.png"
 
 ORIENTATIONS = ("portrait", "landscape", "square")
 OWNERS = ("agent", "human")
-LANES = ("visual", "semantic", "interaction", "vision")
+LANES = ("visual", "semantic", "interaction", "vision", "device")
 LANE_REQUIREMENTS = ("required", "optional", "not_required")
 # The host cannot summon a multimodal judge on its own, so an unreviewed vision lane must not
 # block. A review that was actually submitted and failed still fails the comparison.
+# Device parity needs a physical capture the host cannot produce on demand, so it stays opt-in;
+# declaring it required is what makes a blocked device lane gate the verdict.
 DEFAULT_LANE_REQUIREMENTS = {
     "visual": "required",
     "semantic": "required",
     "interaction": "required",
     "vision": "optional",
+    "device": "not_required",
 }
 
 SCALE_POLICIES = ("aspect_scale", "strict", "stretch")
@@ -38,6 +41,7 @@ TOLERANCE_PROFILES: dict[str, dict[str, float]] = {
         "layout_offset_tolerance": 0.01,
         "layout_size_tolerance": 0.02,
         "layout_content_tolerance": 18.0,
+        "content_coverage_min": 0.99,
         "cell_match_radius": 0.0,
         "cell_coarse_factor": 1.0,
         "cell_structure_relative_tolerance": 0.35,
@@ -50,6 +54,7 @@ TOLERANCE_PROFILES: dict[str, dict[str, float]] = {
         "layout_offset_tolerance": 0.03,
         "layout_size_tolerance": 0.05,
         "layout_content_tolerance": 22.0,
+        "content_coverage_min": 0.95,
     },
     "lenient": {
         "cell_color_tolerance": 24.0,
@@ -59,6 +64,7 @@ TOLERANCE_PROFILES: dict[str, dict[str, float]] = {
         "layout_offset_tolerance": 0.06,
         "layout_size_tolerance": 0.10,
         "layout_content_tolerance": 28.0,
+        "content_coverage_min": 0.90,
     },
 }
 DEFAULT_TOLERANCE_PROFILE = "balanced"
@@ -71,7 +77,7 @@ SHARED_THRESHOLD_DEFAULTS: dict[str, float] = {
     "stability_max_mismatch_ratio": 0.002,
     "max_channel_delta": 8.0,
 }
-SCORE_THRESHOLD_KEYS = ("region_min_similarity", "global_min_similarity")
+SCORE_THRESHOLD_KEYS = ("region_min_similarity", "global_min_similarity", "content_coverage_min")
 RATIO_THRESHOLD_KEYS = (
     "layout_offset_tolerance",
     "layout_size_tolerance",
@@ -116,6 +122,46 @@ class Rect:
 
     def to_mapping(self) -> dict[str, int]:
         return {"x": self.x, "y": self.y, "width": self.width, "height": self.height}
+
+
+def comparison_grid_dimensions(viewport: dict[str, Any], thresholds: dict[str, Any]) -> tuple[int, int]:
+    """The cell grid a comparison will use. One definition, so the mask audit charges masks the
+    same footprint the comparison actually suppresses."""
+
+    width = positive_int(viewport.get("width")) or 1
+    height = positive_int(viewport.get("height")) or 1
+    requested = thresholds.get("comparison_grid_width", DEFAULT_THRESHOLDS["comparison_grid_width"])
+    columns = max(8, min(512, int(requested or 0) or 1, width))
+    rows = max(8, min(round(columns * height / max(1, width)), height))
+    return columns, rows
+
+
+def cell_footprint(
+    rect: Rect,
+    *,
+    reference_width: int,
+    reference_height: int,
+    columns: int,
+    rows: int,
+) -> Rect:
+    """The pixel area a rect actually suppresses once snapped outward to whole comparison cells.
+
+    A mask is applied per cell, so a 1x1 pixel mask still costs a whole cell. Auditing the
+    declared pixel area instead lets a lattice of tiny masks buy a broad mask for free."""
+
+    if rect.area <= 0 or columns <= 0 or rows <= 0:
+        return rect
+    width = max(1, reference_width)
+    height = max(1, reference_height)
+    cell_x0 = max(0, min(columns - 1, (rect.x * columns) // width))
+    cell_y0 = max(0, min(rows - 1, (rect.y * rows) // height))
+    cell_x1 = max(cell_x0 + 1, min(columns, -(-rect.right * columns // width)))
+    cell_y1 = max(cell_y0 + 1, min(rows, -(-rect.bottom * rows // height)))
+    x0 = cell_x0 * width // columns
+    y0 = cell_y0 * height // rows
+    x1 = -(-cell_x1 * width // columns)
+    y1 = -(-cell_y1 * height // rows)
+    return Rect(x=x0, y=y0, width=max(1, x1 - x0), height=max(1, y1 - y0))
 
 
 def union_area(rects: list[Rect]) -> int:

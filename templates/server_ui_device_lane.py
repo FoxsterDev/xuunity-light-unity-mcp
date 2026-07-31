@@ -36,6 +36,7 @@ def device_lane_state(
     capture_lane: str,
     acceptance_policy: dict[str, Any],
     device_context: dict[str, Any],
+    capture_size: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     requirement = str(acceptance_policy.get("device") or "not_required")
     if capture_lane != "device":
@@ -53,11 +54,46 @@ def device_lane_state(
             "missing_fields": list(device_context.get("missing_fields") or []),
         }
 
+    device = f"{device_context['model']} / {device_context['os']} {device_context['os_version']}".strip()
+    mismatch = _resolution_mismatch(device_context.get("resolution"), capture_size)
+    if mismatch:
+        return {
+            "requirement": requirement,
+            "status": "failed",
+            "evidence": "declared_device_resolution_does_not_match_the_capture",
+            "device": device,
+            "failures": [mismatch],
+        }
+
     return {
         "requirement": requirement,
-        "status": "reported",
+        "status": "passed",
         "evidence": "device_capture_with_declared_device_context",
-        "device": f"{device_context['model']} / {device_context['os']} {device_context['os_version']}".strip(),
+        "device": device,
+    }
+
+
+def _resolution_mismatch(
+    declared: Any,
+    capture_size: dict[str, Any] | None,
+) -> dict[str, Any]:
+    if not isinstance(declared, dict) or not declared:
+        return {}
+    capture = capture_size if isinstance(capture_size, dict) else {}
+    width = _positive_int(capture.get("width"))
+    height = _positive_int(capture.get("height"))
+    if width <= 0 or height <= 0:
+        return {}
+    if width == declared.get("width") and height == declared.get("height"):
+        return {}
+    return {
+        "code": "device_resolution_mismatch",
+        "message": (
+            f"The device declares {declared.get('width')}x{declared.get('height')} but the capture is "
+            f"{width}x{height}; the result cannot be attributed to the declared device configuration."
+        ),
+        "declared": dict(declared),
+        "capture": {"width": width, "height": height},
     }
 
 

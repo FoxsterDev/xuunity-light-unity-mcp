@@ -26,20 +26,37 @@ def score_visual_verdict(
     for region in regions:
         region_id = str(region["region_id"])
         if not region["comparable"]:
-            region["passed"] = None
-            if region["required"]:
-                failures.append(f"Required region '{region_id}' has no comparable cells after masking.")
-                first_failed = first_failed or region_id
+            # False, not None: a region that could not be compared has not passed, and a None
+            # reads as a pass to any caller testing `is not False`.
+            region["passed"] = False
+            region["not_comparable"] = True
+            failures.append(
+                f"Region '{region_id}' has no comparable cells after masking, so it carries no evidence."
+                if not region["required"]
+                else f"Required region '{region_id}' has no comparable cells after masking."
+            )
+            first_failed = first_failed or region_id
             continue
 
         similarity_passed = float(region["similarity_score"]) >= region_minimum
         layout = region.get("layout") or {}
         layout_passed = bool(layout.get("passed", True))
-        region["passed"] = similarity_passed and layout_passed
+        coverage = region.get("content_coverage") or {}
+        coverage_passed = bool(coverage.get("passed", True))
+        region["passed"] = similarity_passed and layout_passed and coverage_passed
         if region["passed"] or not region["required"]:
             continue
 
         first_failed = first_failed or region_id
+        if not coverage_passed:
+            failures.append(
+                f"Required region '{region_id}' renders only "
+                f"{float(coverage['coverage_ratio']):.1%} of the content the reference shows there "
+                f"(minimum {float(coverage['threshold']):.0%}): "
+                f"{int(coverage['rendered_content_cells'])} of "
+                f"{int(coverage['expected_content_cells'])} content cells. An element the reference "
+                "shows is missing or blank, which a whole-screen similarity score dilutes away."
+            )
         if not similarity_passed:
             weakest = "colour" if region["color_score"] <= region["structure_score"] else "detail/structure"
             failures.append(
@@ -142,6 +159,7 @@ def finalize_comparison(
             capture_lane=capture_lane,
             acceptance_policy=acceptance_policy,
             device_context=device_context,
+            capture_size=dict(result.get("actual_image") or {}),
         ),
     }
     result["acceptance_lanes"] = lanes
@@ -162,7 +180,7 @@ def finalize_comparison(
     blocked_lanes = [
         lane
         for lane, state in lanes.items()
-        if lane != "visual" and state["requirement"] == "required" and state["status"] == "blocked"
+        if lane != "visual" and state["requirement"] != "not_required" and state["status"] == "blocked"
     ]
 
     result["lane_disagreement"] = analyze_lane_disagreement(
@@ -214,6 +232,8 @@ def finalize_comparison(
     if visual_verdict == "blocked":
         readiness_gaps.append("visual_lane_blocked")
     readiness_gaps.extend(f"{lane}_lane_blocked" for lane in blocked_lanes)
+    if lanes["vision"].get("self_reviewed_only"):
+        readiness_gaps.append("vision_self_reviewed_only")
     result["decision_ready"] = not readiness_gaps
     result["decision_readiness_gaps"] = readiness_gaps
     if fixture.get("visual_determinism") == "unproven":

@@ -13,7 +13,7 @@ demanded, and where the claims outrun the evidence. You did not write this code 
 owe its author nothing.
 
 Repository: `AIRoot/Operations/XUUnityLightUnityMcp`
-(nested public repo inside `/Users/siarheikha/Projects/Work/GameStory/Apperfun`).
+(nested public repo inside the host monorepo checkout).
 
 ## The two documents, and their different standing
 

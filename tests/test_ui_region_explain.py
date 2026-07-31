@@ -337,8 +337,29 @@ class DeviceLaneTest(unittest.TestCase):
         )
 
         self.assertTrue(context["complete"])
-        self.assertEqual("reported", state["status"])
+        self.assertEqual("passed", state["status"])
         self.assertEqual([], device_lane_warnings(capture_lane="device", device_context=context))
+
+    def test_declared_device_resolution_must_match_the_capture(self) -> None:
+        context = normalize_device_context(self.complete_device())
+        state = device_lane_state(
+            capture_lane="device",
+            acceptance_policy={"device": "required"},
+            device_context=context,
+            capture_size={"width": 1080, "height": 2400},
+        )
+
+        self.assertEqual("failed", state["status"])
+        self.assertEqual("device_resolution_mismatch", state["failures"][0]["code"])
+        self.assertEqual(
+            "passed",
+            device_lane_state(
+                capture_lane="device",
+                acceptance_policy={"device": "required"},
+                device_context=context,
+                capture_size={"width": 1179, "height": 2556},
+            )["status"],
+        )
 
     def test_incomplete_device_context_blocks_the_lane(self) -> None:
         context = normalize_device_context({"model": "Pixel 8"})
@@ -393,7 +414,10 @@ class ComparisonIntegrationTest(unittest.TestCase):
             "reference_id": "explain-ref",
             "source_image": str(source),
             "fixture": "popup.available",
-            "regions": [{"id": "body", "rect": {"x": 0, "y": 0, "width": 120, "height": 240}}],
+            "regions": [
+                {"id": "body", "rect": {"x": 0, "y": 0, "width": 120, "height": 160}},
+                {"id": "footer", "rect": {"x": 0, "y": 160, "width": 120, "height": 80}},
+            ],
             "acceptance": dict(VISUAL_ONLY_ACCEPTANCE),
             "workspace_root": str(self.workspace),
             "register_in_artifact_registry": False,
@@ -523,7 +547,7 @@ class ComparisonIntegrationTest(unittest.TestCase):
                 "model": "iPhone 15 Pro",
                 "os": "iOS",
                 "os_version": "17.4",
-                "resolution": {"width": 1179, "height": 2556},
+                "resolution": {"width": 120, "height": 240},
                 "orientation": "portrait",
                 "build_revision": "abc1234",
                 "safe_area": {"top": 59, "bottom": 34},
@@ -535,8 +559,32 @@ class ComparisonIntegrationTest(unittest.TestCase):
         self.assertEqual("game_view", game_view["capture_lane"])
         self.assertEqual("not_evaluated", game_view["acceptance_lanes"]["device"]["status"])
         self.assertEqual("device", device["capture_lane"])
-        self.assertEqual("reported", device["acceptance_lanes"]["device"]["status"])
+        self.assertEqual("passed", device["acceptance_lanes"]["device"]["status"])
         self.assertEqual("iPhone 15 Pro", device["device_context"]["model"])
+
+    def test_a_required_device_lane_blocks_acceptance_end_to_end(self) -> None:
+        acceptance = dict(VISUAL_ONLY_ACCEPTANCE)
+        acceptance["device"] = "required"
+        self.build(acceptance=acceptance)
+        expected = self.solid((240, 240, 240, 255))
+        stability = self.captures / "stability.png"
+        png.write_png(stability, expected)
+
+        result = self.compare(
+            expected,
+            stability_image=str(stability),
+            capture_lane="device",
+            device={"model": "Pixel 8"},
+            comparison_id="device-required",
+            capture_name="device-required-actual",
+        )
+
+        self.assertEqual("required", result["acceptance_lanes"]["device"]["requirement"])
+        self.assertEqual("blocked", result["acceptance_lanes"]["device"]["status"])
+        self.assertIn("device", result["blocked_lanes"])
+        self.assertEqual("blocked", result["reference_acceptance"])
+        self.assertFalse(result["decision_ready"])
+        self.assertFalse(result["succeeded"])
 
     def test_invalid_capture_lane_is_a_typed_error(self) -> None:
         self.build()

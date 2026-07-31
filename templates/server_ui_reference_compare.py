@@ -34,6 +34,7 @@ from server_ui_reference_png import RgbaImage, read_png
 from server_ui_reference_registry import load_ui_reference, recommended_capture_resolutions
 from server_ui_reference_similarity import (
     build_cell_grid,
+    content_coverage,
     cluster_mismatch_cells,
     compare_layout,
     compare_region,
@@ -158,12 +159,18 @@ def compare_ui_reference(
 
     viewport = manifest.get("viewport") or {}
     scale_policy = str(manifest.get("scale_policy") or "aspect_scale").strip().lower()
+    reference_width = int(viewport.get("width") or expected.width)
+    reference_height = int(viewport.get("height") or expected.height)
+    columns = max(8, min(512, int(tolerances["comparison_grid_width"]), reference_width))
+    rows = max(8, min(round(columns * reference_height / max(1, reference_width)), reference_height))
     comparability = _check_comparability(
         expected=expected,
         actual=actual,
         viewport=viewport,
         scale_policy=scale_policy,
         aspect_tolerance=float(tolerances["aspect_tolerance"]),
+        columns=columns,
+        rows=rows,
     )
     result["comparability"] = comparability
     if not comparability["comparable"]:
@@ -181,10 +188,6 @@ def compare_ui_reference(
         )
 
     regions, masks = manifest_rects(manifest)
-    reference_width = int(viewport.get("width") or expected.width)
-    reference_height = int(viewport.get("height") or expected.height)
-    columns = max(8, min(512, int(tolerances["comparison_grid_width"]), reference_width))
-    rows = max(8, min(round(columns * reference_height / max(1, reference_width)), reference_height))
 
     expected_grid = build_cell_grid(expected, columns=columns, rows=rows)
     actual_grid = build_cell_grid(actual, columns=columns, rows=rows)
@@ -265,6 +268,17 @@ def compare_ui_reference(
             mask_rects=mask_cells,
             tolerances=tolerances,
         )
+        coverage = content_coverage(
+            expected_grid,
+            actual_grid,
+            rect=cell_rect,
+            mask_rects=mask_cells,
+            content_tolerance=float(tolerances["layout_content_tolerance"]),
+        )
+        coverage_minimum = float(tolerances["content_coverage_min"])
+        if coverage.get("evaluated"):
+            coverage["threshold"] = coverage_minimum
+            coverage["passed"] = float(coverage["coverage_ratio"]) >= coverage_minimum
         metrics.update(
             {
                 "region_id": region_id,
@@ -274,6 +288,7 @@ def compare_ui_reference(
                 "weight": weight,
                 "threshold": float(tolerances["region_min_similarity"]),
                 "layout": layout,
+                "content_coverage": coverage,
             }
         )
         region_results.append(metrics)
@@ -493,6 +508,8 @@ def _check_comparability(
     viewport: dict[str, Any],
     scale_policy: str,
     aspect_tolerance: float,
+    columns: int = 0,
+    rows: int = 0,
 ) -> dict[str, Any]:
     declared_width = int(viewport.get("width") or expected.width)
     declared_height = int(viewport.get("height") or expected.height)
@@ -536,6 +553,22 @@ def _check_comparability(
             "message": (
                 f"Capture orientation '{actual_orientation}' does not match the declared "
                 f"'{declared_orientation}' orientation."
+            ),
+        }
+
+    # The comparison grid is sized from the reference. A capture with fewer pixels than the grid
+    # has cells the actual image cannot fill, so the region maths would index past the end of the
+    # capture's grid. Refuse before any score exists rather than raising IndexError mid-comparison.
+    if columns > 0 and rows > 0 and (actual.width < columns or actual.height < rows):
+        return {
+            **base,
+            "comparable": False,
+            "reason": "capture_below_comparison_grid",
+            "message": (
+                f"Capture is {actual.width}x{actual.height}, smaller than the {columns}x{rows} "
+                "comparison grid derived from the reference, so there is not enough capture detail "
+                "to compare. Capture at or above the reference resolution, or lower "
+                "'comparison_grid_width' for this reference."
             ),
         }
 

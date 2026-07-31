@@ -113,8 +113,10 @@ def resolve_vision_policy(manifest: dict[str, Any]) -> dict[str, Any]:
         if isinstance(required, list):
             resolved["required_criteria"] = [str(item) for item in required if str(item) in CRITERIA]
 
-    resolved["min_criterion"] = max(0, min(SCALE_MAX, int(resolved["min_criterion"])))
-    resolved["min_overall"] = max(0, min(SCALE_MAX, int(resolved["min_overall"])))
+    # A floor of 0 would be a bar nothing can fail: score 0 means "absent — the element the
+    # reference shows is not present at all".
+    resolved["min_criterion"] = max(1, min(SCALE_MAX, int(resolved["min_criterion"])))
+    resolved["min_overall"] = max(1, min(SCALE_MAX, int(resolved["min_overall"])))
     resolved["judges_required"] = max(1, int(resolved["judges_required"]))
     resolved["profile"] = profile
     return resolved
@@ -136,6 +138,9 @@ def packet_hash(
             str(actual_sha256),
             f"{policy.get('min_criterion')}:{policy.get('min_overall')}",
             ",".join(sorted(str(item) for item in policy.get("required_criteria") or [])),
+            # The independence half of the bar belongs in the hash too, or it can be lowered
+            # after the judgement while every stored review still reads as valid.
+            f"{int(policy.get('judges_required') or 1)}:{bool(policy.get('allow_self_review'))}",
         ]
     )
     return hashlib.sha256(material.encode("utf-8")).hexdigest()
@@ -207,10 +212,18 @@ def normalize_vision_review(
     worst_required = min(scored) if scored else None
     overall_effective = overall_reported
     if overall_reported is not None and worst_required is not None:
-        clamp = min(SCALE_MAX, worst_required + 1)
-        overall_effective = min(overall_reported, clamp)
+        # Two independent bounds. The worst-criterion bound stops one catastrophic criterion from
+        # being averaged away; the corroboration bound stops a claimed overall from exceeding what
+        # the criteria as a whole support, which is what let every criterion sit on the bare floor
+        # and still pass.
+        worst_bound = min(SCALE_MAX, worst_required + 1)
+        corroborated = int(sum(scored) / len(scored) + 0.5)
+        overall_effective = min(overall_reported, worst_bound, corroborated)
         if overall_effective < overall_reported:
-            warnings.append("overall_clamped_to_worst_criterion")
+            if corroborated <= worst_bound:
+                warnings.append("overall_clamped_to_criteria_corroboration")
+            else:
+                warnings.append("overall_clamped_to_worst_criterion")
 
     record.update(
         {
@@ -469,9 +482,14 @@ def _normalize_criteria(raw: Any, policy: dict[str, Any]) -> tuple[dict[str, Any
 
     criteria: dict[str, Any] = {}
     errors: list[str] = []
+    unknown: list[str] = []
     for key, value in raw.items():
         name = str(key).strip().lower()
         if name not in CRITERIA:
+            unknown.append(str(key))
+            continue
+        if name in criteria:
+            errors.append(f"duplicate_criterion_{name}")
             continue
         if isinstance(value, dict):
             score = _score(value.get("score"))
@@ -486,6 +504,7 @@ def _normalize_criteria(raw: Any, policy: dict[str, Any]) -> tuple[dict[str, Any
             errors.append(f"missing_observation_{name}")
         criteria[name] = {"score": score, "name": SCALE[score], "observation": observation}
 
+    errors.extend(f"unknown_criterion_{name}" for name in unknown)
     missing = [key for key in (policy.get("required_criteria") or CRITERIA) if key not in criteria]
     errors.extend(f"missing_criterion_{key}" for key in missing)
     return criteria, errors
