@@ -5,13 +5,22 @@ import json
 from pathlib import Path
 from typing import Any
 
+from server_bridge_paths import scenario_results_dir
 from server_core import ToolInvocationError, read_json
 
 
 UI_FIXTURE_SCHEMA_VERSION = "xuunity.ui-fixture.v1"
 
 DATA_SOURCES = ("fixture", "live", "mixed")
-EVIDENCE_SOURCES = ("scenario_result", "hook_payload", "caller_asserted", "none")
+EVIDENCE_SOURCES = (
+    "scenario_result",
+    "hook_payload",
+    "caller_asserted",
+    # A result file the caller named that does not live where the editor writes results. Kept
+    # distinct from caller_asserted so the report says which of the two it was.
+    "unverified_result_path",
+    "none",
+)
 HOOK_STEP_KINDS = ("project_defined_hook", "project_defined_hook_poll_until")
 
 DETERMINISM_PROVEN = "proven"
@@ -40,6 +49,27 @@ GAP_MESSAGES = {
     "hook_step_failed": "The scenario step that reported the fixture did not pass.",
     "fixture_id_mismatch": "The reported fixture differs from the fixture the reference declares.",
     "viewport_mismatch": "The reported fixture viewport differs from the reference viewport.",
+    "scenario_run_failed": (
+        "The scenario that reported the fixture did not pass, so the run that produced this "
+        "capture did not complete; a passing hook step inside a failed run proves nothing about "
+        "the state at capture time."
+    ),
+    "fixture_reported_by_cleanup_step": (
+        "The fixture was reported by a cleanup step, which runs after the capture, so the capture "
+        "cannot be credited to the state it describes."
+    ),
+    "result_path_outside_editor_results_directory": (
+        "The scenario result was read from outside the editor's own results directory, so nothing "
+        "distinguishes it from a file the caller wrote; it is treated as an assertion, not a receipt."
+    ),
+    "result_path_unverifiable_without_project_root": (
+        "The scenario result could not be checked against the editor's results directory because no "
+        "project root was supplied, so its provenance is unverified."
+    ),
+    "result_path_unverifiable": (
+        "The scenario result path could not be resolved against the editor's results directory, so "
+        "its provenance is unverified."
+    ),
 }
 
 
@@ -207,18 +237,34 @@ def normalize_ui_fixture_evidence(
     if declared_fixture and fixture_id and declared_fixture != fixture_id:
         gaps.append("fixture_id_mismatch")
 
-    if source == "caller_asserted":
+    if source != "scenario_result":
         gaps.append("evidence_not_receipt_backed")
 
     step_status = str((receipt or {}).get("step_status") or "")
     if step_status and step_status != "passed":
         gaps.append("hook_step_failed")
 
+    # A scenario that failed after the fixture hook still leaves a passing hook step behind, so the
+    # run's own status has to be consulted or a crashed run yields decision-ready capture evidence.
+    scenario_status = str((receipt or {}).get("scenario_status") or "")
+    if scenario_status and scenario_status != "passed":
+        gaps.append("scenario_run_failed")
+
+    # Teardown re-establishing the fixture after the capture would credit the capture to a state
+    # that only existed afterwards.
+    if str((receipt or {}).get("step_phase") or "") == "cleanup":
+        gaps.append("fixture_reported_by_cleanup_step")
+
+    receipt_gaps = list((receipt or {}).get("provenance_gaps") or [])
+    gaps.extend(str(code) for code in receipt_gaps)
+
     established = (
         not validation_errors
         and ready["satisfied"]
         and not ready["timed_out"]
         and step_status in ("", "passed")
+        and scenario_status in ("", "passed")
+        and not receipt_gaps
     )
     determinism = DETERMINISM_PROVEN if established and not gaps else DETERMINISM_UNPROVEN
 
@@ -245,7 +291,11 @@ def normalize_ui_fixture_evidence(
     return record
 
 
-def read_scenario_ui_fixture(result_path: Path) -> tuple[Any, dict[str, Any]]:
+def read_scenario_ui_fixture(
+    result_path: Path,
+    *,
+    provenance_gaps: list[str] | None = None,
+) -> tuple[Any, dict[str, Any]]:
     try:
         payload = read_json(result_path)
     except Exception as exc:
@@ -267,9 +317,10 @@ def read_scenario_ui_fixture(result_path: Path) -> tuple[Any, dict[str, Any]]:
         "run_id": str(payload.get("run_id") or ""),
         "scenario_name": str(payload.get("scenario_name") or ""),
         "scenario_status": str(payload.get("status") or ""),
+        "provenance_gaps": list(provenance_gaps or []),
     }
 
-    for step in _hook_steps(payload):
+    for step, phase in _hook_steps(payload):
         raw = extract_ui_fixture_block(scenario_step_payload(step))
         if raw is None:
             continue
@@ -279,6 +330,7 @@ def read_scenario_ui_fixture(result_path: Path) -> tuple[Any, dict[str, Any]]:
                 "hook_name": str(step.get("hookName") or step.get("hook_name") or ""),
                 "step_kind": str(step.get("kind") or ""),
                 "step_status": str(step.get("status") or ""),
+                "step_phase": phase,
             }
         )
         return raw, receipt
@@ -293,14 +345,19 @@ def resolve_ui_fixture_evidence(
     fixture_result_path: str = "",
     declared_fixture: str = "",
     declared_viewport: dict[str, Any] | None = None,
+    project_root: Path | None = None,
 ) -> dict[str, Any]:
     requested = str(fixture_result_path or "").strip()
     if requested:
         resolved = resolve_result_path(requested, workspace)
-        raw, receipt = read_scenario_ui_fixture(resolved)
+        provenance_gaps = result_path_provenance_gaps(resolved, project_root)
+        raw, receipt = read_scenario_ui_fixture(resolved, provenance_gaps=provenance_gaps)
         return normalize_ui_fixture_evidence(
             raw,
-            evidence_source="scenario_result",
+            # Passing a path is not proof the editor wrote the file. Only a result inside the
+            # editor's own results directory is treated as a receipt; anything else is a caller
+            # assertion with a longer argument, and must not reach visual_determinism=proven.
+            evidence_source="scenario_result" if not provenance_gaps else "unverified_result_path",
             receipt=receipt,
             declared_fixture=declared_fixture,
             declared_viewport=declared_viewport,
@@ -321,6 +378,31 @@ def resolve_ui_fixture_evidence(
         declared_fixture=declared_fixture,
         declared_viewport=declared_viewport,
     )
+
+
+def result_path_provenance_gaps(resolved: Path, project_root: Path | None) -> list[str]:
+    """Why this file cannot be trusted as an editor receipt, if it cannot.
+
+    The host knows where the editor writes scenario results and owns the run ids it dispatched, so
+    a result claiming to be a receipt has to come from that directory. Without this the only thing
+    separating a receipt from a caller assertion is which argument the JSON arrived through."""
+
+    if project_root is None:
+        return ["result_path_unverifiable_without_project_root"]
+
+    gaps: list[str] = []
+    try:
+        expected_dir = scenario_results_dir(Path(project_root)).resolve()
+    except Exception:
+        return ["result_path_unverifiable_without_project_root"]
+
+    try:
+        resolved.resolve().relative_to(expected_dir)
+    except ValueError:
+        gaps.append("result_path_outside_editor_results_directory")
+    except Exception:
+        gaps.append("result_path_unverifiable")
+    return gaps
 
 
 def resolve_result_path(value: str, workspace: Path) -> Path:
@@ -351,6 +433,7 @@ def validate_ui_fixture(
         fixture_result_path=fixture_result_path,
         declared_fixture=declared_fixture,
         declared_viewport=declared_viewport,
+        project_root=project_root,
     )
     return {
         "action": "unity_ui_fixture_validate",
@@ -399,12 +482,23 @@ def fixture_next_actions(record: dict[str, Any]) -> list[str]:
     return actions
 
 
-def _hook_steps(payload: dict[str, Any]) -> list[dict[str, Any]]:
-    steps: list[dict[str, Any]] = []
-    for group in ("steps", "cleanupSteps", "cleanup_steps"):
+def _hook_steps(payload: dict[str, Any]) -> list[tuple[dict[str, Any], str]]:
+    """Hook steps paired with the run phase they belong to.
+
+    The editor emits a single `steps` list with `cleanup_start_index` marking the teardown
+    boundary; the separate cleanup keys are accepted for older payload shapes."""
+
+    steps: list[tuple[dict[str, Any], str]] = []
+    body = list(payload.get("steps") or [])
+    boundary = payload.get("cleanup_start_index", payload.get("cleanupStartIndex"))
+    cutoff = int(boundary) if isinstance(boundary, int) and boundary >= 0 else len(body)
+    for index, step in enumerate(body):
+        if isinstance(step, dict) and str(step.get("kind") or "") in HOOK_STEP_KINDS:
+            steps.append((step, "body" if index < cutoff else "cleanup"))
+    for group in ("cleanupSteps", "cleanup_steps"):
         for step in list(payload.get(group) or []):
             if isinstance(step, dict) and str(step.get("kind") or "") in HOOK_STEP_KINDS:
-                steps.append(step)
+                steps.append((step, "cleanup"))
     return steps
 
 

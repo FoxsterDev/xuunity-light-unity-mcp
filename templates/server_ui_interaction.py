@@ -5,7 +5,11 @@ from pathlib import Path
 from typing import Any
 
 from server_core import ToolInvocationError, read_json
-from server_ui_fixture import resolve_result_path, scenario_step_payload
+from server_ui_fixture import (
+    resolve_result_path,
+    result_path_provenance_gaps,
+    scenario_step_payload,
+)
 
 UI_INTERACTION_SCHEMA_VERSION = "xuunity.ui-interaction.v1"
 INTERACTION_STEP_KIND = "ui_click"
@@ -32,6 +36,22 @@ GAP_MESSAGES = {
         "the running user path; only a Play-mode scenario proves a real transition."
     ),
     "step_failed": "The scenario step that delivered the interaction did not pass.",
+    "scenario_run_failed": (
+        "The scenario that delivered the interaction did not pass, so the run did not complete and "
+        "a passing step inside it does not prove the user path."
+    ),
+    "result_path_outside_editor_results_directory": (
+        "The scenario result was read from outside the editor's own results directory, so nothing "
+        "distinguishes it from a file the caller wrote; it is treated as an assertion, not a receipt."
+    ),
+    "result_path_unverifiable_without_project_root": (
+        "The scenario result could not be checked against the editor's results directory because no "
+        "project root was supplied, so its provenance is unverified."
+    ),
+    "result_path_unverifiable": (
+        "The scenario result path could not be resolved against the editor's results directory, so "
+        "its provenance is unverified."
+    ),
 }
 
 
@@ -123,12 +143,19 @@ def normalize_ui_interaction(
     if delivered and playmode_state not in RUNTIME_PLAYMODE_STATES:
         gaps.append("edit_mode_delivery")
 
-    if evidence_source == "caller_asserted":
+    if evidence_source != "scenario_result":
         gaps.append("evidence_not_receipt_backed")
 
     step_status = str((receipt or {}).get("step_status") or "")
     if step_status and step_status != "passed":
         gaps.append("step_failed")
+
+    scenario_status = str((receipt or {}).get("scenario_status") or "")
+    if scenario_status and scenario_status != "passed":
+        gaps.append("scenario_run_failed")
+
+    receipt_gaps = [str(code) for code in list((receipt or {}).get("provenance_gaps") or [])]
+    gaps.extend(receipt_gaps)
 
     record.update(
         {
@@ -150,6 +177,8 @@ def normalize_ui_interaction(
             "runtime_proven": delivered
             and playmode_state in RUNTIME_PLAYMODE_STATES
             and step_status in ("", "passed")
+            and scenario_status in ("", "passed")
+            and evidence_source == "scenario_result"
             and not refusal_code,
             "gaps": _dedupe(gaps),
         }
@@ -158,7 +187,11 @@ def normalize_ui_interaction(
     return record
 
 
-def read_scenario_ui_interactions(result_path: Path) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+def read_scenario_ui_interactions(
+    result_path: Path,
+    *,
+    provenance_gaps: list[str] | None = None,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     try:
         payload = read_json(result_path)
     except Exception as exc:
@@ -180,7 +213,9 @@ def read_scenario_ui_interactions(result_path: Path) -> tuple[list[dict[str, Any
         "run_id": str(payload.get("run_id") or ""),
         "scenario_name": str(payload.get("scenario_name") or ""),
         "scenario_status": str(payload.get("status") or ""),
+        "provenance_gaps": list(provenance_gaps or []),
     }
+    source = "scenario_result" if not provenance_gaps else "unverified_result_path"
 
     records: list[dict[str, Any]] = []
     for step in _interaction_steps(payload):
@@ -193,7 +228,7 @@ def read_scenario_ui_interactions(result_path: Path) -> tuple[list[dict[str, Any
             "step_kind": str(step.get("kind") or ""),
             "step_status": str(step.get("status") or ""),
         }
-        records.append(normalize_ui_interaction(block, evidence_source="scenario_result", receipt=receipt))
+        records.append(normalize_ui_interaction(block, evidence_source=source, receipt=receipt))
     return records, base_receipt
 
 
@@ -202,10 +237,15 @@ def resolve_ui_interaction_evidence(
     workspace: Path,
     interaction_result_path: str = "",
     interaction_evidence: list[dict[str, Any]] | dict[str, Any] | None = None,
+    project_root: Path | None = None,
 ) -> list[dict[str, Any]]:
     requested = str(interaction_result_path or "").strip()
     if requested:
-        records, _ = read_scenario_ui_interactions(resolve_result_path(requested, workspace))
+        resolved = resolve_result_path(requested, workspace)
+        records, _ = read_scenario_ui_interactions(
+            resolved,
+            provenance_gaps=result_path_provenance_gaps(resolved, project_root),
+        )
         return records
 
     if not interaction_evidence:
@@ -348,6 +388,7 @@ def validate_ui_interactions(
         workspace=workspace,
         interaction_result_path=interaction_result_path,
         interaction_evidence=interaction_evidence,
+        project_root=project_root,
     )
     lane = evaluate_interaction_lane(
         interactions=records,

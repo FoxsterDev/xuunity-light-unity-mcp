@@ -1,0 +1,43 @@
+{
+    "name": "com.xuunity.light-mcp.Editor.Tmp.Tests",
+    "rootNamespace": "XUUnity.LightMcp.Tests.EditModeTmp",
+    "references": [
+        "com.xuunity.light-mcp.Editor",
+        "com.xuunity.light-mcp.Editor.Tmp",
+        "Unity.TextMeshPro"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "optionalUnityReferences": [
+        "TestAssemblies"
+    ],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "UNITY_INCLUDE_TESTS",
+        "XUUNITY_LIGHT_MCP_TESTS_CAPABILITY",
+        "XUUNITY_LIGHT_MCP_TMP_CAPABILITY"
+    ],
+    "versionDefines": [
+        {
+            "name": "com.unity.test-framework",
+            "expression": "1.1.33",
+            "define": "XUUNITY_LIGHT_MCP_TESTS_CAPABILITY"
+        },
+        {
+            "name": "com.unity.ugui",
+            "expression": "2.0.0",
+            "define": "XUUNITY_LIGHT_MCP_TMP_CAPABILITY"
+        },
+        {
+            "name": "com.unity.textmeshpro",
+            "expression": "3.0.0",
+            "define": "XUUNITY_LIGHT_MCP_TMP_CAPABILITY"
+        }
+    ],
+    "noEngineReferences": false
+}

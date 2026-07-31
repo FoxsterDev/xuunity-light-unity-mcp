@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from itertools import accumulate
 from typing import Any
 
+from server_core import ToolInvocationError
 from server_ui_reference_manifest import Rect, clip_rect, union_area
 from server_ui_reference_png import RgbaImage
 
@@ -254,6 +255,24 @@ def compare_region(
     moved or resized element is caught by the separate layout lane.
     """
 
+    # build_cell_grid clamps the grid to the image, so a capture smaller than the requested grid
+    # yields fewer cells than the reference and every index below would read past its end. The
+    # comparison pipeline refuses this earlier with `capture_below_comparison_grid`; this guard
+    # makes the crash unreachable for any other caller too.
+    if (expected.columns, expected.rows) != (actual.columns, actual.rows):
+        raise ToolInvocationError(
+            "ui_reference_grid_mismatch",
+            (
+                f"Comparison grids differ: reference is {expected.columns}x{expected.rows} cells "
+                f"and capture is {actual.columns}x{actual.rows}. A capture smaller than the grid "
+                "cannot be compared; capture at or above the reference resolution."
+            ),
+            {
+                "expected_grid": {"columns": expected.columns, "rows": expected.rows},
+                "actual_grid": {"columns": actual.columns, "rows": actual.rows},
+            },
+        )
+
     color_tolerance = float(tolerances["cell_color_tolerance"])
     structure_tolerance = float(tolerances["cell_structure_tolerance"])
     structure_relative = float(tolerances.get("cell_structure_relative_tolerance", 0.5))
@@ -438,6 +457,9 @@ def compare_layout(
     offset_tolerance = float(tolerances["layout_offset_tolerance"])
     size_tolerance = float(tolerances["layout_size_tolerance"])
 
+    # Each box is measured against its own capture's background on purpose. Sharing the
+    # reference's background makes both boxes describe the same thing and the lane then cannot see
+    # a moved or resized element, which is the one defect it exists to catch.
     expected_box = _content_box(expected, rect=rect, mask_rects=mask_rects, content_tolerance=content_tolerance)
     actual_box = _content_box(actual, rect=rect, mask_rects=mask_rects, content_tolerance=content_tolerance)
 
@@ -494,8 +516,10 @@ def _content_box(
     rect: Rect,
     mask_rects: list[Rect],
     content_tolerance: float,
+    background: tuple[int, int, int] | None = None,
 ) -> Rect | None:
-    background = _background_colour(grid, rect=rect, mask_rects=mask_rects)
+    if background is None:
+        background = _background_colour(grid, rect=rect, mask_rects=mask_rects)
     if background is None:
         return None
 

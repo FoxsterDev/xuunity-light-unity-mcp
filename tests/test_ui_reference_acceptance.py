@@ -27,6 +27,7 @@ from server_ui_reference_manifest import (
 )
 from server_ui_reference_registry import register_ui_reference, validate_ui_reference
 from server_ui_reference_verdict import score_visual_verdict
+from server_bridge_paths import scenario_results_dir
 
 VISUAL_ONLY_ACCEPTANCE = {"visual": "required", "semantic": "not_required", "interaction": "not_required"}
 
@@ -161,6 +162,15 @@ def shift_colors(image: png.RgbaImage, delta: int) -> png.RgbaImage:
     return png.RgbaImage(width=image.width, height=image.height, pixels=bytes(shifted))
 
 
+def _png_chunk(chunk_type: bytes, payload: bytes) -> bytes:
+    return (
+        struct.pack(">I", len(payload))
+        + chunk_type
+        + payload
+        + struct.pack(">I", zlib.crc32(chunk_type + payload) & 0xFFFFFFFF)
+    )
+
+
 def raw_png(
     width: int,
     height: int,
@@ -280,15 +290,30 @@ class UiReferenceTestCase(unittest.TestCase):
         name: str = "scenario-result",
         step_status: str = "passed",
         run_id: str = "run-1",
+        scenario_status: str = "passed",
+        in_editor_results_dir: bool = True,
+        cleanup_phase: bool = False,
     ) -> str:
+        """A scenario result on disk.
+
+        By default it lands in the editor's own results directory, which is what makes it count as
+        a receipt; `in_editor_results_dir=False` writes it somewhere the caller chose, which the
+        host must treat as an assertion instead."""
+
         payload_json = json.dumps({"outcome": "fixture_established", **({"ui_fixture": fixture} if fixture else {})})
-        path = self.captures / f"{name}.json"
+        if in_editor_results_dir:
+            directory = scenario_results_dir(self.project_root)
+            directory.mkdir(parents=True, exist_ok=True)
+        else:
+            directory = self.captures
+        path = directory / f"{name}.json"
         path.write_text(
             json.dumps(
                 {
                     "run_id": run_id,
                     "scenario_name": "establish_popup_available",
-                    "status": "passed",
+                    "status": scenario_status,
+                    "cleanup_start_index": 0 if cleanup_phase else 1,
                     "steps": [
                         {
                             "stepId": "establish_fixture",
@@ -303,6 +328,88 @@ class UiReferenceTestCase(unittest.TestCase):
             encoding="utf-8",
         )
         return str(path)
+
+
+class FixtureProvenanceTest(UiReferenceTestCase):
+    """A path argument is not provenance.
+
+    Before this, the only thing separating a receipt from a caller assertion was which argument the
+    JSON arrived through, so writing the same dict to a file bought visual_determinism=proven."""
+
+    def validate(self, path: str) -> dict:
+        return validate_ui_fixture(
+            project_root=self.project_root,
+            workspace=self.workspace,
+            fixture_result_path=path,
+        )
+
+    def test_a_result_in_the_editor_directory_is_a_receipt(self) -> None:
+        payload = self.validate(self.scenario_result(fixture_block()))
+
+        self.assertEqual("scenario_result", payload["fixture"]["evidence_source"])
+        self.assertEqual([], payload["fixture"]["determinism_gaps"])
+        self.assertEqual("proven", payload["visual_determinism"])
+        self.assertTrue(payload["succeeded"])
+
+    def test_a_hand_written_file_outside_it_is_only_an_assertion(self) -> None:
+        payload = self.validate(
+            self.scenario_result(fixture_block(), name="forged", in_editor_results_dir=False)
+        )
+
+        self.assertEqual("unverified_result_path", payload["fixture"]["evidence_source"])
+        self.assertIn(
+            "result_path_outside_editor_results_directory", payload["fixture"]["determinism_gaps"]
+        )
+        self.assertIn("evidence_not_receipt_backed", payload["fixture"]["determinism_gaps"])
+        self.assertEqual("unproven", payload["visual_determinism"])
+        self.assertFalse(payload["succeeded"])
+
+    def test_a_failed_scenario_run_does_not_prove_determinism(self) -> None:
+        payload = self.validate(
+            self.scenario_result(fixture_block(), name="crashed", scenario_status="failed")
+        )
+
+        self.assertIn("scenario_run_failed", payload["fixture"]["determinism_gaps"])
+        self.assertEqual("unproven", payload["visual_determinism"])
+        self.assertFalse(payload["fixture"]["established"])
+
+    def test_a_fixture_reported_by_a_cleanup_step_is_not_credited(self) -> None:
+        payload = self.validate(
+            self.scenario_result(fixture_block(), name="teardown", cleanup_phase=True)
+        )
+
+        self.assertEqual("cleanup", payload["fixture"]["receipt"]["step_phase"])
+        self.assertIn("fixture_reported_by_cleanup_step", payload["fixture"]["determinism_gaps"])
+        self.assertEqual("unproven", payload["visual_determinism"])
+
+    def test_a_forged_result_cannot_reach_acceptance_end_to_end(self) -> None:
+        expected = screen_image()
+        self.register(
+            expected,
+            regions=[
+                {"id": "illustration", "rect": ILLUSTRATION_REGION.to_mapping(), "weight": 4},
+                {"id": "body", "rect": BODY_REGION.to_mapping(), "weight": 4},
+            ],
+        )
+        forged = self.scenario_result(
+            fixture_block(fixture_id="popup.available"),
+            name="forged-e2e",
+            in_editor_results_dir=False,
+        )
+        result = self.compare(
+            expected,
+            stability_image=self.stability_capture(expected),
+            fixture_result_path=forged,
+            capture_name="forged-e2e",
+        )
+
+        self.assertEqual("passed", result["visual_verdict"])
+        self.assertEqual("unproven", result["visual_determinism"])
+        self.assertFalse(result["decision_ready"])
+        self.assertIn(
+            "fixture_result_path_outside_editor_results_directory",
+            result["decision_readiness_gaps"],
+        )
 
 
 class PngCodecTest(UiReferenceTestCase):
@@ -354,10 +461,58 @@ class PngCodecTest(UiReferenceTestCase):
 
         interlaced = bytearray(raw_png(2, 1, bytes(8), color_type=6, filters=[0]))
         interlaced[28] = 1
-        interlaced[29:33] = struct.pack(">I", zlib.crc32(bytes(interlaced[16:29])) & 0xFFFFFFFF)
+        # The CRC covers the chunk type as well as the payload; the earlier form omitted the type
+        # and only passed because chunk CRCs were never verified.
+        interlaced[29:33] = struct.pack(">I", zlib.crc32(bytes(interlaced[12:29])) & 0xFFFFFFFF)
         with self.assertRaises(ToolInvocationError) as adam7:
             png.decode_png(bytes(interlaced), source="capture.png")
         self.assertEqual("ui_reference_image_unsupported", adam7.exception.code)
+
+    def test_a_decompression_bomb_is_refused_without_inflating_it(self) -> None:
+        """A tiny file declaring a tiny image whose stream expands without bound.
+
+        The pixel budget limits the declared size, which says nothing about the compressed stream,
+        so this used to inflate until the host ran out of memory."""
+
+        payload = zlib.compress(b"\x00" * (4 * 1024 * 1024), 9)
+        data = (
+            png.PNG_SIGNATURE
+            + _png_chunk(b"IHDR", struct.pack(">IIBBBBB", 1, 1, 8, 6, 0, 0, 0))
+            + _png_chunk(b"IDAT", payload)
+            + _png_chunk(b"IEND", b"")
+        )
+        self.assertLess(len(data), 64 * 1024)
+
+        with self.assertRaises(ToolInvocationError) as exc:
+            png.decode_png(data, source="bomb.png")
+        self.assertEqual("ui_reference_image_too_large", exc.exception.code)
+
+    def test_a_tampered_chunk_fails_its_crc_instead_of_changing_the_image(self) -> None:
+        good = raw_png(2, 2, bytes([9] * 16), color_type=6, filters=[0, 0])
+        self.assertEqual(2, png.decode_png(good, source="ok").height)
+
+        # Flip the declared height and leave the now-stale CRC in place. Undetected, this silently
+        # decodes as a 2x1 image and the registry records those dimensions as the reference viewport.
+        header_start = len(png.PNG_SIGNATURE) + 8
+        tampered = bytearray(good)
+        tampered[header_start + 7] = 1
+        with self.assertRaises(ToolInvocationError) as exc:
+            png.decode_png(bytes(tampered), source="tampered.png")
+        self.assertEqual("ui_reference_image_corrupt", exc.exception.code)
+        self.assertIn("CRC", str(exc.exception))
+
+    def test_a_palette_index_past_the_palette_is_corrupt_not_black(self) -> None:
+        data = raw_png(
+            2,
+            2,
+            bytes([0, 1, 200, 0]),
+            color_type=3,
+            filters=[0, 0],
+            palette=bytes([255, 0, 0, 0, 255, 0]),
+        )
+        with self.assertRaises(ToolInvocationError) as exc:
+            png.decode_png(data, source="palette.png")
+        self.assertEqual("ui_reference_image_corrupt", exc.exception.code)
 
     def test_oversized_images_are_refused_before_decoding(self) -> None:
         data = raw_png(4, 4, bytes(64), color_type=6, filters=[0])
@@ -379,6 +534,38 @@ class ReferenceRegistrationTest(UiReferenceTestCase):
         expected_bytes = Path(payload["expected_image_path"]).read_bytes()
         self.assertEqual(manifest["expected_image"]["sha256"], payload["expected_image"]["sha256"])
         self.assertEqual(len(expected_bytes), manifest["expected_image"]["size_bytes"])
+
+    def test_a_manifest_registered_before_a_lane_existed_stays_valid(self) -> None:
+        """Adding a lane to LANES must not invalidate references already on disk.
+
+        Every test manifest is written through normalize_acceptance, which fills in each known
+        lane, so only a stored manifest from an earlier version exercises this."""
+
+        payload = self.register(solid_image(40, 90, (20, 30, 40, 255)))
+        manifest_path = Path(payload["manifest_path"])
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest["acceptance"].pop("device", None)
+        manifest["acceptance"].pop("vision", None)
+        manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+        validated = validate_ui_reference(
+            project_root=self.project_root,
+            reference_id="popup-available-v1",
+            workspace_root=str(self.workspace),
+        )
+        self.assertTrue(validated["validation"]["valid"], validated["validation"]["errors"])
+
+    def test_an_explicit_bad_lane_requirement_is_still_refused(self) -> None:
+        with self.assertRaises(ToolInvocationError) as exc:
+            self.register(
+                solid_image(40, 90, (20, 30, 40, 255)),
+                acceptance={**VISUAL_ONLY_ACCEPTANCE, "device": "REQUIRED"},
+            )
+        self.assertEqual("ui_reference_manifest_invalid", exc.exception.code)
+        self.assertIn(
+            "ui_reference_acceptance_invalid",
+            [error["code"] for error in exc.exception.details["errors"]],
+        )
 
     def test_a_single_full_screen_region_is_refused(self) -> None:
         with self.assertRaises(ToolInvocationError) as exc:
@@ -405,6 +592,30 @@ class ReferenceRegistrationTest(UiReferenceTestCase):
 
         payload = self.register(solid_image(10, 20, (9, 9, 9, 255)), overwrite=True)
         self.assertTrue(payload["validation"]["valid"])
+
+    def test_a_rejected_overwrite_leaves_the_previous_reference_intact(self) -> None:
+        original = solid_image(40, 90, (20, 30, 40, 255))
+        first = self.register(original)
+        expected_path = Path(first["expected_image_path"])
+        original_bytes = expected_path.read_bytes()
+
+        with self.assertRaises(ToolInvocationError) as exc:
+            self.register(
+                solid_image(40, 90, (99, 99, 99, 255)),
+                overwrite=True,
+                regions=[{"id": "outside", "rect": {"x": 0, "y": 0, "width": 400, "height": 900}}],
+            )
+        self.assertEqual("ui_reference_manifest_invalid", exc.exception.code)
+        self.assertTrue(exc.exception.details["previous_reference_restored"])
+
+        # The reference that was already working must still be usable.
+        self.assertEqual(original_bytes, expected_path.read_bytes())
+        validated = validate_ui_reference(
+            project_root=self.project_root,
+            reference_id="popup-available-v1",
+            workspace_root=str(self.workspace),
+        )
+        self.assertTrue(validated["validation"]["valid"], validated["validation"]["errors"])
 
     def test_broad_mask_is_rejected_by_policy(self) -> None:
         with self.assertRaises(ToolInvocationError) as exc:

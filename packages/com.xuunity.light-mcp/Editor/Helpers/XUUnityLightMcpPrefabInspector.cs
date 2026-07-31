@@ -216,7 +216,10 @@ namespace XUUnity.LightMcp.Editor.Helpers
             payload.defects.Add(new XUUnityLightMcpPrefabDefect
             {
                 defect_type = "serialized_reference_type_mismatch",
-                severity = "warning",
+                // Only "error" increments errorCount, so a warning here left validation passing for
+                // exactly the defect class this validator exists to catch: a reference that
+                // deserializes to an incompatible component and throws the moment it is used.
+                severity = "error",
                 object_path = objectPath,
                 component_type = componentType,
                 property_path = property.propertyPath,

@@ -53,12 +53,30 @@ namespace XUUnity.LightMcp.Editor.Helpers
 
         public static XUUnityLightMcpResponse ExecuteNestedOperation(string operationName, string argsJson, XUUnityLightMcpRequest requestOverride)
         {
-            if (!XUUnityLightMcpOperationRegistry.TryGet(operationName, out var operation))
+            var nestedRequest = requestOverride ?? BuildNestedRequest(operationName, argsJson, 30000);
+
+            // The same capability gate the direct tool path applies. Without it a constraint-gated
+            // operation threw out of the step handler, and the scheduler's catch persists
+            // "scenario_runner_failed" without jumping to cleanup: a run that had entered Play mode
+            // stayed there, and the next Edit-mode test run refused with playmode_state_invalid.
+            if (XUUnityLightMcpCapabilityRegistry.TryGetRequiredCapability(operationName, out _)
+                && !XUUnityLightMcpHealthProbe.IsOperationSupported(operationName, out var unavailableReason))
             {
-                throw new InvalidOperationException($"Scenario runner could not resolve nested operation '{operationName}'.");
+                return XUUnityLightMcpResponseWriter.Error(
+                    nestedRequest.request_id,
+                    "operation_unavailable",
+                    unavailableReason
+                );
             }
 
-            var nestedRequest = requestOverride ?? BuildNestedRequest(operationName, argsJson, 30000);
+            if (!XUUnityLightMcpOperationRegistry.TryGet(operationName, out var operation))
+            {
+                return XUUnityLightMcpResponseWriter.Error(
+                    nestedRequest.request_id,
+                    "tool_unsupported",
+                    $"Scenario runner could not resolve nested operation '{operationName}'."
+                );
+            }
 
             return operation.Execute(nestedRequest);
         }

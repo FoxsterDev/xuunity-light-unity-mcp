@@ -74,6 +74,18 @@ def decode_png(data: bytes, *, max_pixels: int = DEFAULT_MAX_IMAGE_PIXELS, sourc
         if end + 4 > total:
             raise _corrupt(source, "a PNG chunk extends past the end of the file")
         payload = data[start:end]
+        (declared_crc,) = struct.unpack(">I", data[end : end + 4])
+        actual_crc = zlib.crc32(chunk_type + payload) & 0xFFFFFFFF
+        if declared_crc != actual_crc:
+            # Without this a bit-flip in IHDR silently changes the decoded dimensions, and those
+            # dimensions are what the registry records in the manifest as the reference viewport.
+            raise _corrupt(
+                source,
+                (
+                    f"the {chunk_type.decode('ascii', 'replace')} chunk fails its CRC "
+                    f"(declared {declared_crc:08x}, computed {actual_crc:08x})"
+                ),
+            )
         offset = end + 4
         if chunk_type == b"IHDR":
             header = _parse_ihdr(payload, source)
@@ -110,15 +122,43 @@ def decode_png(data: bytes, *, max_pixels: int = DEFAULT_MAX_IMAGE_PIXELS, sourc
     bytes_per_pixel = channels * sample_bytes
     stride = width * bytes_per_pixel
 
+    # The exact number of bytes the declared image needs: one filter byte plus one row of samples,
+    # per row. Inflating without this bound lets a small file expand until the host runs out of
+    # memory — the pixel budget above limits the declared size, which says nothing about the
+    # compressed stream. zlib reaches roughly 1000:1, so a 16 MB capture could ask for 16 GB.
+    expected_raw_length = (stride + 1) * height
     try:
-        raw = zlib.decompress(bytes(idat))
+        decompressor = zlib.decompressobj()
+        raw = decompressor.decompress(bytes(idat), expected_raw_length)
+        if decompressor.unconsumed_tail:
+            raise ToolInvocationError(
+                "ui_reference_image_too_large",
+                (
+                    f"'{source}' declares {width}x{height} but its image data expands past the "
+                    f"{expected_raw_length} bytes that size needs, so it was refused before being "
+                    "fully decompressed."
+                ),
+                {
+                    "source": source,
+                    "width": width,
+                    "height": height,
+                    "expected_raw_bytes": expected_raw_length,
+                },
+            )
     except zlib.error as exc:
         raise _corrupt(source, f"the PNG image data could not be decompressed: {exc}") from exc
 
-    if len(raw) < (stride + 1) * height:
+    if len(raw) < expected_raw_length:
         raise _corrupt(source, "the PNG image data is shorter than the declared image size")
 
-    samples = _unfilter(raw, width=width, height=height, stride=stride, bytes_per_pixel=bytes_per_pixel)
+    samples = _unfilter(
+        raw,
+        width=width,
+        height=height,
+        stride=stride,
+        bytes_per_pixel=bytes_per_pixel,
+        source=source,
+    )
     if sample_bytes == 2:
         samples = samples[0::2]
 
@@ -189,7 +229,15 @@ def _parse_ihdr(payload: bytes, source: str) -> dict[str, int]:
     }
 
 
-def _unfilter(raw: bytes, *, width: int, height: int, stride: int, bytes_per_pixel: int) -> bytearray:
+def _unfilter(
+    raw: bytes,
+    *,
+    width: int,
+    height: int,
+    stride: int,
+    bytes_per_pixel: int,
+    source: str = "image",
+) -> bytearray:
     out = bytearray(stride * height)
     position = 0
     for row in range(height):
@@ -232,7 +280,7 @@ def _unfilter(raw: bytes, *, width: int, height: int, stride: int, bytes_per_pix
                 )
                 out[row_start + index] = (line[index] + _paeth(left, up, up_left)) & 0xFF
             continue
-        raise _corrupt("image", f"unknown PNG row filter {filter_type}")
+        raise _corrupt(source, f"unknown PNG row filter {filter_type}")
     return out
 
 
@@ -296,6 +344,13 @@ def _to_rgba(
         alpha_table[index] = transparency[index]
 
     indices = bytes(samples[:pixel_count])
+    if indices and max(indices) >= entries:
+        # An index past the palette is invalid PNG; translating it would yield opaque black and
+        # read as a legitimate colour.
+        raise _corrupt(
+            source,
+            f"a palette index {max(indices)} exceeds the {entries} entries the PLTE chunk declares",
+        )
     rgba[0::4] = indices.translate(bytes(red_table))
     rgba[1::4] = indices.translate(bytes(green_table))
     rgba[2::4] = indices.translate(bytes(blue_table))

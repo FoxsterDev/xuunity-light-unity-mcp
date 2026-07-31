@@ -405,6 +405,10 @@ def validate_manifest(manifest: dict[str, Any], *, reference_dir: Path) -> dict[
 
     acceptance = manifest.get("acceptance") if isinstance(manifest.get("acceptance"), dict) else {}
     for lane in LANES:
+        # An absent lane takes its documented default, so a manifest registered before a lane
+        # existed stays valid. Only a lane that is present with a bad value is an error.
+        if lane not in acceptance:
+            continue
         requirement = str(acceptance.get(lane) or "")
         if requirement not in LANE_REQUIREMENTS:
             errors.append(

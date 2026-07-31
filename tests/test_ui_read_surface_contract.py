@@ -67,7 +67,9 @@ def satellite_registered_operations() -> dict[str, str]:
                     read(path),
                 )
                 if match:
-                    owners[match.group(1)] = str(path.relative_to(EDITOR_ROOT))
+                    # as_posix, not str: the assembly checks below compare against "Ugui/", and a
+                    # native separator makes them fail on Windows for a correctly gated operation.
+                    owners[match.group(1)] = path.relative_to(EDITOR_ROOT).as_posix()
     return owners
 
 

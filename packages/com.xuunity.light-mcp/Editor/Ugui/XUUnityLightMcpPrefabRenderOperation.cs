@@ -151,6 +151,17 @@ namespace XUUnity.LightMcp.Editor.Ugui
                 };
                 camera.targetTexture = renderTexture;
                 camera.Render();
+
+                // The snapshot's screen rects come from WorldToScreenPoint(camera, ...), which reads
+                // the camera's pixel rect. That is the render target only while it is attached;
+                // detaching first makes every rect scale by editorDisplayHeight/height, and
+                // explain_regions then blames the wrong node with full confidence.
+                XUUnityLightMcpUiTreePayload renderedSnapshot = null;
+                if (args.includeSnapshot)
+                {
+                    renderedSnapshot = BuildSnapshot(args, instance, width, height, payload);
+                }
+
                 camera.targetTexture = null;
 
                 var previous = RenderTexture.active;
@@ -174,10 +185,10 @@ namespace XUUnity.LightMcp.Editor.Ugui
                 payload.success = true;
                 payload.proof_class = XUUnityLightMcpUiRead.ProofSemanticTree;
 
-                if (args.includeSnapshot)
+                if (renderedSnapshot != null)
                 {
-                    payload.snapshot = BuildSnapshot(args, instance, width, height, payload);
-                    payload.proof_class = payload.snapshot.proof_class;
+                    payload.snapshot = renderedSnapshot;
+                    payload.proof_class = renderedSnapshot.proof_class;
                 }
             }
             finally

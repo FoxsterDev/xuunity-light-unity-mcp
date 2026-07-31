@@ -12,6 +12,7 @@ if str(TEMPLATES_DIR) not in sys.path:
 
 import server_core
 import server_sdk_package_restore
+from server_host_platform import host_platform_kind, is_wsl
 
 
 class SdkPackageRestoreTests(unittest.TestCase):
@@ -35,9 +36,20 @@ class SdkPackageRestoreTests(unittest.TestCase):
         return project
 
     def _unity_app(self, project: Path) -> Path:
-        unity_app = project.parent / "Unity.app"
-        binary = unity_app / "Contents" / "MacOS" / "Unity"
-        binary.parent.mkdir(parents=True)
+        """A Unity installation shaped the way the host platform expects to find one.
+
+        A hardcoded `Unity.app/Contents/MacOS/Unity` only normalizes on macOS, so on Windows and
+        Linux every test using it failed in resolve_unity_executable rather than exercising the
+        restore contract it was written for."""
+
+        kind = host_platform_kind()
+        if kind == "macos":
+            unity_app = project.parent / "Unity.app"
+            binary = unity_app / "Contents" / "MacOS" / "Unity"
+        else:
+            unity_app = project.parent / "UnityEditor"
+            binary = unity_app / ("Unity.exe" if kind == "windows" or is_wsl() else "Unity")
+        binary.parent.mkdir(parents=True, exist_ok=True)
         binary.write_text("", encoding="utf-8")
         return unity_app
 

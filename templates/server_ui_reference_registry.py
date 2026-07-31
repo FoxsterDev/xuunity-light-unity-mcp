@@ -97,6 +97,10 @@ def register_ui_reference(
 
     expected_path = reference_dir / EXPECTED_IMAGE_FILE_NAME
     expected_path.parent.mkdir(parents=True, exist_ok=True)
+    # Keep the bytes we are about to replace: validation happens after the write (it re-hashes the
+    # published image), so a rejected re-registration has to put the previous one back or it leaves
+    # a live reference with a manifest and no image.
+    previous_expected = expected_path.read_bytes() if expected_path.is_file() else None
     expected_path.write_bytes(source_bytes)
 
     manifest = {
@@ -130,11 +134,18 @@ def register_ui_reference(
 
     validation = validate_manifest(manifest, reference_dir=reference_dir)
     if not validation["valid"]:
-        expected_path.unlink(missing_ok=True)
+        if previous_expected is None:
+            expected_path.unlink(missing_ok=True)
+        else:
+            expected_path.write_bytes(previous_expected)
         raise ToolInvocationError(
             "ui_reference_manifest_invalid",
             "The reference manifest failed policy validation and was not registered.",
-            {"reference_id": normalized_id, "errors": validation["errors"]},
+            {
+                "reference_id": normalized_id,
+                "errors": validation["errors"],
+                "previous_reference_restored": previous_expected is not None,
+            },
         )
 
     write_json(manifest_path, manifest)

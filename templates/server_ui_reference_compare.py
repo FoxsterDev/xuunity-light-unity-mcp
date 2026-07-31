@@ -93,6 +93,7 @@ def compare_ui_reference(
             fixture_result_path=fixture_result_path,
             declared_fixture=str(manifest.get("fixture") or ""),
             declared_viewport=dict(manifest.get("viewport") or {}),
+            project_root=project_root,
         ),
         capture_lane=capture_lane,
         device=device,
@@ -108,6 +109,7 @@ def compare_ui_reference(
         workspace=workspace,
         interaction_result_path=str(interaction_result_path or "").strip() or fixture_result_path,
         interaction_evidence=interaction_evidence,
+        project_root=project_root,
     )
     result["interactions"] = interactions
     result["interaction_lane"] = evaluate_interaction_lane(
