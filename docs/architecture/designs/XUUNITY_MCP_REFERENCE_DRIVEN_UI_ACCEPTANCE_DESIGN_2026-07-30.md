@@ -1,7 +1,16 @@
 # XUUnity MCP Reference-Driven UI Acceptance Design
 
 Date: `2026-07-30`
-Status: `P0.1, P0.2, P1.1, P1.2, P1.3, P2.1, P2.2, P2.3, P3.1, P3.2 implemented and validated`
+Status: `P0.1, P0.2, P1.1, P1.2, P1.3, P2.1, P2.2, P2.3, P3.1, P3.2 implemented; audited externally 2026-07-31, findings closed in v0.3.50`
+
+An independent external audit of this surface found false passes that this document's
+own validation section did not: caller-named result files accepted as editor receipts,
+a mask policy measuring declared pixels while the comparison suppressed whole grid
+cells, a similarity grid that failed the identical design captured at another
+resolution, and a single full-screen region diluting a missing element below the
+floor. See the `v0.3.50` changelog and `scripts/testing/check_audit_regressions.py`,
+which re-runs each finding's reproduction. Read the per-slice validation notes below
+as the state at `v0.3.49`, not as an independent verdict.
 Scope: `Operations/XUUnityLightUnityMcp`
 Source: [`2026-07-30_reference_driven_ui_completion_and_visual_acceptance_retro.md`](../../archive/retros/2026-07-30_reference_driven_ui_completion_and_visual_acceptance_retro.md)
 
@@ -516,7 +525,7 @@ failure.
 
 ### P3.1/P3.2 validation
 
-- Host: **634 tests passing**, 13 platform skips. 59 are the new
+- Host: **634 tests ran — 621 passed, 13 platform skips**. 59 are the new
   `tests/test_ui_vision_and_interaction.py`: the rubric clamp, per-profile bars, packet
   staleness, judge provenance and self-review flagging, judge disagreement, the sheet
   geometry (reference left, shared panel height, markers on both panels, decodable PNG with

@@ -2,14 +2,116 @@
 
 ## Unreleased
 
+## 0.3.50
+
+Release tag: `v0.3.50`
+
+Current Git UPM install URL:
+
+```text
+https://github.com/FoxsterDev/xuunity-mcp.git?path=/packages/com.xuunity.light-mcp#v0.3.50
+```
+
+This release closes the findings of an independent external audit of the
+reference-driven UI acceptance surface shipped in `v0.3.49`. Several of them were
+false passes: evidence that had not been earned, a mask policy that measured a
+different quantity than the comparison applied, and a similarity grid that failed
+the identical design captured at another resolution. Each fix is re-checked by
+`scripts/testing/check_audit_regressions.py`, which also asserts the opposite
+direction — that captures which are legitimately the same screen still pass.
+
+### Security
+
+- A scenario result only counts as an editor receipt when it is read from the
+  editor's own results directory. A file the caller named anywhere else is
+  reported as `evidence_source=unverified_result_path` and cannot reach
+  `visual_determinism=proven`. Previously a hand-written JSON file passed as
+  `fixtureResultPath` earned `reference_acceptance=passed` and
+  `decision_ready=true` across every lane, because the only thing separating a
+  receipt from a caller assertion was which argument the JSON arrived through.
+- `judges_required` and `allow_self_review` are covered by `packet_hash`, so the
+  independence half of the vision bar cannot be lowered after a judgement while
+  stored reviews still read as valid.
+- PNG decompression is bounded by the size the declared image needs. A 782 KB
+  file declaring a 1x1 image drove peak RSS to 1.6 GB and decoded successfully;
+  it now costs 32 MB and a typed `ui_reference_image_too_large`.
+- PNG chunk CRCs are verified. A tampered `IHDR` silently changed the decoded
+  dimensions, and those dimensions are what the registry records as the
+  reference viewport.
+
+### Changed
+
+- **Breaking.** A reference that declares a single full-screen region is refused.
+  One whole-screen average dilutes a missing element by the share of the screen
+  it occupied, so a missing button or body paragraph scored above the floor and
+  passed. Existing references with one full-screen region must be re-registered
+  with a region per meaningful UI area.
+- **Breaking.** `fixtureResultPath` and `interactionResultPath` outside the
+  editor's results directory no longer produce decision-ready evidence.
+- Comparison-grid cells are area weighted, so each source pixel contributes to
+  the cells it overlaps in proportion. The identical design captured at 2x, 3x or
+  4x now scores as identical instead of failing on binning phase.
+- Masks are charged the grid-cell footprint they actually suppress rather than
+  their declared pixel area, and the per-region cap applies to every declared
+  region rather than only required ones.
+- The `blocked_lanes` filter matches `failed_lanes`: an `optional` lane that ran
+  and could not decide now gates the verdict instead of being dropped from it.
+- `device` is a first-class acceptance lane with a pass/fail vocabulary and
+  capture-resolution reconciliation. An acceptance key that a manifest does not
+  declare takes its documented default, so references registered before a lane
+  existed stay valid.
+- `serialized_reference_type_mismatch` is severity `error`. Only `error`
+  increments the failure count, so an unassignable serialized reference left
+  prefab validation passing.
+
 ### Added
 
+- Per-region content-coverage check, independent of region area, so a missing
+  element inside a larger region fails even when cell similarity stays above the
+  floor.
+- `capture_below_comparison_grid` refusal for a capture smaller than the
+  comparison grid, which previously raised `IndexError` mid-comparison.
+- `scripts/testing/check_audit_regressions.py`: 25 executable checks that
+  reproduce each audit finding and assert it stays closed, including a
+  benign-variation sweep against false rejections.
+- Cross-language pins for `playmode_state`, `targetKind`, clip/material/font
+  states, bridge refusal codes and the file-IPC layout; `bridgeOperation`
+  coverage widened from the ui/prefab subset to every declared editor operation.
+- TMP EditMode test assembly and a prefab-defect test for an unresolvable script
+  GUID, both previously uncovered.
 - Added `unity_sdk_package_restore` and `request-sdk-package-restore`, a
   closed-project Unity batch lane that waits for Package Manager's registered
   graph to become idle-stable, then atomically records package ids/versions,
   direct dependencies, dependency-XML hashes, and manifest/lock hashes. The
   verdict is decision-ready only when Unity publishes a successful run-bound
   receipt and the same-project editor process is proven closed after exit.
+
+### Fixed
+
+- A rejected `overwrite=true` re-registration restores the previous
+  `expected.png` instead of deleting it and leaving a manifest with no image,
+  which permanently broke a working reference.
+- Nested scenario operations pass through the capability gate. A
+  constraint-gated operation threw out of the step handler and the scheduler
+  persisted `scenario_runner_failed` without jumping to cleanup, stranding the
+  editor in Play mode.
+- `unity_prefab_render` builds its snapshot before detaching the render target,
+  so node screen rects are not scaled by the editor display size.
+- A vision review the normalizer rejects is refused rather than stored, a second
+  submission by the same judge is refused rather than silently overwriting a
+  previous verdict, and an unreadable review file blocks instead of being
+  indistinguishable from no review.
+- Duplicate or case-variant rubric criterion keys are an error instead of
+  silently overwriting a low score; the vision score floor is 1, so a manifest
+  cannot declare a bar no review can fail.
+- A region that could not be compared reports `passed: false` rather than
+  `null`, which read as a pass to any caller testing `is not False`.
+- The region background is the dominant colour that actually occurs in the
+  region; an independent per-channel median invented a colour the image never
+  contained.
+- The `sdk_package_restore` tests built a macOS-shaped Unity installation and
+  failed on Windows and Linux, and an assembly-ownership assertion compared a
+  native path separator against `"Ugui/"`. Both predate this release.
 
 ## 0.3.49
 
