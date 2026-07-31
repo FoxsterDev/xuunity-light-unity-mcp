@@ -28,6 +28,15 @@ host-local registry.
 
 ## Re-Evaluation 2026-07-31
 
+- First post-release consumer run of the `v0.3.49` UI acceptance slice is
+  recorded in
+  `2026-07-31_shipped_ui_acceptance_toolchain_first_run_retro.md`. The slice
+  holds end to end and stays in completed history; four implementation
+  residuals are now tracked as an active row. The P0 is mutation-receipt
+  honesty: `set_serialized_field` reported `status: "applied"` for an enum
+  write where `before == after`, because enum properties are index-addressed
+  and out-of-range input is clamped rather than rejected. That defeats the
+  other mutation guardrails, which all assume the change report is truthful.
 - `v0.3.49` is now the released `master`/`origin/master` line. It implements
   every reference-driven UI acceptance slice added on 2026-07-30, including
   the reference comparator, fixture contract, semantic/prefab inspection,
@@ -208,6 +217,7 @@ the entire Windows install root-cause set (python3 delegation, UTF-8 BOM,
 
 | Date | File | Scope | Registry Status | Why It Is Not Completed History |
 | --- | --- | --- | --- | --- |
+| 2026-07-31 | `2026-07-31_shipped_ui_acceptance_toolchain_first_run_retro.md` | First post-release consumer run of the `v0.3.49` reference-driven UI acceptance slice: mutation-receipt honesty, prefab-render-to-semantic-lane wiring, transient render overrides, unassigned-reference noise | **open; P0 receipt honesty** | Verifies the 2026-07-30 slice end to end (card similarity `0.9952`, exact layout verdict, stability `proven`, vision 4/4, 31/31 requests, zero false negatives) and keeps that slice in completed history. Four residuals stay open: (P0) `set_serialized_field` reports `status: "applied"` when `before == after` and clamps out-of-range enum input instead of rejecting it, so an enum write can silently no-op behind a success receipt; (P1) `unity_prefab_render` returns its `ui.read.v1` snapshot inline only while `unity_ui_reference_compare` needs `uiSnapshotPath`, making `semantic: required` unsatisfiable off Play mode; (P1) no transient `overrides` on render, so a second runtime-driven UI state costs a mutate/restore pair on a shared asset (54% of this session's mutation calls were workarounds); (P2) passing comparisons are delivered on the error channel and `reportUnassignedReferences` emits ~57 standard-empty uGUI/TMP fields. |
 | 2026-05-14 | `2026-05-14_sdk_rollout_mcp_portfolio_retro.md` | SDK/EDM4U rollout validation lane: typed resolver preconditions, package restore, generated-Gradle diff guard, GUI process pool + quit-and-wait closeout, portfolio SDK summary | **generated-diff + typed resolver/package-restore P0 complete in current source; orchestration remains P1** | `v0.3.45`-`v0.3.48` shipped and hardened generated-diff plus callback-backed Android resolution. Current source adds fail-closed closed-project `unity.sdk.package_restore` with an idle-stable registered package graph, atomic package/dependency receipt, and proven process exit. Still open: GUI process pool, batch resolve, closeout orchestration, and portfolio summary. Device lanes remain ROADMAP Wave 5. |
 | 2026-06-02 | `2026-06-02_token_efficiency_response_envelope_retro.md` | Response-envelope token efficiency: compact-by-default across MCP tool surfaces | mostly implemented; P2 residual | Compact-by-default shipped `v0.3.32`-`v0.3.44` for scenario, refresh, compile, build-config compile, test, `unity_status_summary`, `ensure-ready`, and batch CLI, each with `includeFullPayload`/`--output` opt-in (STATUS.md "Compact MCP envelopes"). Remaining (ROADMAP.md "Phase 2" residual): broader multi-project compact ceilings, a token ledger, and fast-path profiles. |
 | 2026-06-11 | `2026-06-11_token_accounting_and_fast_path_retro.md` | Token-accounting ledger, one-shot package-pin verifier, fast-path prompt profile | partial; P2 | The biggest win (compact output) shipped through `v0.3.40`/`v0.3.44`, and the fast path is documented in `docs/agents/PACKAGE_BUMP_FAST_PATH.md`, but no token-accounting ledger, one-shot verify-package-pin verifier, or runner token-budget hints exist in source or ROADMAP/STATUS. Overlaps the response-envelope row above as the token-efficiency tail. |
