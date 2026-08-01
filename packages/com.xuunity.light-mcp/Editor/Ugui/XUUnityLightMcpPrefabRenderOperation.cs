@@ -1,5 +1,6 @@
 using System;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using UnityEditor;
 using UnityEditor.SceneManagement;
@@ -51,6 +52,8 @@ namespace XUUnity.LightMcp.Editor.Ugui
             payload.prefab_guid = loaded.Guid;
             payload.reference_width = args.referenceWidth > 0 ? args.referenceWidth : width;
             payload.reference_height = args.referenceHeight > 0 ? args.referenceHeight : height;
+            payload.requested_override_count =
+                (args.overrides ?? Array.Empty<XUUnityLightMcpPrefabMutationOperation>()).Length;
 
             var stopwatch = Stopwatch.StartNew();
             try
@@ -139,6 +142,14 @@ namespace XUUnity.LightMcp.Editor.Ugui
                     instanceRect.SetParent(contentParent, false);
                 }
 
+                // Overrides land on the preview instance only. The prefab asset is never saved from this
+                // operation, so a second runtime-driven UI state costs one render instead of a
+                // mutate/restore pair on an asset other projects share.
+                if (!TryApplyOverrides(args, instance, payload))
+                {
+                    return;
+                }
+
                 Canvas.ForceUpdateCanvases();
                 if (instanceRect != null)
                 {
@@ -156,11 +167,7 @@ namespace XUUnity.LightMcp.Editor.Ugui
                 // the camera's pixel rect. That is the render target only while it is attached;
                 // detaching first makes every rect scale by editorDisplayHeight/height, and
                 // explain_regions then blames the wrong node with full confidence.
-                XUUnityLightMcpUiTreePayload renderedSnapshot = null;
-                if (args.includeSnapshot)
-                {
-                    renderedSnapshot = BuildSnapshot(args, instance, width, height, payload);
-                }
+                var renderedSnapshot = BuildSnapshot(args, instance, width, height, payload);
 
                 camera.targetTexture = null;
 
@@ -187,8 +194,26 @@ namespace XUUnity.LightMcp.Editor.Ugui
 
                 if (renderedSnapshot != null)
                 {
-                    payload.snapshot = renderedSnapshot;
                     payload.proof_class = renderedSnapshot.proof_class;
+                    if (args.writeSnapshot)
+                    {
+                        payload.snapshot_path = XUUnityLightMcpUiSnapshotArtifact.Write(
+                            renderedSnapshot,
+                            args.snapshotOutputPath,
+                            outputPath,
+                            "prefab-render-" + Path.GetFileNameWithoutExtension(loaded.NormalizedPath),
+                            out var snapshotError);
+                        renderedSnapshot.snapshot_path = payload.snapshot_path;
+                        if (snapshotError != null)
+                        {
+                            payload.warnings.Add(snapshotError);
+                        }
+                    }
+
+                    if (args.includeSnapshot)
+                    {
+                        payload.snapshot = renderedSnapshot;
+                    }
                 }
             }
             finally
@@ -216,6 +241,45 @@ namespace XUUnity.LightMcp.Editor.Ugui
 
                 EditorSceneManager.ClosePreviewScene(previewScene);
             }
+        }
+
+        static bool TryApplyOverrides(
+            XUUnityLightMcpPrefabRenderArgs args,
+            GameObject instance,
+            XUUnityLightMcpPrefabRenderPayload payload)
+        {
+            var overrides = args.overrides ?? Array.Empty<XUUnityLightMcpPrefabMutationOperation>();
+            if (overrides.Length == 0)
+            {
+                return true;
+            }
+
+            if (overrides.Length > XUUnityLightMcpPrefabMutator.MAX_OPERATIONS)
+            {
+                payload.errors.Add(XUUnityLightMcpUiTreeBuilder.Diagnostic(
+                    "prefab_render_override_limit",
+                    $"A render may carry at most {XUUnityLightMcpPrefabMutator.MAX_OPERATIONS} transient overrides.",
+                    overrides.Length.ToString(CultureInfo.InvariantCulture)));
+                return false;
+            }
+
+            var allowed = XUUnityLightMcpPrefabMutator.ResolveAllowedComponentTypes(args.allowedComponentTypes);
+            for (var index = 0; index < overrides.Length; index++)
+            {
+                var change = XUUnityLightMcpPrefabMutator.Apply(instance, overrides[index], index, allowed);
+                payload.applied_overrides.Add(change);
+                if (string.Equals(change.status, "failed", StringComparison.Ordinal))
+                {
+                    payload.errors.Add(XUUnityLightMcpUiTreeBuilder.Diagnostic(
+                        "prefab_render_override_failed",
+                        "A transient override failed, so no capture was taken; a render of the un-overridden state "
+                        + "would be evidence for the wrong UI state.",
+                        $"override {index} ({change.op}) failed as {change.error_code}"));
+                    return false;
+                }
+            }
+
+            return true;
         }
 
         static RectTransform BuildSafeArea(

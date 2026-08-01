@@ -131,7 +131,7 @@ an existing helper, compare its version and .source_root with v0.3.45 and refres
 stale files from that release. On native Windows, migrate only the XUUnity client
 block to cmd.exe plus run_installed_or_refresh_xuunity_mcp.cmd. After any helper
 or client-config change, restart or refresh the client, list the live MCP tools,
-and run unity_status_summary. Require mcp_server_info.version=0.3.50 in that live
+and run unity_status_summary. Require mcp_server_info.version=0.3.51 in that live
 result. Only then run EditMode tests.
 ```
 
@@ -187,7 +187,7 @@ Agent defaults:
 9. After any helper or client-config change, restart or refresh the client,
    confirm that `xuunity_light_unity` appears in its MCP server list, list the
    live MCP tools, and run `unity_status_summary`; require
-   `mcp_server_info.version=0.3.50`. Helper-only validation does
+   `mcp_server_info.version=0.3.51`. Helper-only validation does
    not prove that the current MCP client session is connected.
 10. When the user requested tests, run EditMode tests only after the live status
     summary is healthy.
@@ -236,7 +236,7 @@ Preflight review
 - Planned project file changes: <manifest, bridge config, lockfile, none>
 - Planned user-level config changes: <exact file paths or none>
 - Restart or refresh required after mutation: <yes/no and which client>
-- Required live proof after restart: <server listed, tools listed, unity_status_summary healthy with mcp_server_info.version=0.3.50>
+- Required live proof after restart: <server listed, tools listed, unity_status_summary healthy with mcp_server_info.version=0.3.51>
 - Planned commands after approval: <setup-apply, validate-setup, ensure-ready, request-status-summary, unity_status_summary after reload, ...>
 
 Do not run setup-apply, installer commands, helper sync, or client config edits
@@ -551,7 +551,7 @@ In Unity: `Window > Package Manager > + > Add package from git URL...`
 > Tip
 >
 > ```text
-> https://github.com/FoxsterDev/xuunity-mcp.git?path=/packages/com.xuunity.light-mcp#v0.3.50
+> https://github.com/FoxsterDev/xuunity-mcp.git?path=/packages/com.xuunity.light-mcp#v0.3.51
 > ```
 
 Or add it directly to `Packages/manifest.json`:
@@ -559,7 +559,7 @@ Or add it directly to `Packages/manifest.json`:
 ```json
 {
   "dependencies": {
-    "com.xuunity.light-mcp": "https://github.com/FoxsterDev/xuunity-mcp.git?path=/packages/com.xuunity.light-mcp#v0.3.50"
+    "com.xuunity.light-mcp": "https://github.com/FoxsterDev/xuunity-mcp.git?path=/packages/com.xuunity.light-mcp#v0.3.51"
   }
 }
 ```
@@ -849,7 +849,32 @@ summaries by default; pass `includeFullPayload=true` when you need full
 `_xuunity_lifecycle` snapshots for transport or lifecycle debugging.
 Use `request-console-grep --source editor_log` or
 `unity_console_grep` with `source=editor_log` when log presence must survive
-Unity Console clear-on-play or ring-buffer eviction.
+Unity Console clear-on-play or ring-buffer eviction. Grep suppresses
+build-pipeline progress chatter (`CopyFiles`, `[n/m ...]`) by default, because
+those lines match whatever feature name the compile job carries and bury the
+answer the grep was asked for; `build_pipeline_suppressed_count` always reports
+how many were hidden, and `includeBuildPipelineNoise=true` keeps them.
+
+UI prefab authoring is one lane, not two. `unity_prefab_mutate` covers typed
+fields, RectTransform geometry, CanvasGroup state, child structure, allow-listed
+components, and asset-typed object references (`Sprite`, `Material`,
+`TMP_FontAsset`, …) addressed by project path or GUID — including a sub-asset such
+as a sliced sprite, via `assetSubAssetName` or a `path#SubAsset` suffix. Component
+and `GameObject` references stay out of scope by design, so a component can never
+be swapped for another type. There is therefore no remaining reason to hand-edit
+prefab YAML; if you do edit a serialized asset out of band anyway, run
+`unity_project_refresh` before the next transaction, because a mutation writes
+from the editor's in-memory copy and would otherwise overwrite the edit. Pass the
+hash you inspected as `expectedSha256` to make that ordering enforceable: a
+mismatch fails as `prefab_mutation_asset_drifted`, and a transaction without it
+reports `drift_guard: "unguarded"` rather than implying the check ran.
+
+Two mutation-receipt rules worth knowing before leaning on the change table: a
+write whose serialized value did not change is reported as `status: "no_op"`, never
+`applied`, and counted in `no_op_count`; and enum properties are addressed by
+member index, so `numberValue` is an index, `stringValue` is a member name, and
+out-of-range input is rejected as `prefab_mutation_enum_value_invalid` instead of
+being clamped.
 
 See [FEATURES.md](docs/reference/FEATURES.md) for maturity levels and implementation evidence.
 

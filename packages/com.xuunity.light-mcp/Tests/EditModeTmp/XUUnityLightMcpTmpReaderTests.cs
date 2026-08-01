@@ -1,6 +1,7 @@
 using NUnit.Framework;
 using TMPro;
 using UnityEngine;
+using UnityEngine.TestTools;
 using XUUnity.LightMcp.Editor.Core;
 using XUUnity.LightMcp.Editor.Operations;
 
@@ -8,8 +9,13 @@ namespace XUUnity.LightMcp.Tests.EditModeTmp
 {
     /// <summary>
     /// The TMP reader had no test assembly at all, so nothing exercised the reader that owns the
-    /// exact defect this toolchain was built for: body copy that does not render. The unresolved
-    /// font and material branches were reachable only in production.
+    /// exact defect this toolchain was built for: body copy that does not render.
+    ///
+    /// The unresolved font branch stays production-only on purpose. TMP substitutes its default font
+    /// asset in both the `font` setter and `OnValidate`, so a project with TMP Essentials imported
+    /// cannot hold a TMP label with a null font asset at all; the branch's real trigger is a project
+    /// with no default font asset configured. Asserting it from here produced a permanently red test,
+    /// which is worse than an honestly named gap.
     /// </summary>
     [Category("XUUnity.MCP.SelfTest")]
     [Category("XUUnity.MCP.EditMode")]
@@ -22,6 +28,11 @@ namespace XUUnity.LightMcp.Tests.EditModeTmp
         [SetUp]
         public void SetUp()
         {
+            // Creating a TMP label touches font asset setup, which logs "No graphic device is
+            // available to initialize the view" on a headless 2021.3 runner. The reader under test
+            // reads serialized state and does not need a device, so the message is not a failure.
+            LogAssert.ignoreFailingMessages = true;
+
             _canvasRoot = new GameObject("XUUnityMcp_TmpCanvas", typeof(RectTransform), typeof(Canvas));
             _canvasRoot.GetComponent<Canvas>().renderMode = RenderMode.ScreenSpaceOverlay;
             _canvasRoot.GetComponent<RectTransform>().sizeDelta = new Vector2(1080f, 1920f);
@@ -47,6 +58,7 @@ namespace XUUnity.LightMcp.Tests.EditModeTmp
                 Object.DestroyImmediate(_canvasRoot);
                 _canvasRoot = null;
             }
+            LogAssert.ignoreFailingMessages = false;
         }
 
         [Test]
@@ -102,28 +114,61 @@ namespace XUUnity.LightMcp.Tests.EditModeTmp
             Assert.That(body, Is.Not.Null);
             // Whichever way the project's TMP defaults resolve, the status must be one of the
             // documented values the host branches on, never blank.
-            Assert.That(
+            CollectionAssert.Contains(
+                new[] { "resolved", "unresolved" },
                 body.font_resolved_status,
-                Is.AnyOf("resolved", "unresolved"),
                 "font_resolved_status is read by the explanation lane and must be populated");
-            Assert.That(
+            CollectionAssert.Contains(
+                new[] { "resolved", "unresolved", "font_without_material" },
                 body.material_resolved_status,
-                Is.AnyOf("resolved", "unresolved", "font_without_material"),
                 "material_resolved_status is read by the explanation lane and must be populated");
         }
 
+        /// <summary>
+        /// The reader's `font_resolved_status: "unresolved"` branch is real but is not reachable from a
+        /// test in this project: TMP substitutes the default font asset both in the `font` setter and
+        /// again in `OnValidate`, so neither `font = null` nor writing `m_fontAsset` through
+        /// SerializedObject survives. Its actual trigger is a project whose TMP settings carry no
+        /// default font asset — TMP Essentials not imported — which onboarding hits, not a prefab an
+        /// operator can author. What is reachable, and what an operator must not be misled by, is the
+        /// substitution itself: a label nobody assigned a font to reports a resolved font, and the
+        /// evidence has to name it so the substitution is visible rather than silent.
+        /// </summary>
         [Test]
-        public void Reader_FlagsAFontlessLabelAsUnresolved()
+        public void Reader_NamesTheSubstitutedFontOnALabelThatWasNeverAssignedOne()
         {
             var orphan = NewChild("FontlessBody");
-            var orphanText = orphan.AddComponent<TextMeshProUGUI>();
-            orphanText.text = "No font asset";
-            orphanText.font = null;
+            orphan.AddComponent<TextMeshProUGUI>().text = "No font asset assigned";
 
+            var label = orphan.GetComponent<TextMeshProUGUI>();
             var node = RunTree().nodes.Find(item => item.name == "FontlessBody");
 
             Assert.That(node, Is.Not.Null);
-            Assert.That(node.font_resolved_status, Is.EqualTo("unresolved"));
+
+            // Whether TMP has a default font asset to substitute depends on TMP Essential Resources
+            // being imported, which a bare CI project does not have. The invariant that matters to
+            // the explanation lane holds either way: the status and the named font must agree, so a
+            // substituted font is never reported as unresolved and an absent one is never reported
+            // as resolved with no name.
+            if (label.font != null)
+            {
+                Assert.That(
+                    node.font_resolved_status,
+                    Is.EqualTo("resolved"),
+                    "TMP substituted its default font asset; reporting unresolved here would be wrong");
+                Assert.That(
+                    node.font,
+                    Is.Not.Empty,
+                    "a resolved font must be named, or the substitution is invisible to the operator");
+            }
+            else
+            {
+                Assert.That(
+                    node.font_resolved_status,
+                    Is.EqualTo("unresolved"),
+                    "no font asset was available to substitute, which is exactly the unresolved case");
+                Assert.That(node.font, Is.Empty);
+            }
         }
 
         GameObject NewChild(string name)

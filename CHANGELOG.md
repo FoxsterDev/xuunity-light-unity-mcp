@@ -2,6 +2,143 @@
 
 ## Unreleased
 
+## 0.3.51
+
+Release tag: `v0.3.51`
+
+Current Git UPM install URL:
+
+```text
+https://github.com/FoxsterDev/xuunity-mcp.git?path=/packages/com.xuunity.light-mcp#v0.3.51
+```
+
+Two things land together: the residuals from the first consumer run of the
+reference-driven UI acceptance surface, and the repair of `v0.3.50`, whose TMP
+test assembly did not compile. That defect is the reason the editor package is
+now built and tested by a real editor before a tag is cut rather than after — the
+first blocker in
+[`XUUNITY_MCP_ENTERPRISE_READINESS_DESIGN_2026-07-31.md`](docs/architecture/designs/XUUNITY_MCP_ENTERPRISE_READINESS_DESIGN_2026-07-31.md).
+
+### Fixed — v0.3.50 package repair
+
+- The TMP EditMode test assembly introduced in `v0.3.50` did not compile:
+  `XUUnityLightMcpUiTreePayload` is internal and the new assembly had no
+  `InternalsVisibleTo` grant, and the tests used `Is.AnyOf`, which the NUnit
+  version Unity ships does not define. `v0.3.50` therefore shipped a package
+  whose tests could not build for any consumer that lists it in `testables`.
+- The TMP and prefab-defect fixtures failed headless. Creating a TMP label logs
+  a graphics-device message on a 2021.3 runner, and the prefab-defect test
+  deliberately imports a broken prefab; the test framework fails a test on any
+  unhandled error log. Both now scope `LogAssert.ignoreFailingMessages` to the
+  fixture that needs it and reset it in teardown.
+- A TMP reader test asserted that a label with no font assigned reports
+  `unresolved`. TMP substitutes its default font asset when one is available, so
+  the assertion was wrong in a normal project and the corrected form was wrong in
+  a bare one, where TMP Essential Resources are absent. It now asserts the
+  invariant the explanation lane depends on — the status and the named font
+  agree — which holds in both environments.
+- Validated by execution on both supported lines rather than asserted: Unity
+  `2021.3.45f2` and `6000.0.58f2` each report 99 EditMode tests, 98 passed, 0
+  failed, and the one graphics-device render test correctly self-skipping
+  headless. The TMP reader tests and the prefab script-GUID defect test — retro
+  section 9 case 4, previously uncovered — execute for the first time. The core
+  assembly was checked for the constraint-gating claim directly against the built
+  DLL: `com.xuunity.light-mcp.Editor.dll` carries no `UnityEngine.UI` or
+  TextMeshPro assembly reference while both satellites do.
+
+Closes the four residuals from the first post-release consumer run of the
+reference-driven UI acceptance surface, recorded in
+`docs/archive/retros/2026-07-31_shipped_ui_acceptance_toolchain_first_run_retro.md`.
+The protocol held end to end in that session; what it exposed was a mutation
+receipt that could report success for a write that did nothing, a semantic
+acceptance lane that could not be reached from the isolated-render lane, and two
+surfaces whose default output was mostly noise.
+
+### Fixed
+
+- `unity_prefab_mutate` reports `status: "no_op"` for a value-setting operation
+  whose serialized value did not change, and carries `no_op_count` on the
+  transaction. It previously reported `applied` with `before == after`, no
+  warning, and a passing `post_validation` — a false-positive receipt on the one
+  surface where `expectedSha256`, atomic rollback, `post_validation`, and
+  `reversible_patch_json` all presume the change report is truthful. An operator
+  who did not re-measure the render shipped the wrong value believing it.
+- Enum properties are refused rather than clamped when the supplied index is out
+  of range, as `prefab_mutation_enum_value_invalid`, naming the valid
+  `name=index` pairs. `SerializedProperty` addresses an enum by member index
+  while a caller naturally supplies the enum's underlying value, so the natural
+  call was silently discarded.
+- `unity_ui_reference_compare` returns a successful envelope whenever the
+  comparison ran. A passing visual lane was previously delivered inside an
+  `<error>` envelope whenever an optional interaction lane or a pending semantic
+  lane left overall `reference_acceptance` short of `passed`, forcing the
+  operator to re-read a large payload to confirm the tool had not malfunctioned.
+  The error channel is now reserved for a comparison that could not compute a
+  visual verdict at all.
+
+### Added
+
+- `unity_prefab_render` and `unity_prefab_snapshot` persist the `ui.read.v1`
+  snapshot beside the capture and return `snapshot_path`. The comparison surface
+  consumes a snapshot by path, so while the snapshot was returned inline only, a
+  reference declaring `acceptance.semantic: "required"` was structurally
+  unsatisfiable outside Play mode and reported
+  `not_evaluated / no_ui_snapshot_supplied` permanently.
+- `unity_prefab_render` accepts `overrides`, the same typed operation list as
+  `unity_prefab_mutate`, applied to the preview-scene instance only and never
+  written to the asset, reported back as `applied_overrides`. Rendering a second
+  runtime-driven UI state previously required mutate → render → inverse-mutate on
+  a prefab shared by twelve projects; 54% of one session's mutation calls existed
+  only to work around its absence. A failing override fails the render instead of
+  capturing the un-overridden state.
+- `set_serialized_field` writes asset-typed object references — `Sprite`,
+  `Material`, `TMP_FontAsset`, meshes, ScriptableObjects — addressed by
+  project-relative path or 32-character GUID, with `assetSubAssetName` (or a
+  `path#SubAsset` suffix) for a sub-asset such as a sliced sprite, and
+  `valueKind: "null"` to clear. Component and `GameObject` references stay
+  refused, which is the guardrail that actually prevents swapping a component for
+  another type. Refusing asset references was the only remaining reason to
+  hand-edit prefab YAML.
+- `unity_prefab_validate` accepts `unassignedReferenceScope`
+  (`project_scripts` | `required` | `all`), defaulting to `project_scripts`, and
+  always reports `unassigned_reference_suppressed_count`. One call with
+  `reportUnassignedReferences` previously returned ~57 findings that were all
+  standard-empty uGUI/TMP optional fields, and the one genuinely interesting
+  empty field in the prefab was indistinguishable from them. `required` reads the
+  project's own convention — a field attribute whose type name starts with
+  `Required` — and is empty for a project that uses no such convention.
+- `unity_console_grep` accepts `excludePattern` and suppresses build-pipeline
+  progress lines (`CopyFiles`, `[n/m ...]`) by default on both the console-buffer
+  and Editor.log lanes, reporting `excluded_count` and
+  `build_pipeline_suppressed_count`. A grep for a feature keyword returned 159
+  matches that were all `CopyFiles` lines, because the compile job had been named
+  after the feature. `includeBuildPipelineNoise: true` restores them. A
+  cross-language test pins the two lanes to the same pattern.
+- `unity_prefab_mutate` reports `drift_guard`: `precondition_matched`,
+  `unguarded`, or `drifted`. An Editor-API write goes through the editor's
+  in-memory copy, so a serialized asset edited on disk without an intervening
+  `unity_project_refresh` was silently overwritten, and nothing warned. Whether
+  the editor's copy still matches the file is only decidable from the caller's
+  own `expectedSha256`: from inside the editor, a file rewritten by an external
+  tool and a file Unity itself reimported are indistinguishable, and an inferred
+  check refuses legitimate writes. A transaction without a precondition therefore
+  says so and carries the observed hash to pass next time, rather than implying
+  the check ran.
+
+### Changed
+
+- A stale `expectedSha256` now fails as `prefab_mutation_asset_drifted` rather
+  than `prefab_mutation_precondition_failed`, and names `unity_project_refresh`
+  as the remedy for a stale editor import. Callers matching the old code must
+  update.
+- `unity_prefab_render`'s `includeSnapshot` defaults to `false`. The inline
+  snapshot is large and the comparison tool cannot consume it; `snapshot_path` is
+  what closes the semantic lane. Pass `includeSnapshot: true` to restore the
+  previous response shape.
+- An enum's `before`/`after` in the mutation change table name the enum member
+  instead of its index, so the emitted `reversible_patch_json` carries a
+  `restoreValue` that can be replayed through `stringValue`.
+
 ## 0.3.50
 
 Release tag: `v0.3.50`

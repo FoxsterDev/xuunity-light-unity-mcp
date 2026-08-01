@@ -4,7 +4,7 @@ Date: `2026-07-31`
 Status: `design; no blocker started`
 Scope: `Operations/XUUnityLightUnityMcp`
 Source: gap assessment following the external audit of the reference-driven UI acceptance
-surface and its remediation in `v0.3.50`
+surface and its remediation in `v0.3.51`
 
 ## Problem
 
@@ -48,7 +48,7 @@ Python host suite only. No consuming project references the package sources by p
 twelve pin it by git tag — so a change to the editor assemblies can be committed, released
 and tagged without ever being compiled.
 
-This is not hypothetical. The `v0.3.50` release ships three editor-side fixes and two new
+This is not hypothetical. The `v0.3.51` release ships three editor-side fixes and two new
 EditMode test files that no machine has built. The release commit says so explicitly, which
 is honest but is not a substitute.
 
@@ -80,7 +80,7 @@ first.
 **Where it dies.** Security review, as soon as someone asks what the acceptance verdict is
 worth against a motivated or merely careless process.
 
-`v0.3.50` closed the acute hole: a scenario result is only treated as an editor receipt
+`v0.3.51` closed the acute hole: a scenario result is only treated as an editor receipt
 when it is read from the editor's own results directory, and anything else is reported as
 an unverified path that cannot reach proven determinism. That is a real improvement — the
 prior behaviour let a hand-written JSON file earn a full pass on every lane — but the
@@ -116,7 +116,7 @@ title." Everything after that is academic.
 Scenario results, comparisons and vision reviews are files in a directory. A review is
 keyed by a judge id the submitter chooses for itself. There is no locking, no identity, no
 tenancy, and no notion of concurrent runs. Two agents against the same project race; two
-CI jobs against the same reference collide. `v0.3.50` made a duplicate submission an
+CI jobs against the same reference collide. `v0.3.51` made a duplicate submission an
 explicit refusal rather than a silent overwrite, which prevents the worst outcome but does
 not make concurrency work.
 
@@ -182,14 +182,14 @@ Toolkit is not implemented. A studio with editor tooling or a modern runtime UI 
 Toolkit gets no semantic lane at all, and the tool degrades to pixels.
 
 Related coverage state at the time of the audit: of the twelve acceptance cases the
-originating retro defined, five were covered, five partially, two not at all. `v0.3.50`
+originating retro defined, five were covered, five partially, two not at all. `v0.3.51`
 improved several but did not close the matrix.
 
 **Done when**
 
 - A PlayMode test delivers a guarded click in Play mode and asserts the receipt, the
   before/after state change and the refusal paths, running in the B1 workflow.
-- The TMP tests added in `v0.3.50` have actually executed on both Unity lines.
+- The TMP tests added in `v0.3.51` have actually executed on both Unity lines.
 - Either UI Toolkit has a read provider behind the same constraint-gating pattern as the
   uGUI and TMP satellites, or the limitation is stated prominently in the public
   positioning so no evaluator discovers it during a pilot.
@@ -233,7 +233,7 @@ until that was recognised.
 
 Documentation honesty is part of this. The prior release documentation reported test counts
 that included skips as passes in three separate places, and claimed validation on a UI stack
-that had no tests. Both were corrected in `v0.3.50`, but the process that produced them is
+that had no tests. Both were corrected in `v0.3.51`, but the process that produced them is
 unchanged.
 
 **Done when**

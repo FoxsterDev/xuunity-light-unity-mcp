@@ -1196,9 +1196,48 @@ class McpToolSurfaceTest(UiReferenceTestCase):
                 "comparisonId": "tool-comparison-failed",
             },
         )
-        self.assertTrue(failed["is_error"])
+        # A comparison that ran is a result, not a tool failure. Delivering a verdict on the error
+        # channel forces the operator to re-read a large payload just to confirm the tool itself did
+        # not malfunction, and it hides a passing visual lane inside an <error> envelope.
+        self.assertFalse(failed["is_error"])
         self.assertEqual("failed", failed["payload"]["reference_acceptance"])
+        self.assertEqual("failed", failed["payload"]["visual_verdict"])
         self.assertEqual("card", failed["payload"]["first_failed_region"])
+
+    def test_a_comparison_that_could_not_run_stays_on_the_error_channel(self) -> None:
+        expected = solid_image(32, 64, (10, 20, 30, 255))
+        self.assertFalse(
+            self.call(
+                "unity_ui_reference_register",
+                {
+                    "projectRoot": str(self.project_root),
+                    "referenceId": "tool-ref-portrait-v1",
+                    "sourceImage": str(write_image(self.captures / "portrait_expected.png", expected)),
+                    "regions": [{"id": "card", "rect": {"x": 4, "y": 8, "width": 24, "height": 24}}],
+                    "acceptance": dict(VISUAL_ONLY_ACCEPTANCE),
+                    "workspaceRoot": str(self.workspace),
+                },
+            )["is_error"]
+        )
+
+        landscape = write_image(
+            self.captures / "portrait_actual_landscape.png",
+            solid_image(64, 32, (10, 20, 30, 255)),
+        )
+        blocked = self.call(
+            "unity_ui_reference_compare",
+            {
+                "projectRoot": str(self.project_root),
+                "referenceId": "tool-ref-portrait-v1",
+                "actualImage": str(landscape),
+                "stabilityImage": str(landscape),
+                "workspaceRoot": str(self.workspace),
+                "comparisonId": "tool-comparison-blocked",
+            },
+        )
+        self.assertTrue(blocked["is_error"])
+        self.assertEqual("blocked", blocked["payload"]["visual_verdict"])
+        self.assertEqual("comparison_not_comparable", blocked["payload"]["blocked_reason"])
 
     def test_tool_errors_are_typed_not_raised(self) -> None:
         missing = self.call(

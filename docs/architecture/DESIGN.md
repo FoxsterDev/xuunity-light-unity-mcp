@@ -288,6 +288,63 @@ Compact operator and diagnostic surfaces:
 - `registry-context-report`
 - `registry-prune-contexts`
 
+## Prefab Mutation Contract
+
+`unity.prefab.mutate` is a typed transaction over the Editor API. Three properties
+of that contract are not inferable from the schema and have each cost a real
+session, so they are recorded here.
+
+**Enum properties are index-addressed.** `SerializedProperty` exposes an enum
+through `enumValueIndex`, the ordinal position in `enumNames`, while a caller
+naturally supplies the enum's underlying value — for a TMP font weight, `700` for
+Bold rather than the index. Unity clamps or discards out-of-range input silently,
+so the natural call produced a `status: "applied"` receipt for a write that changed
+nothing. The contract is therefore: `numberValue` on an enum is the member index
+and out-of-range input is refused as `prefab_mutation_enum_value_invalid` naming
+the valid `name=index` pairs; `stringValue` sets the member by name; and the
+receipt's `before`/`after` name the member, so the emitted inverse patch is
+replayable through `stringValue`.
+
+**A write that changed nothing is `no_op`, not `applied`.** Every other guardrail
+on this surface — `expectedSha256`, atomic rollback, `post_validation`,
+`reversible_patch_json` — presumes the change report is truthful, so a
+false-positive receipt defeats all of them at once. Value-setting operations
+compare the serialized value after the write and report `no_op` when it is
+unchanged; the transaction still succeeds, and `no_op_count` carries the total.
+
+**The object-reference policy is split by what the reference points at.** Asset
+references (`Sprite`, `Material`, `TMP_FontAsset`, meshes, ScriptableObjects) are
+writable, addressed by project path or GUID, with an optional sub-asset name for a
+sliced sprite. Component and `GameObject` references stay refused, because that is
+the case where a write could swap a component for another type. The earlier blanket
+refusal of all object references was the only remaining reason to hand-edit prefab
+YAML, and the ordering hazard that came with it — an Editor-API write silently
+overwriting an out-of-band edit from the editor's stale in-memory copy.
+
+That hazard is guarded by the caller's `expectedSha256`, deliberately rather than
+by inference: from inside the editor, a file rewritten by an external tool and a
+file Unity itself reimported are indistinguishable, so an inferred drift check
+refuses legitimate writes. A mismatched precondition fails as
+`prefab_mutation_asset_drifted` naming `unity_project_refresh`; a transaction
+without a precondition reports `drift_guard: "unguarded"` instead of implying the
+check ran.
+
+## Isolated Render Contract
+
+`unity.prefab.render` persists the `ui.read.v1` snapshot it rendered beside the
+capture and returns `snapshot_path`, because `unity_ui_reference_compare` consumes
+a snapshot by path. While the snapshot was returned inline only, a reference
+declaring `acceptance.semantic: "required"` was structurally unsatisfiable outside
+Play mode and reported `not_evaluated / no_ui_snapshot_supplied` forever. The
+inline copy is retained behind `includeSnapshot`, defaulting to off.
+
+`overrides` takes the same typed operation list as the mutation surface and applies
+it to the preview-scene instance only. A UI state that runtime code applies — a
+second popup state, an active nav button — is therefore capturable without touching
+an asset that other projects share. A failing override fails the render rather than
+returning a capture of the un-overridden state, since that capture would be
+evidence for the wrong state.
+
 ## Compile Validation
 
 Compile validation uses Unity:

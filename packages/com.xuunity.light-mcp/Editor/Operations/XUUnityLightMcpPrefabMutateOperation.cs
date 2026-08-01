@@ -54,12 +54,30 @@ namespace XUUnity.LightMcp.Editor.Operations
             if (!string.IsNullOrEmpty(expected)
                 && !string.Equals(expected, payload.sha256_before, StringComparison.OrdinalIgnoreCase))
             {
+                payload.drift_guard = "drifted";
                 payload.errors.Add(XUUnityLightMcpUiTreeBuilder.Diagnostic(
-                    "prefab_mutation_precondition_failed",
-                    "The prefab changed since it was inspected; refusing to apply a stale transaction.",
+                    "prefab_mutation_asset_drifted",
+                    "The prefab file no longer matches the hash this transaction was built against, so the editor's "
+                    + "loaded copy may be stale and applying it could overwrite an out-of-band edit.",
                     $"expected {expected}, observed {payload.sha256_before}"));
-                payload.recommended_next_action = "re_read_the_prefab_then_rebuild_the_transaction";
+                payload.recommended_next_action = "run_unity_project_refresh_then_rebuild_the_transaction";
                 return Respond(request, payload);
+            }
+
+            // A write goes through the editor's in-memory copy. Whether that copy still matches the file
+            // is only decidable from the caller's own expectedSha256: from inside the editor, a file
+            // rewritten by an external tool and a file Unity itself reimported look identical, so an
+            // inferred drift check would refuse legitimate writes. Naming the unguarded case is the
+            // honest alternative to guessing.
+            payload.drift_guard = string.IsNullOrEmpty(expected) ? "unguarded" : "precondition_matched";
+            if (payload.drift_guard == "unguarded")
+            {
+                payload.warnings.Add(XUUnityLightMcpUiTreeBuilder.Diagnostic(
+                    "prefab_mutation_unguarded_by_precondition",
+                    "No expectedSha256 was supplied, so this write cannot detect that the file changed on disk "
+                    + "since it was inspected. Pass the observed hash as expectedSha256, and always run "
+                    + "unity_project_refresh between a raw file edit and the next transaction.",
+                    payload.sha256_before));
             }
 
             RunTransaction(args, loaded, payload);
@@ -77,7 +95,8 @@ namespace XUUnity.LightMcp.Editor.Operations
             {
                 contents = PrefabUtility.LoadPrefabContents(loaded.NormalizedPath);
                 var failure = ApplyOperations(args, contents, allowed, payload);
-                payload.planned_change_count = CountApplied(payload.changes);
+                payload.planned_change_count = CountStatus(payload.changes, "applied");
+                payload.no_op_count = CountStatus(payload.changes, "no_op");
 
                 if (failure != null)
                 {
@@ -111,6 +130,13 @@ namespace XUUnity.LightMcp.Editor.Operations
                 }
 
                 payload.reversible_patch_json = BuildReversiblePatch(payload);
+                if (payload.no_op_count > 0)
+                {
+                    payload.warnings.Add(XUUnityLightMcpUiTreeBuilder.Diagnostic(
+                        "prefab_mutation_no_op_operations",
+                        "Some operations left the serialized value unchanged and are reported as no_op, not applied.",
+                        $"{payload.no_op_count} of {payload.changes.Count}"));
+                }
 
                 if (payload.preview_only)
                 {
@@ -234,12 +260,12 @@ namespace XUUnity.LightMcp.Editor.Operations
                    + "]}";
         }
 
-        static int CountApplied(List<XUUnityLightMcpPrefabMutationChange> changes)
+        static int CountStatus(List<XUUnityLightMcpPrefabMutationChange> changes, string status)
         {
             var count = 0;
             foreach (var change in changes)
             {
-                if (string.Equals(change.status, "applied", StringComparison.Ordinal))
+                if (string.Equals(change.status, status, StringComparison.Ordinal))
                 {
                     count++;
                 }

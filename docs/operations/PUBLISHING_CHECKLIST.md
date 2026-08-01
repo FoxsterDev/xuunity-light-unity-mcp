@@ -21,6 +21,13 @@ Release is blocked until all of the following are true:
 - `python3 scripts/testing/check_public_release_safety.py` passes, with any
   host-local project names listed only in a gitignored local denylist or in
   `XUUNITY_PUBLIC_SAFETY_DENYLIST`
+  Supply one. The gate reports `ok` with `local_denylist_tokens=0` when no denylist
+  exists, which reads as "no private tokens found" but means "nothing was looked
+  for" — three committed public retros carried a consumer project name and a
+  feature codename while it passed. Keep the list in
+  `.xuunity-public-safety-denylist` (gitignored, since the list itself names private
+  things) with the host's project names, feature codenames, and host identity, and
+  check `local_denylist_tokens` in the output is non-zero.
 - the freshness audit for the current release has checked `git log
   --oneline --decorate --since=<last-public-doc-refresh>`, the top
   `CHANGELOG.md` release section, `README.md`, `docs/reference/FEATURES.md`,

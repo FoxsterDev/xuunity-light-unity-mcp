@@ -230,8 +230,11 @@ namespace XUUnity.LightMcp.Tests.EditMode
             CreatePrefab();
 
             var quiet = RunPrefabValidate($"{{\"prefabPath\":\"{_prefabPath}\"}}");
+            // scope=all, because this probe prefab carries only engine components and the default
+            // project_scripts scope exists precisely to keep their default-empty fields out of the report.
             var verbose = RunPrefabValidate(
-                $"{{\"prefabPath\":\"{_prefabPath}\",\"reportUnassignedReferences\":true}}");
+                $"{{\"prefabPath\":\"{_prefabPath}\",\"reportUnassignedReferences\":true,"
+                + "\"unassignedReferenceScope\":\"all\"}");
 
             Assert.That(quiet.inspected_reference_count, Is.GreaterThan(0), "the reference scan must actually run");
             Assert.That(quiet.defect_types, Does.Not.Contain("serialized_reference_unassigned"));

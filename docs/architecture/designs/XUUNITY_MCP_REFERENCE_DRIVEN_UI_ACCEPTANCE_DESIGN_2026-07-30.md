@@ -1,14 +1,14 @@
 # XUUnity MCP Reference-Driven UI Acceptance Design
 
 Date: `2026-07-30`
-Status: `P0.1, P0.2, P1.1, P1.2, P1.3, P2.1, P2.2, P2.3, P3.1, P3.2 implemented; audited externally 2026-07-31, findings closed in v0.3.50`
+Status: `P0.1, P0.2, P1.1, P1.2, P1.3, P2.1, P2.2, P2.3, P3.1, P3.2 implemented; audited externally 2026-07-31, findings closed in v0.3.51`
 
 An independent external audit of this surface found false passes that this document's
 own validation section did not: caller-named result files accepted as editor receipts,
 a mask policy measuring declared pixels while the comparison suppressed whole grid
 cells, a similarity grid that failed the identical design captured at another
 resolution, and a single full-screen region diluting a missing element below the
-floor. See the `v0.3.50` changelog and `scripts/testing/check_audit_regressions.py`,
+floor. See the `v0.3.51` changelog and `scripts/testing/check_audit_regressions.py`,
 which re-runs each finding's reproduction. Read the per-slice validation notes below
 as the state at `v0.3.49`, not as an independent verdict.
 Scope: `Operations/XUUnityLightUnityMcp`

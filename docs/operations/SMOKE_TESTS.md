@@ -647,6 +647,71 @@ Pass criteria:
   `bridge_generation_before`, `bridge_generation_after`, and
   `cold_start_reason`
 
+### 19. Mutation Receipt Honesty Smoke
+
+Every other guardrail on `unity_prefab_mutate` — `expectedSha256`, atomic
+rollback, `post_validation`, `reversible_patch_json` — assumes the change table is
+truthful. A receipt that reports `applied` for a write that changed nothing
+defeats all of them at once, and an operator who does not re-measure the render
+ships the wrong value believing the receipt.
+
+Run four transactions against a throwaway prefab with a managed enum field
+(`Image.m_Type` is a convenient one):
+
+1. `set_serialized_field` writing the value the field already holds
+2. `set_serialized_field` on the enum with `numberValue` out of range
+3. `set_serialized_field` on the enum with `stringValue` naming a real member
+4. `set_serialized_field` on the enum with `stringValue` naming no member
+
+Pass criteria:
+
+- case 1 reports `status: "no_op"` for that operation, never `applied`; the
+  transaction still succeeds; `no_op_count` is `1` and `planned_change_count`
+  excludes it; a `prefab_mutation_no_op_operations` warning is present
+- case 2 fails as `prefab_mutation_enum_value_invalid`, the whole batch rolls
+  back, and the message states that `numberValue` is the member index and lists
+  the valid `name=index` pairs
+- case 3 applies, and `before`/`after` name the enum members rather than
+  indices, so `reversible_patch_json` carries a `restoreValue` that can be
+  replayed through `stringValue`
+- case 4 fails as `prefab_mutation_enum_value_invalid` and lists the valid
+  members
+- a transaction that supplies no `expectedSha256` reports
+  `drift_guard: "unguarded"` plus a `prefab_mutation_unguarded_by_precondition`
+  warning carrying the observed hash; one that supplies a stale hash fails as
+  `prefab_mutation_asset_drifted` and names `unity_project_refresh` as the remedy
+
+### 20. Render-To-Semantic-Lane Smoke
+
+A snapshot returned inline only cannot close the semantic acceptance lane,
+because `unity_ui_reference_compare` consumes a snapshot by path. Before this was
+fixed, a reference declaring `acceptance.semantic: "required"` was unsatisfiable
+outside Play mode and reported `not_evaluated / no_ui_snapshot_supplied` forever.
+
+Register a reference with `acceptance.semantic: "required"` and at least one
+`requiredUi` selector, then run `unity_prefab_render` on the prefab and feed the
+result straight into `unity_ui_reference_compare`.
+
+Pass criteria:
+
+- the render returns a non-empty `snapshot_path`, the file exists beside the
+  capture with a `.ui-snapshot.json` suffix, and it parses as a complete
+  `xuunity.ui.read.v1` payload with the rendered nodes and `target.capture_width`
+  / `target.capture_height`
+- `includeSnapshot` defaults to `false`, so the response does not carry the node
+  list
+- passing that `snapshot_path` as `uiSnapshotPath` moves the semantic lane off
+  `not_evaluated` with no Play-mode run
+- rendering a second UI state through `overrides` needs zero mutations: the
+  response reports `applied_overrides`, and the prefab's `sha256` is unchanged
+  afterwards
+- an override that cannot resolve fails the render as
+  `prefab_render_override_failed` and returns no `screenshot_path`, because a
+  capture of the un-overridden state is evidence for the wrong state
+- a comparison that ran returns a successful envelope even when
+  `reference_acceptance` is `failed` or `pending_lanes`; only a comparison that
+  could not compute a visual verdict belongs on the error channel
+
 ## Public Template Assets
 
 Generic example scenario JSON templates live under:

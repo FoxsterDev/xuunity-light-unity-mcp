@@ -45,12 +45,51 @@ namespace XUUnity.LightMcp.Editor.Operations
                 }
             }
 
+            var excludePattern = (args.excludePattern ?? "").Trim();
+            Regex compiledExclude = null;
+            if (args.regex && excludePattern.Length > 0)
+            {
+                try
+                {
+                    compiledExclude = new Regex(excludePattern, options);
+                }
+                catch (ArgumentException ex)
+                {
+                    return XUUnityLightMcpResponseWriter.Error(
+                        request.request_id,
+                        "invalid_regex",
+                        $"unity.console.grep excludePattern is invalid: {ex.Message}");
+                }
+            }
+
             var includeTypes = NormalizeIncludeTypes(args.includeTypes);
             var allItems = XUUnityLightMcpConsoleBuffer.Snapshot();
-            var matches = allItems
+            var candidates = allItems
                 .Where(item => includeTypes.Contains(item.type))
                 .Where(item => IsMatch(item, args, pattern, compiledRegex))
                 .ToList();
+
+            var excludedCount = 0;
+            var buildPipelineSuppressedCount = 0;
+            var matches = new List<XUUnityLightMcpConsoleItem>(candidates.Count);
+            foreach (var item in candidates)
+            {
+                if (excludePattern.Length > 0 && IsExcluded(item, args, excludePattern, compiledExclude))
+                {
+                    excludedCount++;
+                    continue;
+                }
+
+                if (!args.includeBuildPipelineNoise
+                    && XUUnityLightMcpConsoleNoise.IsBuildPipelineProgress(item.message))
+                {
+                    buildPipelineSuppressedCount++;
+                    continue;
+                }
+
+                matches.Add(item);
+            }
+
             var matchCount = matches.Count;
 
             var truncated = matches.Count > limit;
@@ -76,9 +115,12 @@ namespace XUUnity.LightMcp.Editor.Operations
             {
                 project_root = XUUnityLightMcpFileIpcPaths.ProjectRootPath,
                 pattern = pattern,
+                exclude_pattern = excludePattern,
                 regex = args.regex,
                 ignore_case = args.ignoreCase,
                 match_count = matchCount,
+                excluded_count = excludedCount,
+                build_pipeline_suppressed_count = buildPipelineSuppressedCount,
                 items = matches,
                 truncated = truncated
             };
@@ -92,10 +134,27 @@ namespace XUUnity.LightMcp.Editor.Operations
 
         static bool IsMatch(XUUnityLightMcpConsoleItem item, XUUnityLightMcpConsoleGrepArgs args, string pattern, Regex compiledRegex)
         {
-            var haystack = args.includeStackTraces
+            return Contains(Haystack(item, args), args, pattern, compiledRegex);
+        }
+
+        static bool IsExcluded(
+            XUUnityLightMcpConsoleItem item,
+            XUUnityLightMcpConsoleGrepArgs args,
+            string excludePattern,
+            Regex compiledExclude)
+        {
+            return Contains(Haystack(item, args), args, excludePattern, compiledExclude);
+        }
+
+        static string Haystack(XUUnityLightMcpConsoleItem item, XUUnityLightMcpConsoleGrepArgs args)
+        {
+            return args.includeStackTraces
                 ? $"{item.message ?? ""}\n{item.stack_trace ?? ""}"
                 : item.message ?? "";
+        }
 
+        static bool Contains(string haystack, XUUnityLightMcpConsoleGrepArgs args, string pattern, Regex compiledRegex)
+        {
             if (args.regex)
             {
                 return compiledRegex != null && compiledRegex.IsMatch(haystack);

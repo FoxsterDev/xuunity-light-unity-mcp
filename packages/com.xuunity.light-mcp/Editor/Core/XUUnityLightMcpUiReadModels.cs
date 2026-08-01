@@ -25,6 +25,9 @@ namespace XUUnity.LightMcp.Editor.Core
         public const int DefaultMaxDepth = 12;
         public const int DefaultMaxNodes = 500;
         public const int DefaultMaxMatches = 20;
+
+        public const string DefaultUnassignedReferenceScope = "project_scripts";
+        public const string SnapshotArtifactSuffix = ".ui-snapshot.json";
     }
 
     [Serializable]
@@ -161,6 +164,7 @@ namespace XUUnity.LightMcp.Editor.Core
         public int max_nodes;
         public bool truncated;
         public string truncation_reason = "";
+        public string snapshot_path = "";
         public List<XUUnityLightMcpUiDiagnostic> warnings = new();
         public List<XUUnityLightMcpUiDiagnostic> errors = new();
         public string validation_evidence = "unity_mcp";
@@ -205,6 +209,9 @@ namespace XUUnity.LightMcp.Editor.Core
         public bool includeBounds;
         public bool includeText = true;
         public bool reportUnassignedReferences;
+        public string unassignedReferenceScope = XUUnityLightMcpUiRead.DefaultUnassignedReferenceScope;
+        public bool writeSnapshot = true;
+        public string snapshotOutputPath = "";
     }
 
     [Serializable]
@@ -317,10 +324,15 @@ namespace XUUnity.LightMcp.Editor.Core
         public int referenceHeight;
         public float scalerMatch = 0.5f;
         public int antiAliasing = 1;
-        public bool includeSnapshot = true;
+        public bool includeSnapshot;
+        public bool writeSnapshot = true;
+        public string snapshotOutputPath = "";
         public int maxDepth = XUUnityLightMcpUiRead.DefaultMaxDepth;
         public int maxNodes = XUUnityLightMcpUiRead.DefaultMaxNodes;
         public bool includeInactive;
+        public XUUnityLightMcpPrefabMutationOperation[] overrides =
+            Array.Empty<XUUnityLightMcpPrefabMutationOperation>();
+        public string[] allowedComponentTypes = Array.Empty<string>();
     }
 
     [Serializable]
@@ -346,7 +358,10 @@ namespace XUUnity.LightMcp.Editor.Core
         public int reference_width;
         public int reference_height;
         public double render_duration_seconds;
+        public string snapshot_path = "";
         public XUUnityLightMcpUiTreePayload snapshot;
+        public int requested_override_count;
+        public List<XUUnityLightMcpPrefabMutationChange> applied_overrides = new();
         public List<XUUnityLightMcpUiDiagnostic> warnings = new();
         public List<XUUnityLightMcpUiDiagnostic> errors = new();
         public string validation_evidence = "unity_mcp";
@@ -382,6 +397,7 @@ namespace XUUnity.LightMcp.Editor.Core
         public float w;
         public string templatePath = "";
         public string childName = "";
+        public string assetSubAssetName = "";
     }
 
     [Serializable]
@@ -427,11 +443,13 @@ namespace XUUnity.LightMcp.Editor.Core
         public string sha256_before = "";
         public string sha256_after = "";
         public bool preview_only = true;
+        public string drift_guard = "not_evaluated";
         public bool applied;
         public bool rolled_back;
         public string rollback_reason = "";
         public int requested_operation_count;
         public int planned_change_count;
+        public int no_op_count;
         public List<XUUnityLightMcpPrefabMutationChange> changes = new();
         public XUUnityLightMcpPrefabValidatePayload post_validation;
         public string reversible_patch_json = "";
@@ -459,6 +477,9 @@ namespace XUUnity.LightMcp.Editor.Core
         public int inspected_component_count;
         public int inspected_reference_count;
         public int unverified_reference_count;
+        public string unassigned_reference_scope = "not_reported";
+        public int unassigned_reference_count;
+        public int unassigned_reference_suppressed_count;
         public List<XUUnityLightMcpPrefabDefect> defects = new();
         public List<string> defect_types = new();
         public List<string> lanes_not_evaluated = new();

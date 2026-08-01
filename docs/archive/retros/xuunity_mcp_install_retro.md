@@ -4,7 +4,7 @@
 **Successful End-to-End Installation, Verification, and Android Compilation of XUUnity MCP**
 
 ## 2. Executive Summary
-The installation and verification of XUUnity Light Unity MCP (`v0.3.21`) in the `AI Sudoku` project completed successfully. The project was prepared offline, verified online via TCP loopback transport, and subjected to EditMode test execution and batch compilation for the Android build target. All operations completed cleanly without issues.
+The installation and verification of XUUnity Light Unity MCP (`v0.3.21`) in a consumer Unity project completed successfully. The project was prepared offline, verified online via TCP loopback transport, and subjected to EditMode test execution and batch compilation for the Android build target. All operations completed cleanly without issues.
 
 ## 3. Environment Table
 | Parameter | Value |
@@ -18,7 +18,7 @@ The installation and verification of XUUnity Light Unity MCP (`v0.3.21`) in the 
 
 ## 4. Project Topology
 - **Workspace Layout**: Single-project repository
-- **Project Path**: `<workspace>/AI Sudoku`
+- **Project Path**: `<workspace>/<UnityProject>`
 - **Unity version**: `6000.3.3f1` (Unity 6)
 
 ## 5. Installation Route Attempted

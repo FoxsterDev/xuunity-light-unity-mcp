@@ -254,5 +254,53 @@ class BridgeOperationCoverageTest(unittest.TestCase):
             self.assertIn(operation, registered)
 
 
+class BuildPipelineNoisePatternTest(unittest.TestCase):
+    """`unity_console_grep` suppresses build-pipeline chatter on two independent lanes.
+
+    The console-buffer lane filters in C#, the Editor.log lane filters in Python. If the two patterns
+    drift, the same grep suppresses different lines depending on which source the caller picked, and a
+    real defect can be visible on one lane and hidden on the other.
+    """
+
+    def test_both_lanes_use_the_same_pattern(self) -> None:
+        import server_health
+
+        noise_source = (EDITOR_ROOT / "Core" / "XUUnityLightMcpConsoleNoise.cs").read_text(
+            encoding="utf-8"
+        )
+        match = re.search(
+            r"BuildPipelineProgressPattern\s*=\s*\n?\s*@\"(?P<pattern>.+?)\";",
+            noise_source,
+            re.DOTALL,
+        )
+        self.assertIsNotNone(match, "the editor pattern constant could not be read")
+        self.assertEqual(
+            match.group("pattern"),
+            server_health.BUILD_PIPELINE_PROGRESS_PATTERN,
+            "the C# console lane and the Python Editor.log lane must suppress the same lines",
+        )
+
+    def test_the_pattern_suppresses_the_observed_noise_and_keeps_real_findings(self) -> None:
+        import server_health
+
+        # The feature keyword is the point: a compile job named after the feature makes every
+        # CopyFiles line match a grep for it, which is how 159 matches hid an answer of zero.
+        for noisy in (
+            "CopyFiles Library/Bee/artifacts/RewardPopup-Android/RewardPopup.dll",
+            "  CopyDirs Library/Bee/artifacts",
+            "[12/431 ...] CopyFiles something",
+        ):
+            self.assertIsNotNone(
+                server_health.BUILD_PIPELINE_PROGRESS.search(noisy),
+                noisy,
+            )
+        for real in (
+            "NullReferenceException: RewardPopupPresenter.Show",
+            "Assets/Scripts/RewardPopup.cs(42,9): error CS0103",
+            "RewardPopup opened",
+        ):
+            self.assertIsNone(server_health.BUILD_PIPELINE_PROGRESS.search(real), real)
+
+
 if __name__ == "__main__":
     unittest.main()

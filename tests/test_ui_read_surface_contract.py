@@ -123,7 +123,7 @@ class UiReadSurfaceContractTest(unittest.TestCase):
         self.assertIn("disabled_missing_dependency", text)
         self.assertIn("XUUnityLightMcpCapabilityRegistry.BuildRegisteredCapabilityOrNull(capabilityId)", text)
 
-    def test_mutation_never_reaches_for_raw_yaml_or_object_references(self) -> None:
+    def test_mutation_never_reaches_for_raw_yaml(self) -> None:
         mutator = read(EDITOR_ROOT / "Helpers" / "XUUnityLightMcpPrefabMutator.cs")
         operation = read(EDITOR_ROOT / "Operations" / "XUUnityLightMcpPrefabMutateOperation.cs")
 
@@ -131,12 +131,64 @@ class UiReadSurfaceContractTest(unittest.TestCase):
         self.assertNotIn("File.WriteAllText", operation)
         self.assertIn("PrefabUtility.LoadPrefabContents(", operation)
         self.assertIn("PrefabUtility.UnloadPrefabContents(", operation)
+
+    def test_asset_references_are_writable_but_scene_bound_ones_are_not(self) -> None:
+        """The guardrail is 'no component swap', not 'no object reference'.
+
+        Refusing asset references is what forced operators onto raw prefab YAML, and the drift that
+        came with it; refusing component/GameObject references is what stops a component being
+        swapped for another type.
+        """
+
+        mutator = read(EDITOR_ROOT / "Helpers" / "XUUnityLightMcpPrefabMutator.cs")
         self.assertIn("SerializedPropertyType.ObjectReference", mutator)
+        self.assertIn("TryAssignObjectReference(", mutator)
+        self.assertIn("IsSceneBoundReferenceType(", mutator)
+        self.assertIn("asset is Component || asset is GameObject", mutator)
+        self.assertIn("prefab_mutation_asset_type_mismatch", mutator)
+        self.assertIn("prefab_mutation_asset_not_found", mutator)
         self.assertIn(
-            "only sets string, bool, int, float, enum, color, Vector2, and Vector3 fields",
+            "can never be swapped for another type",
             mutator,
-            "object-reference assignment must stay refused so a component cannot be swapped for another type",
+            "the component-swap refusal must stay stated where the policy is enforced",
         )
+
+    def test_a_write_that_changed_nothing_is_not_reported_as_applied(self) -> None:
+        """A mutation receipt that says applied for an unchanged value defeats every other guardrail
+        on this surface: expectedSha256, atomic rollback, post_validation and the inverse patch all
+        presume the change report is truthful."""
+
+        mutator = read(EDITOR_ROOT / "Helpers" / "XUUnityLightMcpPrefabMutator.cs")
+        operation = read(EDITOR_ROOT / "Operations" / "XUUnityLightMcpPrefabMutateOperation.cs")
+        models = read(EDITOR_ROOT / "Core" / "XUUnityLightMcpUiReadModels.cs")
+
+        self.assertIn("ResolveWriteStatus(change)", mutator)
+        self.assertIn('"no_op" : "applied"', mutator)
+        self.assertIn('CountStatus(payload.changes, "no_op")', operation)
+        self.assertIn("public int no_op_count;", models)
+
+    def test_enum_properties_are_addressed_by_index_or_member_name(self) -> None:
+        mutator = read(EDITOR_ROOT / "Helpers" / "XUUnityLightMcpPrefabMutator.cs")
+        self.assertIn("prefab_mutation_enum_value_invalid", mutator)
+        self.assertIn("property.enumNames", mutator)
+        self.assertIn("is the member index, not the enum's ", mutator)
+
+    def test_mutation_refuses_a_prefab_that_drifted_and_names_an_unguarded_write(self) -> None:
+        """Drift is only decidable from the caller's own expectedSha256.
+
+        From inside the editor a file rewritten by an external tool and a file Unity itself reimported
+        look identical, so an inferred drift check refuses legitimate writes. The surface therefore
+        refuses a mismatched precondition and, when none was supplied, says so instead of implying the
+        check ran.
+        """
+
+        operation = read(EDITOR_ROOT / "Operations" / "XUUnityLightMcpPrefabMutateOperation.cs")
+        models = read(EDITOR_ROOT / "Core" / "XUUnityLightMcpUiReadModels.cs")
+
+        self.assertIn("prefab_mutation_asset_drifted", operation)
+        self.assertIn("run_unity_project_refresh_then_rebuild_the_transaction", operation)
+        self.assertIn("prefab_mutation_unguarded_by_precondition", operation)
+        self.assertIn("public string drift_guard", models)
 
     def test_click_refuses_before_it_delivers(self) -> None:
         text = read(EDITOR_ROOT / "Ugui" / "XUUnityLightMcpUiClickOperation.cs")
@@ -160,6 +212,49 @@ class UiReadSurfaceContractTest(unittest.TestCase):
         self.assertIn("HideFlags.HideAndDontSave", text)
         self.assertNotIn("EditorSceneManager.SaveScene", text)
         self.assertNotIn("EditorSceneManager.OpenScene", text)
+
+    def test_transient_render_overrides_never_reach_the_asset(self) -> None:
+        """Rendering a runtime-driven second UI state must not cost a mutate/restore pair on an asset
+        that other projects share."""
+
+        text = read(EDITOR_ROOT / "Ugui" / "XUUnityLightMcpPrefabRenderOperation.cs")
+        self.assertIn("TryApplyOverrides(", text)
+        self.assertIn("XUUnityLightMcpPrefabMutator.Apply(instance,", text)
+        self.assertIn("prefab_render_override_failed", text)
+        self.assertNotIn("PrefabUtility.SaveAsPrefabAsset", text)
+        self.assertNotIn("PrefabUtility.ApplyPrefabInstance", text)
+
+    def test_snapshots_are_persisted_as_artifacts_not_inline_only(self) -> None:
+        """unity_ui_reference_compare consumes a snapshot by path, so an inline-only snapshot leaves
+        acceptance.semantic=required permanently not_evaluated on the isolated-render lane."""
+
+        render = read(EDITOR_ROOT / "Ugui" / "XUUnityLightMcpPrefabRenderOperation.cs")
+        prefab_ops = read(EDITOR_ROOT / "Operations" / "XUUnityLightMcpPrefabOperations.cs")
+        models = read(EDITOR_ROOT / "Core" / "XUUnityLightMcpUiReadModels.cs")
+
+        for text in (render, prefab_ops):
+            self.assertIn("XUUnityLightMcpUiSnapshotArtifact.Write(", text)
+        self.assertIn("public string snapshot_path", models)
+        self.assertIn('SnapshotArtifactSuffix = ".ui-snapshot.json"', models)
+
+        render_spec = server_specs.TOOLS["unity_prefab_render"]["inputSchema"]["properties"]
+        self.assertTrue(render_spec["writeSnapshot"]["default"])
+        self.assertFalse(
+            render_spec["includeSnapshot"]["default"],
+            "the inline copy is large and unusable by the consumer tool; the path is the product",
+        )
+
+    def test_unassigned_reference_report_is_scoped_by_default(self) -> None:
+        inspector = read(EDITOR_ROOT / "Helpers" / "XUUnityLightMcpPrefabInspector.cs")
+        self.assertIn("NormalizeUnassignedScope(", inspector)
+        self.assertIn("IsProjectScript(", inspector)
+        self.assertIn("unassigned_reference_suppressed_count", inspector)
+
+        scope = server_specs.TOOLS["unity_prefab_validate"]["inputSchema"]["properties"][
+            "unassignedReferenceScope"
+        ]
+        self.assertEqual(["project_scripts", "required", "all"], scope["enum"])
+        self.assertEqual("project_scripts", scope["default"])
 
     def test_new_operations_are_capability_mapped(self) -> None:
         mapped = capability_map()

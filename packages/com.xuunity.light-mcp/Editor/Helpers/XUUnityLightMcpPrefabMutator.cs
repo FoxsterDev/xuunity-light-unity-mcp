@@ -223,15 +223,15 @@ namespace XUUnity.LightMcp.Editor.Helpers
             }
 
             change.before = DescribeProperty(property);
-            if (!TryAssign(property, operation, out var assignError))
+            if (!TryAssign(property, operation, out var assignErrorCode, out var assignError))
             {
-                return Fail(change, "prefab_mutation_value_incompatible", assignError);
+                return Fail(change, assignErrorCode, assignError);
             }
 
             serialized.ApplyModifiedPropertiesWithoutUndo();
             change.after = DescribeProperty(property);
             change.inverse_op = "set_serialized_field";
-            change.status = "applied";
+            change.status = ResolveWriteStatus(change);
             return change;
         }
 
@@ -277,7 +277,7 @@ namespace XUUnity.LightMcp.Editor.Helpers
             change.after = DescribeRect(rect, field);
             change.component_type = "RectTransform";
             change.inverse_op = "set_rect_transform";
-            change.status = "applied";
+            change.status = ResolveWriteStatus(change);
             return change;
         }
 
@@ -322,7 +322,7 @@ namespace XUUnity.LightMcp.Editor.Helpers
             }
 
             change.inverse_op = "set_canvas_group";
-            change.status = "applied";
+            change.status = ResolveWriteStatus(change);
             return change;
         }
 
@@ -335,7 +335,7 @@ namespace XUUnity.LightMcp.Editor.Helpers
             target.gameObject.SetActive(operation.boolValue);
             change.after = target.gameObject.activeSelf ? "true" : "false";
             change.inverse_op = "set_active";
-            change.status = "applied";
+            change.status = ResolveWriteStatus(change);
             return change;
         }
 
@@ -539,8 +539,10 @@ namespace XUUnity.LightMcp.Editor.Helpers
         static bool TryAssign(
             SerializedProperty property,
             XUUnityLightMcpPrefabMutationOperation operation,
+            out string errorCode,
             out string error)
         {
+            errorCode = "prefab_mutation_value_incompatible";
             error = "";
             switch (property.propertyType)
             {
@@ -566,15 +568,272 @@ namespace XUUnity.LightMcp.Editor.Helpers
                     property.vector3Value = new Vector3(operation.x, operation.y, operation.z);
                     return true;
                 case SerializedPropertyType.Enum:
-                    property.enumValueIndex = (int)Math.Round(operation.numberValue);
-                    return true;
+                    return TryAssignEnum(property, operation, out errorCode, out error);
+                case SerializedPropertyType.ObjectReference:
+                    return TryAssignObjectReference(property, operation, out errorCode, out error);
                 default:
                     error =
                         $"Property '{property.propertyPath}' is a {property.propertyType}; this transaction API "
-                        + "only sets string, bool, int, float, enum, color, Vector2, and Vector3 fields. Object "
-                        + "references are intentionally excluded so a component can never be swapped for another type.";
+                        + "only sets string, bool, int, float, enum, color, Vector2, Vector3, and asset-typed "
+                        + "object-reference fields.";
                     return false;
             }
+        }
+
+        static bool TryAssignEnum(
+            SerializedProperty property,
+            XUUnityLightMcpPrefabMutationOperation operation,
+            out string errorCode,
+            out string error)
+        {
+            errorCode = "prefab_mutation_enum_value_invalid";
+            error = "";
+            var names = property.enumNames ?? Array.Empty<string>();
+            var requestedName = (operation.stringValue ?? "").Trim();
+            if (requestedName.Length > 0)
+            {
+                var byName = IndexOfEnumName(names, requestedName);
+                if (byName < 0)
+                {
+                    error =
+                        $"'{requestedName}' is not a member of enum property '{property.propertyPath}'. "
+                        + DescribeEnumMembers(names);
+                    return false;
+                }
+
+                property.enumValueIndex = byName;
+                errorCode = "";
+                return true;
+            }
+
+            var requestedIndex = (int)Math.Round(operation.numberValue);
+            if (requestedIndex < 0 || requestedIndex >= names.Length)
+            {
+                error =
+                    $"numberValue on enum property '{property.propertyPath}' is the member index, not the enum's "
+                    + $"underlying value, and {requestedIndex} is out of range. " + DescribeEnumMembers(names)
+                    + " Pass stringValue to set it by name instead.";
+                return false;
+            }
+
+            property.enumValueIndex = requestedIndex;
+            errorCode = "";
+            return true;
+        }
+
+        static bool TryAssignObjectReference(
+            SerializedProperty property,
+            XUUnityLightMcpPrefabMutationOperation operation,
+            out string errorCode,
+            out string error)
+        {
+            errorCode = "prefab_mutation_value_incompatible";
+            error = "";
+            var declared = XUUnityLightMcpPrefabInspector.DeclaredTypeName(property.type);
+            if (IsSceneBoundReferenceType(declared))
+            {
+                error =
+                    $"Property '{property.propertyPath}' holds a {declared} reference. Component and GameObject "
+                    + "references stay out of scope so a component can never be swapped for another type; only "
+                    + "asset-typed references such as Sprite, Material, or TMP_FontAsset are writable.";
+                return false;
+            }
+
+            if (string.Equals((operation.valueKind ?? "").Trim(), "null", StringComparison.OrdinalIgnoreCase))
+            {
+                property.objectReferenceValue = null;
+                return true;
+            }
+
+            var requested = (operation.stringValue ?? "").Trim();
+            if (requested.Length == 0)
+            {
+                errorCode = "prefab_mutation_asset_reference_required";
+                error =
+                    $"Property '{property.propertyPath}' is an asset reference; pass stringValue as a "
+                    + "project-relative asset path or a 32-character asset GUID, with the optional "
+                    + "assetSubAssetName for a sub-asset. Use valueKind=\"null\" to clear it.";
+                return false;
+            }
+
+            SplitAssetReference(requested, operation.assetSubAssetName, out var target, out var subAsset);
+            if (!TryLoadAssetObject(target, subAsset, out var asset, out var loadError))
+            {
+                errorCode = "prefab_mutation_asset_not_found";
+                error = loadError;
+                return false;
+            }
+
+            if (asset is Component || asset is GameObject)
+            {
+                error =
+                    $"'{requested}' resolves to a {asset.GetType().Name}. Component and GameObject references stay "
+                    + "out of scope so a component can never be swapped for another type.";
+                return false;
+            }
+
+            if (!string.IsNullOrEmpty(declared)
+                && !XUUnityLightMcpPrefabInspector.TypeChainContains(asset.GetType(), declared))
+            {
+                errorCode = "prefab_mutation_asset_type_mismatch";
+                error =
+                    $"'{requested}' is a {asset.GetType().Name}, which is not in the type chain of the declared "
+                    + $"{declared} field '{property.propertyPath}'.";
+                return false;
+            }
+
+            property.objectReferenceValue = asset;
+            return true;
+        }
+
+        static void SplitAssetReference(
+            string requested,
+            string declaredSubAssetName,
+            out string target,
+            out string subAssetName)
+        {
+            target = requested;
+            subAssetName = (declaredSubAssetName ?? "").Trim();
+            if (subAssetName.Length > 0)
+            {
+                return;
+            }
+
+            var separator = requested.LastIndexOf('#');
+            if (separator <= 0 || separator >= requested.Length - 1)
+            {
+                return;
+            }
+
+            target = requested.Substring(0, separator);
+            subAssetName = requested.Substring(separator + 1);
+        }
+
+        static bool TryLoadAssetObject(
+            string requested,
+            string subAssetName,
+            out UnityEngine.Object asset,
+            out string error)
+        {
+            asset = null;
+            error = "";
+            var path = LooksLikeAssetGuid(requested)
+                ? AssetDatabase.GUIDToAssetPath(requested)
+                : requested.Replace('\\', '/');
+            if (string.IsNullOrEmpty(path))
+            {
+                error = $"GUID '{requested}' does not resolve to an asset path in this project.";
+                return false;
+            }
+
+            var wantedSubAsset = (subAssetName ?? "").Trim();
+            if (wantedSubAsset.Length == 0)
+            {
+                asset = AssetDatabase.LoadMainAssetAtPath(path);
+                if (asset == null)
+                {
+                    error = $"No asset could be loaded at '{path}'.";
+                    return false;
+                }
+
+                return true;
+            }
+
+            foreach (var candidate in AssetDatabase.LoadAllAssetsAtPath(path))
+            {
+                if (candidate == null)
+                {
+                    continue;
+                }
+
+                if (string.Equals(candidate.name, wantedSubAsset, StringComparison.Ordinal))
+                {
+                    asset = candidate;
+                    return true;
+                }
+            }
+
+            error = $"'{path}' has no sub-asset named '{wantedSubAsset}'.";
+            return false;
+        }
+
+        static bool LooksLikeAssetGuid(string value)
+        {
+            if (value == null || value.Length != 32)
+            {
+                return false;
+            }
+
+            foreach (var character in value)
+            {
+                var isHex = (character >= '0' && character <= '9')
+                            || (character >= 'a' && character <= 'f')
+                            || (character >= 'A' && character <= 'F');
+                if (!isHex)
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        static bool IsSceneBoundReferenceType(string declared)
+        {
+            if (string.IsNullOrEmpty(declared))
+            {
+                return false;
+            }
+
+            if (string.Equals(declared, "GameObject", StringComparison.Ordinal))
+            {
+                return true;
+            }
+
+            var type = ResolveComponentType(declared);
+            return type != null;
+        }
+
+        static int IndexOfEnumName(string[] names, string wanted)
+        {
+            for (var index = 0; index < names.Length; index++)
+            {
+                if (string.Equals(names[index], wanted, StringComparison.Ordinal))
+                {
+                    return index;
+                }
+            }
+
+            for (var index = 0; index < names.Length; index++)
+            {
+                if (string.Equals(names[index], wanted, StringComparison.OrdinalIgnoreCase))
+                {
+                    return index;
+                }
+            }
+
+            return -1;
+        }
+
+        static string DescribeEnumMembers(string[] names)
+        {
+            if (names.Length == 0)
+            {
+                return "The property reports no enum members.";
+            }
+
+            var described = new List<string>(names.Length);
+            for (var index = 0; index < names.Length; index++)
+            {
+                described.Add($"{names[index]}={index}");
+            }
+
+            return "Valid members (name=index): " + string.Join(", ", described) + ".";
+        }
+
+        static string ResolveWriteStatus(XUUnityLightMcpPrefabMutationChange change)
+        {
+            return string.Equals(change.before, change.after, StringComparison.Ordinal) ? "no_op" : "applied";
         }
 
         static string DescribeProperty(SerializedProperty property)
@@ -585,15 +844,38 @@ namespace XUUnity.LightMcp.Editor.Helpers
                 SerializedPropertyType.Boolean => property.boolValue ? "true" : "false",
                 SerializedPropertyType.Integer => property.intValue.ToString(CultureInfo.InvariantCulture),
                 SerializedPropertyType.Float => property.floatValue.ToString("0.####", CultureInfo.InvariantCulture),
-                SerializedPropertyType.Enum => property.enumValueIndex.ToString(CultureInfo.InvariantCulture),
+                SerializedPropertyType.Enum => DescribeEnumValue(property),
                 SerializedPropertyType.Color => property.colorValue.ToString(),
                 SerializedPropertyType.Vector2 => property.vector2Value.ToString(),
                 SerializedPropertyType.Vector3 => property.vector3Value.ToString(),
-                SerializedPropertyType.ObjectReference => property.objectReferenceValue != null
-                    ? property.objectReferenceValue.name
-                    : "<null>",
+                SerializedPropertyType.ObjectReference => DescribeObjectReference(property.objectReferenceValue),
                 _ => property.propertyType.ToString(),
             };
+        }
+
+        static string DescribeEnumValue(SerializedProperty property)
+        {
+            var names = property.enumNames ?? Array.Empty<string>();
+            var index = property.enumValueIndex;
+            return index >= 0 && index < names.Length
+                ? names[index]
+                : index.ToString(CultureInfo.InvariantCulture);
+        }
+
+        static string DescribeObjectReference(UnityEngine.Object value)
+        {
+            if (value == null)
+            {
+                return "<null>";
+            }
+
+            var path = AssetDatabase.GetAssetPath(value);
+            if (string.IsNullOrEmpty(path))
+            {
+                return value.name ?? "";
+            }
+
+            return AssetDatabase.IsMainAsset(value) ? path : $"{path}#{value.name}";
         }
 
         static string DescribeRect(RectTransform rect, string field)

@@ -675,6 +675,15 @@ TOOLS: dict[str, dict[str, Any]] = {
                     "description": "Prefab assets are not in a Canvas, so bounds are layout-local, not screen pixels."
                 },
                 "includeText": {"type": "boolean", "default": True},
+                "writeSnapshot": {
+                    "type": "boolean",
+                    "default": True,
+                    "description": "Persist the ui.read.v1 snapshot and return snapshot_path, so it can be passed to unity_ui_reference_compare as uiSnapshotPath."
+                },
+                "snapshotOutputPath": {
+                    "type": "string",
+                    "description": "Defaults to the project's MCP captures directory."
+                },
                 "timeoutMs": {"type": "integer", "default": 30000, "minimum": 1000}
             },
             "required": ["projectRoot", "prefabPath"]
@@ -696,7 +705,13 @@ TOOLS: dict[str, dict[str, Any]] = {
                 "reportUnassignedReferences": {
                     "type": "boolean",
                     "default": False,
-                    "description": "Also report empty serialized references as info-level findings."
+                    "description": "Also report empty serialized references as info-level findings, scoped by unassignedReferenceScope."
+                },
+                "unassignedReferenceScope": {
+                    "type": "string",
+                    "enum": ["project_scripts", "required", "all"],
+                    "default": "project_scripts",
+                    "description": "project_scripts reports unfilled [SerializeField] members of components whose script lives under Assets/, which is the wiring bug operators care about; required narrows that to fields carrying a Required* attribute (empty when the project uses no such convention); all also reports uGUI/TMP fields that are empty by default. unassigned_reference_suppressed_count always reports what the scope hid."
                 },
                 "timeoutMs": {"type": "integer", "default": 30000, "minimum": 1000}
             },
@@ -707,9 +722,11 @@ TOOLS: dict[str, dict[str, Any]] = {
         "bridgeOperation": "unity.prefab.render",
         "description": (
             "Render a prefab in an isolated preview scene under a controlled Canvas at the declared viewport and "
-            "safe area, without booting the application. Returns both the PNG and the ui.read.v1 snapshot it "
-            "rendered, so the capture can go straight into unity_ui_reference_compare with uiSnapshotPath. "
-            "Non-persistent: the preview scene is closed and no open scene is modified. Requires com.unity.ugui."
+            "safe area, without booting the application. Writes the PNG and the ui.read.v1 snapshot beside it, and "
+            "returns screenshot_path plus snapshot_path, so the capture closes both the visual and the semantic "
+            "acceptance lane through unity_ui_reference_compare with no Play-mode run. Pass overrides to capture a "
+            "second runtime-driven UI state without touching the asset. Non-persistent: the preview scene is closed "
+            "and no open scene is modified. Requires com.unity.ugui."
         ),
         "inputSchema": {
             "type": "object",
@@ -728,7 +745,30 @@ TOOLS: dict[str, dict[str, Any]] = {
                 "referenceHeight": {"type": "integer"},
                 "scalerMatch": {"type": "number", "default": 0.5},
                 "antiAliasing": {"type": "integer", "enum": [1, 2, 4, 8], "default": 1},
-                "includeSnapshot": {"type": "boolean", "default": True},
+                "overrides": {
+                    "type": "array",
+                    "items": {"type": "object"},
+                    "description": "Transient unity_prefab_mutate operations applied to the preview-scene instance only and never written to the asset, for rendering a UI state that runtime code normally applies. Reported back as applied_overrides; a failing override fails the render instead of capturing the un-overridden state."
+                },
+                "allowedComponentTypes": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Extra component types the transient overrides may add or remove, on top of the built-in layout allowlist."
+                },
+                "writeSnapshot": {
+                    "type": "boolean",
+                    "default": True,
+                    "description": "Persist the ui.read.v1 snapshot next to the capture and return snapshot_path."
+                },
+                "snapshotOutputPath": {
+                    "type": "string",
+                    "description": "Defaults to the capture path with a .ui-snapshot.json suffix."
+                },
+                "includeSnapshot": {
+                    "type": "boolean",
+                    "default": False,
+                    "description": "Also inline the whole snapshot in the response. Off by default: snapshot_path is what the comparison surface consumes, and the inline copy is large."
+                },
                 "includeInactive": {"type": "boolean", "default": False},
                 "maxDepth": {"type": "integer", "default": 12, "minimum": 1},
                 "maxNodes": {"type": "integer", "default": 500, "minimum": 1},
@@ -744,8 +784,13 @@ TOOLS: dict[str, dict[str, Any]] = {
             "set_serialized_field, set_rect_transform, set_canvas_group, set_active, delete_child, "
             "create_child_from_template, add_component, remove_component. Previews by default; approve plus "
             "previewOnly=false is required to write. Any failing operation or failed post-validation discards the "
-            "whole batch, and object-reference fields are out of scope so a component can never be swapped for "
-            "another type."
+            "whole batch. A write that leaves the serialized value unchanged is reported as status no_op, never as "
+            "applied, and counted in no_op_count. Enum properties are index-addressed: numberValue is the member "
+            "index and out-of-range input is rejected, so pass stringValue to set an enum by member name. "
+            "Asset-typed object references (Sprite, Material, TMP_FontAsset, ...) are writable by asset path or "
+            "GUID; component and GameObject references stay refused so a component can never be swapped for "
+            "another type. If the prefab file changed on disk since this session wrote it, the transaction is "
+            "refused as prefab_mutation_asset_drifted instead of overwriting the out-of-band edit."
         ),
         "inputSchema": {
             "type": "object",
@@ -755,7 +800,7 @@ TOOLS: dict[str, dict[str, Any]] = {
                 "operations": {
                     "type": "array",
                     "items": {"type": "object"},
-                    "description": "Typed operations [{op, path, componentType, propertyPath, stringValue|numberValue|boolValue|x,y,z,w, templatePath, childName}]."
+                    "description": "Typed operations [{op, path, componentType, propertyPath, stringValue|numberValue|boolValue|x,y,z,w, templatePath, childName, assetSubAssetName, valueKind}]. On an enum property, numberValue is the member index and stringValue is the member name. On an asset-typed object reference, stringValue is a project-relative asset path or a 32-character GUID, optionally with assetSubAssetName (or a path#SubAsset suffix) for a sub-asset such as a sliced sprite; valueKind=\"null\" clears the reference."
                 },
                 "previewOnly": {"type": "boolean", "default": True},
                 "approve": {
@@ -1188,12 +1233,26 @@ TOOLS: dict[str, dict[str, Any]] = {
     },
     "unity_console_grep": {
         "bridgeOperation": "unity.console.grep",
-        "description": "Return compact Unity console items or path-backed Editor.log lines whose message, and optionally stack trace, matches a string or regex pattern.",
+        "description": (
+            "Return compact Unity console items or path-backed Editor.log lines whose message, and optionally "
+            "stack trace, matches a string or regex pattern. Build-pipeline progress chatter (CopyFiles, "
+            "[n/m ...]) is suppressed by default because it matches whatever feature name the compile job "
+            "carries; the suppressed count is always reported."
+        ),
         "inputSchema": {
             "type": "object",
             "properties": {
                 "projectRoot": {"type": "string"},
                 "pattern": {"type": "string"},
+                "excludePattern": {
+                    "type": "string",
+                    "description": "Drop matches that also match this pattern. Uses the same regex/ignoreCase settings as pattern."
+                },
+                "includeBuildPipelineNoise": {
+                    "type": "boolean",
+                    "default": False,
+                    "description": "Keep build-pipeline progress lines (CopyFiles, [n/m ...]) in the result instead of suppressing them."
+                },
                 "source": {
                     "type": "string",
                     "enum": ["console", "editor_log"],

@@ -21,6 +21,7 @@ namespace XUUnity.LightMcp.Tests.EditModeUgui
 
         string _prefabPath = "";
         string _outputPath = "";
+        string _snapshotPath = "";
         GameObject _canvasRoot;
         int _clickCount;
 
@@ -62,6 +63,12 @@ namespace XUUnity.LightMcp.Tests.EditModeUgui
             {
                 File.Delete(_outputPath);
                 _outputPath = "";
+            }
+
+            if (!string.IsNullOrEmpty(_snapshotPath) && File.Exists(_snapshotPath))
+            {
+                File.Delete(_snapshotPath);
+                _snapshotPath = "";
             }
 
             if (!string.IsNullOrEmpty(_prefabPath))
@@ -125,9 +132,9 @@ namespace XUUnity.LightMcp.Tests.EditModeUgui
         }
 
         [Test]
-        public void Render_ReturnsTheSnapshotItRenderedInRenderPixelSpace()
+        public void Render_ReturnsTheSnapshotItRenderedInRenderPixelSpaceWhenAskedInline()
         {
-            var payload = Render(240, 480);
+            var payload = Render(240, 480, extraArgsJson: "\"includeSnapshot\":true");
 
             Assert.That(payload.snapshot, Is.Not.Null);
             Assert.That(payload.snapshot.target.capture_width, Is.EqualTo(240));
@@ -139,6 +146,78 @@ namespace XUUnity.LightMcp.Tests.EditModeUgui
             Assert.That(title.has_text, Is.True);
             Assert.That(title.text, Is.EqualTo("Rendered"));
             Assert.That(title.has_bounds, Is.True);
+        }
+
+        [Test]
+        public void Render_WritesTheSnapshotBesideTheCaptureAndKeepsItOutOfTheResponseByDefault()
+        {
+            var payload = Render(240, 480);
+
+            Assert.That(payload.success, Is.True, string.Join("; ", payload.errors.ConvertAll(item => item.message)));
+            // JsonUtility writes an empty object rather than null for an unset class field, so the
+            // contract worth holding is that the node list is absent from the response, not that the
+            // container is.
+            Assert.That(
+                payload.snapshot.nodes,
+                Is.Empty,
+                "the inline copy is large and the comparison tool cannot consume it");
+            Assert.That(payload.snapshot_path, Is.Not.Empty);
+            Assert.That(File.Exists(payload.snapshot_path), Is.True);
+            Assert.That(
+                Path.GetFileName(payload.snapshot_path),
+                Is.EqualTo(Path.GetFileNameWithoutExtension(payload.screenshot_path) + ".ui-snapshot.json"));
+            Assert.That(
+                Path.GetFullPath(Path.GetDirectoryName(payload.snapshot_path)),
+                Is.EqualTo(Path.GetFullPath(Path.GetDirectoryName(payload.screenshot_path))),
+                "the snapshot must land beside the capture it describes");
+
+            // The comparison surface reads this file by path and refuses any other schema, so the written
+            // artifact has to be a complete ui.read.v1 payload, not a summary of one.
+            var written = JsonUtility.FromJson<XUUnityLightMcpUiTreePayload>(
+                File.ReadAllText(payload.snapshot_path));
+            Assert.That(written.schema_version, Is.EqualTo("xuunity.ui.read.v1"));
+            Assert.That(written.target.capture_width, Is.EqualTo(240));
+            Assert.That(written.target.capture_height, Is.EqualTo(480));
+            Assert.That(written.nodes.Find(node => node.name == "Title"), Is.Not.Null);
+        }
+
+        [Test]
+        public void Render_AppliesTransientOverridesWithoutTouchingTheAsset()
+        {
+            var before = File.ReadAllBytes(_prefabPath);
+
+            var payload = Render(
+                240,
+                480,
+                extraArgsJson:
+                "\"includeSnapshot\":true,\"overrides\":["
+                + "{\"op\":\"set_serialized_field\",\"path\":\"XUUnityMcp_RenderRoot/Title\","
+                + "\"componentType\":\"Text\",\"propertyPath\":\"m_Text\",\"stringValue\":\"Boost active\"}]");
+
+            Assert.That(payload.success, Is.True, string.Join("; ", payload.errors.ConvertAll(item => item.message)));
+            Assert.That(payload.requested_override_count, Is.EqualTo(1));
+            Assert.That(payload.applied_overrides[0].status, Is.EqualTo("applied"));
+            Assert.That(payload.snapshot.nodes.Find(node => node.name == "Title").text, Is.EqualTo("Boost active"));
+            CollectionAssert.AreEqual(
+                before,
+                File.ReadAllBytes(_prefabPath),
+                "a transient override must never reach the shared asset");
+        }
+
+        [Test]
+        public void Render_FailsInsteadOfCapturingTheStateTheOverrideDidNotReach()
+        {
+            var payload = Render(
+                240,
+                480,
+                extraArgsJson:
+                "\"overrides\":[{\"op\":\"set_serialized_field\",\"path\":\"XUUnityMcp_NoSuchChild\","
+                + "\"componentType\":\"Text\",\"propertyPath\":\"m_Text\",\"stringValue\":\"Boost active\"}]");
+
+            Assert.That(payload.success, Is.False);
+            Assert.That(payload.errors.ConvertAll(item => item.code), Does.Contain("prefab_render_override_failed"));
+            Assert.That(payload.screenshot_path, Is.Empty, "a capture of the wrong state is worse than no capture");
+            Assert.That(payload.applied_overrides[0].error_code, Is.EqualTo("prefab_mutation_target_not_found"));
         }
 
         [Test]
@@ -287,12 +366,14 @@ namespace XUUnity.LightMcp.Tests.EditModeUgui
             int width,
             int height,
             int safeAreaTop = 0,
-            int safeAreaBottom = 0)
+            int safeAreaBottom = 0,
+            string extraArgsJson = "")
         {
             _outputPath = Path.Combine(Path.GetTempPath(), $"xuunity_render_{width}x{height}_{safeAreaTop}.png");
             var args = "{\"prefabPath\":\"" + _prefabPath + "\",\"width\":" + width + ",\"height\":" + height
                        + ",\"safeAreaTop\":" + safeAreaTop + ",\"safeAreaBottom\":" + safeAreaBottom
-                       + ",\"outputPath\":\"" + _outputPath.Replace("\\", "/") + "\"}";
+                       + ",\"outputPath\":\"" + _outputPath.Replace("\\", "/") + "\""
+                       + (string.IsNullOrEmpty(extraArgsJson) ? "" : "," + extraArgsJson) + "}";
             var response = new XUUnityLightMcpPrefabRenderOperation().Execute(new XUUnityLightMcpRequest
             {
                 request_id = "prefab-render-selftest",
@@ -300,7 +381,13 @@ namespace XUUnity.LightMcp.Tests.EditModeUgui
                 args_json = args
             });
             Assert.That(response.status, Is.EqualTo("ok"));
-            return JsonUtility.FromJson<XUUnityLightMcpPrefabRenderPayload>(response.payload_json);
+            var payload = JsonUtility.FromJson<XUUnityLightMcpPrefabRenderPayload>(response.payload_json);
+            if (!string.IsNullOrEmpty(payload.snapshot_path))
+            {
+                _snapshotPath = payload.snapshot_path;
+            }
+
+            return payload;
         }
 
         static XUUnityLightMcpUiClickPayload Click(string argsJson)

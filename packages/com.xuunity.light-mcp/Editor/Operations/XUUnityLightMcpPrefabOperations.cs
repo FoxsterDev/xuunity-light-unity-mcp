@@ -89,6 +89,20 @@ namespace XUUnity.LightMcp.Editor.Operations
                     "Use unity.ui.get_bounds against the live scene for screen-space geometry."));
             }
 
+            if (args.writeSnapshot)
+            {
+                payload.snapshot_path = XUUnityLightMcpUiSnapshotArtifact.Write(
+                    payload,
+                    args.snapshotOutputPath,
+                    "",
+                    "prefab-snapshot-" + System.IO.Path.GetFileNameWithoutExtension(loaded.NormalizedPath),
+                    out var snapshotError);
+                if (snapshotError != null)
+                {
+                    payload.warnings.Add(snapshotError);
+                }
+            }
+
             return Respond(request, payload);
         }
 
@@ -131,7 +145,11 @@ namespace XUUnity.LightMcp.Editor.Operations
 
             payload.prefab_path = loaded.NormalizedPath;
             payload.prefab_guid = loaded.Guid;
-            XUUnityLightMcpPrefabInspector.Inspect(loaded.Root, args.reportUnassignedReferences, payload);
+            XUUnityLightMcpPrefabInspector.Inspect(
+                loaded.Root,
+                args.reportUnassignedReferences,
+                args.unassignedReferenceScope,
+                payload);
 
             if (!XUUnityLightMcpUiComponentReaderRegistry.HasReaders)
             {

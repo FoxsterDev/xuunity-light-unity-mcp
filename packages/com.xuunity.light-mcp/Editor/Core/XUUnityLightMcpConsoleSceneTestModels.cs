@@ -15,9 +15,11 @@ namespace XUUnity.LightMcp.Editor.Core
         internal sealed class XUUnityLightMcpConsoleGrepArgs
         {
             public string pattern = "";
+            public string excludePattern = "";
             public bool regex;
             public bool ignoreCase = true;
             public bool includeStackTraces;
+            public bool includeBuildPipelineNoise;
             public int limit = 20;
             public string[] includeTypes = null;
         }
@@ -38,9 +40,12 @@ namespace XUUnity.LightMcp.Editor.Core
             public string project_root = "";
             public string source = "console";
             public string pattern = "";
+            public string exclude_pattern = "";
             public bool regex;
             public bool ignore_case;
             public int match_count;
+            public int excluded_count;
+            public int build_pipeline_suppressed_count;
             public List<XUUnityLightMcpConsoleItem> items = new();
             public bool truncated;
             public string result_trust_class = "";

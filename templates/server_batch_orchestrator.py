@@ -297,7 +297,7 @@ from server_batch_recovery import (
 PROTOCOL_VERSION = "2025-06-18"
 SERVER_INFO = {
     "name": "xuunity-mcp",
-    "version": "0.3.50",
+    "version": "0.3.51",
 }
 
 # === Block A: Registry & Discovery Helpers ===
@@ -1513,12 +1513,19 @@ def call_unity_console_grep_tool(arguments: dict[str, Any]) -> dict[str, Any]:
     regex = arguments.get("regex", False)
     ignore_case = arguments.get("ignoreCase", True)
     include_stack_traces = arguments.get("includeStackTraces", False)
+    include_build_pipeline_noise = arguments.get("includeBuildPipelineNoise", False)
     if not isinstance(regex, bool):
         raise JsonRpcError(-32602, "regex must be a boolean.")
     if not isinstance(ignore_case, bool):
         raise JsonRpcError(-32602, "ignoreCase must be a boolean.")
     if not isinstance(include_stack_traces, bool):
         raise JsonRpcError(-32602, "includeStackTraces must be a boolean.")
+    if not isinstance(include_build_pipeline_noise, bool):
+        raise JsonRpcError(-32602, "includeBuildPipelineNoise must be a boolean.")
+
+    exclude_pattern = arguments.get("excludePattern", "")
+    if not isinstance(exclude_pattern, str):
+        raise JsonRpcError(-32602, "excludePattern must be a string when provided.")
 
     include_types = _optional_string_list_argument(arguments, "includeTypes")
     project_root = ensure_project_root(project_root_value)
@@ -1533,9 +1540,11 @@ def call_unity_console_grep_tool(arguments: dict[str, Any]) -> dict[str, Any]:
                 project_root,
                 log_path,
                 pattern=pattern,
+                exclude_pattern=exclude_pattern,
                 regex=regex,
                 ignore_case=ignore_case,
                 include_stack_traces=include_stack_traces,
+                include_build_pipeline_noise=include_build_pipeline_noise,
                 limit=max(1, limit),
             )
         except ValueError as exc:
@@ -1548,9 +1557,11 @@ def call_unity_console_grep_tool(arguments: dict[str, Any]) -> dict[str, Any]:
             "unity.console.grep",
             {
                 "pattern": pattern,
+                "excludePattern": exclude_pattern,
                 "regex": regex,
                 "ignoreCase": ignore_case,
                 "includeStackTraces": include_stack_traces,
+                "includeBuildPipelineNoise": include_build_pipeline_noise,
                 "limit": max(1, limit),
                 "includeTypes": include_types or None,
             },
@@ -2191,7 +2202,10 @@ def call_unity_ui_reference_compare_tool(arguments: dict[str, Any]) -> dict[str,
         )
     except ToolInvocationError as exc:
         return mcp_json_result(build_tool_error_payload(exc), is_error=True)
-    return mcp_json_result(payload, is_error=payload.get("reference_acceptance") != "passed")
+    # A comparison that ran is a result, not a tool failure: reference_acceptance, failed_lanes,
+    # pending_lanes, and decision_ready already carry the verdict. Only a comparison that could not
+    # compute a visual verdict at all belongs on the error channel.
+    return mcp_json_result(payload, is_error=str(payload.get("visual_verdict") or "") == "blocked")
 
 
 def call_unity_ui_fixture_validate_tool(arguments: dict[str, Any]) -> dict[str, Any]:

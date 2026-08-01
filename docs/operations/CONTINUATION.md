@@ -390,6 +390,37 @@ For shared protocol integration work:
 - host-opened editor closeout is now expected to distinguish quit acknowledgement
   from verified process exit instead of treating `unity.editor.quit` success as
   sufficient shutdown proof
+- a prefab can be brought to artifact-backed visual parity through the isolated
+  render lane alone, and the surface refuses to call that acceptance while fixture
+  and interaction evidence are absent
+
+## UI Acceptance Handoff Rule
+
+A `visual`-only pass is a handoff state, not reference acceptance. Read the
+verdict fields, not the similarity scalar:
+
+- `decision_ready: false` with `decision_readiness_gaps` means the comparison ran
+  and its conclusion is not yet decision-grade. A high similarity score plus a
+  passing vision review does not buy acceptance while
+  `fixture_evidence_absent` or a blocked lane is listed.
+- `self_reviewed_only: true` on the vision lane means the agent that authored the
+  UI also judged it. That review is stored, never counted as independent proof;
+  closeout needs a different judge or a human.
+- `pending_lanes: ["interaction"]` on an isolated-render capture is structural: a
+  guarded click needs Play mode, so it needs a project scenario emitting a
+  `ui_fixture` block. Report it as an open lane rather than lowering the
+  reference's acceptance policy to make the verdict green.
+- A comparison that ran returns a successful envelope even when
+  `reference_acceptance` is `failed`. Do not read the transport envelope as the
+  verdict; read `reference_acceptance`, `failed_lanes`, `blocked_lanes`,
+  `pending_lanes`, and `decision_ready`.
+
+When handing off mid-parity work, state which lanes carry evidence, which are
+structurally open, and what each open lane needs — not an overall percentage.
+
+Editing package sources under a `file:` dependency needs one explicit
+`unity_project_refresh` before the next test run picks them up; a test run alone
+can execute the previously compiled assemblies and report a stale verdict.
 
 ## What Is Not Yet Proven
 

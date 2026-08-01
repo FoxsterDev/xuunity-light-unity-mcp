@@ -3,6 +3,7 @@ using NUnit.Framework;
 using UnityEditor;
 using UnityEngine;
 using XUUnity.LightMcp.Editor.Core;
+using XUUnity.LightMcp.Editor.Helpers;
 using XUUnity.LightMcp.Editor.Operations;
 
 namespace XUUnity.LightMcp.Tests.EditMode
@@ -140,7 +141,7 @@ namespace XUUnity.LightMcp.Tests.EditMode
         }
 
         [Test]
-        public void ObjectReferenceFieldsAreOutOfScopeSoNoComponentCanBeSwapped()
+        public void SceneBoundReferenceFieldsAreOutOfScopeSoNoComponentCanBeSwapped()
         {
             var payload = Mutate(
                 "{\"prefabPath\":\"" + _prefabPath + "\",\"approve\":true,\"previewOnly\":false,\"operations\":["
@@ -149,19 +150,105 @@ namespace XUUnity.LightMcp.Tests.EditMode
 
             Assert.That(payload.status, Is.EqualTo("rolled_back"));
             Assert.That(payload.changes[0].error_code, Is.EqualTo("prefab_mutation_value_incompatible"));
-            Assert.That(payload.changes[0].error_message, Does.Contain("Object"));
+            Assert.That(payload.changes[0].error_message, Does.Contain("GameObject"));
         }
 
         [Test]
-        public void AStalePreconditionHashRefusesBeforeAnyWork()
+        public void AnAssetTypedReferenceCanBeWrittenByProjectPath()
+        {
+            var meshPath = PREFAB_DIR + "/XUUnityMcp_ProbeMesh.asset";
+            AssetDatabase.CreateAsset(new Mesh { name = "XUUnityMcp_ProbeMesh" }, meshPath);
+            AssetDatabase.Refresh();
+
+            var payload = Mutate(
+                "{\"prefabPath\":\"" + _prefabPath + "\",\"approve\":true,\"previewOnly\":false,"
+                + "\"allowedComponentTypes\":[\"MeshFilter\"],\"operations\":["
+                + "{\"op\":\"add_component\",\"path\":\"XUUnityMcp_MutationRoot/Panel\",\"componentType\":\"MeshFilter\"},"
+                + "{\"op\":\"set_serialized_field\",\"path\":\"XUUnityMcp_MutationRoot/Panel\","
+                + "\"componentType\":\"MeshFilter\",\"propertyPath\":\"m_Mesh\",\"stringValue\":\"" + meshPath + "\"}"
+                + "]}");
+
+            Assert.That(payload.status, Is.EqualTo("applied"), string.Join("; ", payload.changes.ConvertAll(c => c.error_message)));
+            Assert.That(payload.changes[1].after, Is.EqualTo(meshPath));
+
+            var saved = AssetDatabase.LoadAssetAtPath<GameObject>(_prefabPath);
+            var filter = saved.transform.Find("Panel").GetComponent<MeshFilter>();
+            Assert.That(AssetDatabase.GetAssetPath(filter.sharedMesh), Is.EqualTo(meshPath));
+
+            AssetDatabase.DeleteAsset(meshPath);
+        }
+
+        [Test]
+        public void AnAssetReferenceThatDoesNotResolveFailsWithATypedError()
         {
             var payload = Mutate(
                 "{\"prefabPath\":\"" + _prefabPath + "\",\"approve\":true,\"previewOnly\":false,"
-                + "\"expectedSha256\":\"0000000000000000000000000000000000000000000000000000000000000000\","
-                + "\"operations\":[{\"op\":\"set_canvas_group\",\"path\":\"XUUnityMcp_MutationRoot\",\"propertyPath\":\"alpha\",\"numberValue\":0.5}]}");
+                + "\"allowedComponentTypes\":[\"MeshFilter\"],\"operations\":["
+                + "{\"op\":\"add_component\",\"path\":\"XUUnityMcp_MutationRoot/Panel\",\"componentType\":\"MeshFilter\"},"
+                + "{\"op\":\"set_serialized_field\",\"path\":\"XUUnityMcp_MutationRoot/Panel\","
+                + "\"componentType\":\"MeshFilter\",\"propertyPath\":\"m_Mesh\","
+                + "\"stringValue\":\"Assets/XUUnityLightMcpGenerated/NoSuchMesh.asset\"}"
+                + "]}");
 
-            Assert.That(payload.errors[0].code, Is.EqualTo("prefab_mutation_precondition_failed"));
-            Assert.That(payload.changes, Is.Empty);
+            Assert.That(payload.status, Is.EqualTo("rolled_back"));
+            Assert.That(payload.changes[1].error_code, Is.EqualTo("prefab_mutation_asset_not_found"));
+        }
+
+        [Test]
+        public void AWriteThatChangesNothingIsReportedAsNoOpNotApplied()
+        {
+            var payload = Mutate(SetAlphaJson(1f, approve: true, previewOnly: false));
+
+            Assert.That(payload.status, Is.EqualTo("applied"), "the transaction still succeeds");
+            Assert.That(payload.changes[0].status, Is.EqualTo("no_op"));
+            Assert.That(payload.changes[0].before, Is.EqualTo(payload.changes[0].after));
+            Assert.That(payload.no_op_count, Is.EqualTo(1));
+            Assert.That(payload.planned_change_count, Is.EqualTo(0));
+            Assert.That(payload.warnings.ConvertAll(w => w.code), Does.Contain("prefab_mutation_no_op_operations"));
+        }
+
+        [Test]
+        public void APrefabThatDriftedFromItsPreconditionIsRefusedInsteadOfOverwritten()
+        {
+            var refused = Mutate(
+                "{\"prefabPath\":\"" + _prefabPath + "\",\"approve\":true,\"previewOnly\":false,"
+                + "\"expectedSha256\":\"1111111111111111111111111111111111111111111111111111111111111111\","
+                + "\"operations\":[{\"op\":\"set_canvas_group\",\"path\":\"XUUnityMcp_MutationRoot\","
+                + "\"propertyPath\":\"alpha\",\"numberValue\":0.25}]}");
+
+            Assert.That(refused.errors[0].code, Is.EqualTo("prefab_mutation_asset_drifted"));
+            Assert.That(refused.drift_guard, Is.EqualTo("drifted"));
+            Assert.That(refused.changes, Is.Empty, "nothing may be attempted against a possibly stale copy");
+            Assert.That(
+                refused.recommended_next_action,
+                Is.EqualTo("run_unity_project_refresh_then_rebuild_the_transaction"),
+                "the remedy for a stale editor import must be named, not left to the operator");
+        }
+
+        [Test]
+        public void AWriteWithNoPreconditionSaysSoInsteadOfImplyingDriftWasChecked()
+        {
+            // The editor cannot tell an external rewrite from its own reimport, so inferring drift would
+            // refuse legitimate writes. Naming the unguarded case is the honest alternative.
+            var unguarded = Mutate(SetAlphaJson(0.25f, approve: true, previewOnly: false));
+
+            Assert.That(unguarded.status, Is.EqualTo("applied"));
+            Assert.That(unguarded.drift_guard, Is.EqualTo("unguarded"));
+            Assert.That(
+                unguarded.warnings.ConvertAll(warning => warning.code),
+                Does.Contain("prefab_mutation_unguarded_by_precondition"));
+
+            var guarded = Mutate(
+                "{\"prefabPath\":\"" + _prefabPath + "\",\"approve\":true,\"previewOnly\":false,"
+                + "\"expectedSha256\":\"" + unguarded.sha256_after + "\","
+                + "\"operations\":[{\"op\":\"set_canvas_group\",\"path\":\"XUUnityMcp_MutationRoot\","
+                + "\"propertyPath\":\"alpha\",\"numberValue\":0.5}]}");
+
+            Assert.That(guarded.status, Is.EqualTo("applied"), string.Join("; ", guarded.errors.ConvertAll(e => e.code)));
+            Assert.That(guarded.drift_guard, Is.EqualTo("precondition_matched"));
+            Assert.That(
+                guarded.warnings.ConvertAll(warning => warning.code),
+                Does.Not.Contain("prefab_mutation_unguarded_by_precondition"));
         }
 
         [Test]

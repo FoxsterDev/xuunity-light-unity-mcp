@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Reflection;
 using UnityEditor;
 using UnityEngine;
 using XUUnity.LightMcp.Editor.Core;
@@ -16,7 +17,22 @@ namespace XUUnity.LightMcp.Editor.Helpers
 
     internal static class XUUnityLightMcpPrefabInspector
     {
+        public const string UnassignedScopeProjectScripts = "project_scripts";
+        public const string UnassignedScopeRequired = "required";
+        public const string UnassignedScopeAll = "all";
+
         const int MAX_PROPERTIES_PER_COMPONENT = 512;
+
+        public static string NormalizeUnassignedScope(string requested)
+        {
+            var scope = (requested ?? "").Trim().ToLowerInvariant();
+            return scope switch
+            {
+                UnassignedScopeRequired => UnassignedScopeRequired,
+                UnassignedScopeAll => UnassignedScopeAll,
+                _ => UnassignedScopeProjectScripts,
+            };
+        }
 
         public static XUUnityLightMcpPrefabLoadResult Load(string prefabPath)
         {
@@ -67,10 +83,22 @@ namespace XUUnity.LightMcp.Editor.Helpers
             bool reportUnassignedReferences,
             XUUnityLightMcpPrefabValidatePayload payload)
         {
+            Inspect(root, reportUnassignedReferences, UnassignedScopeProjectScripts, payload);
+        }
+
+        public static void Inspect(
+            GameObject root,
+            bool reportUnassignedReferences,
+            string unassignedScope,
+            XUUnityLightMcpPrefabValidatePayload payload)
+        {
             if (root == null)
             {
                 return;
             }
+
+            var scope = NormalizeUnassignedScope(unassignedScope);
+            payload.unassigned_reference_scope = reportUnassignedReferences ? scope : "not_reported";
 
             var transforms = root.GetComponentsInChildren<Transform>(true);
             foreach (var transform in transforms)
@@ -82,7 +110,7 @@ namespace XUUnity.LightMcp.Editor.Helpers
 
                 payload.inspected_object_count++;
                 var objectPath = XUUnityLightMcpUiTreeBuilder.BuildPath(transform);
-                InspectGameObject(transform.gameObject, objectPath, reportUnassignedReferences, payload);
+                InspectGameObject(transform.gameObject, objectPath, reportUnassignedReferences, scope, payload);
             }
         }
 
@@ -90,6 +118,7 @@ namespace XUUnity.LightMcp.Editor.Helpers
             GameObject gameObject,
             string objectPath,
             bool reportUnassignedReferences,
+            string unassignedScope,
             XUUnityLightMcpPrefabValidatePayload payload)
         {
             if (PrefabUtility.IsPrefabAssetMissing(gameObject))
@@ -119,7 +148,7 @@ namespace XUUnity.LightMcp.Editor.Helpers
                     continue;
                 }
 
-                InspectSerializedReferences(component, objectPath, reportUnassignedReferences, payload);
+                InspectSerializedReferences(component, objectPath, reportUnassignedReferences, unassignedScope, payload);
             }
         }
 
@@ -127,10 +156,12 @@ namespace XUUnity.LightMcp.Editor.Helpers
             Component component,
             string objectPath,
             bool reportUnassignedReferences,
+            string unassignedScope,
             XUUnityLightMcpPrefabValidatePayload payload)
         {
             var componentType = component.GetType().Name;
             using var serializedObject = new SerializedObject(component);
+            var declaredByProjectScript = IsProjectScript(serializedObject);
             var property = serializedObject.GetIterator();
             var visited = 0;
 
@@ -174,16 +205,24 @@ namespace XUUnity.LightMcp.Editor.Helpers
                     }
                     else if (reportUnassignedReferences)
                     {
-                        payload.defects.Add(new XUUnityLightMcpPrefabDefect
+                        payload.unassigned_reference_count++;
+                        if (InScope(unassignedScope, declaredByProjectScript, component, property))
                         {
-                            defect_type = "serialized_reference_unassigned",
-                            severity = "info",
-                            object_path = objectPath,
-                            component_type = componentType,
-                            property_path = property.propertyPath,
-                            expected_type = DeclaredTypeName(property.type),
-                            message = "A serialized reference is empty. This is legal unless the component requires it."
-                        });
+                            payload.defects.Add(new XUUnityLightMcpPrefabDefect
+                            {
+                                defect_type = "serialized_reference_unassigned",
+                                severity = "info",
+                                object_path = objectPath,
+                                component_type = componentType,
+                                property_path = property.propertyPath,
+                                expected_type = DeclaredTypeName(property.type),
+                                message = "A serialized reference is empty. This is legal unless the component requires it."
+                            });
+                        }
+                        else
+                        {
+                            payload.unassigned_reference_suppressed_count++;
+                        }
                     }
 
                     continue;
@@ -191,6 +230,81 @@ namespace XUUnity.LightMcp.Editor.Helpers
 
                 ClassifyAssignedReference(property, value, objectPath, componentType, payload);
             }
+        }
+
+        static bool InScope(
+            string unassignedScope,
+            bool declaredByProjectScript,
+            Component component,
+            SerializedProperty property)
+        {
+            if (string.Equals(unassignedScope, UnassignedScopeAll, StringComparison.Ordinal))
+            {
+                return true;
+            }
+
+            if (!declaredByProjectScript)
+            {
+                return false;
+            }
+
+            return !string.Equals(unassignedScope, UnassignedScopeRequired, StringComparison.Ordinal)
+                   || IsMarkedRequired(component, property.propertyPath);
+        }
+
+        static bool IsProjectScript(SerializedObject serializedObject)
+        {
+            var script = serializedObject.FindProperty("m_Script");
+            if (script == null || script.propertyType != SerializedPropertyType.ObjectReference)
+            {
+                return false;
+            }
+
+            var scriptAsset = script.objectReferenceValue;
+            if (scriptAsset == null)
+            {
+                return false;
+            }
+
+            var path = AssetDatabase.GetAssetPath(scriptAsset);
+            return !string.IsNullOrEmpty(path)
+                   && path.StartsWith("Assets/", StringComparison.OrdinalIgnoreCase);
+        }
+
+        // Unity exposes no "required" flag on a serialized property, so the required scope reads the
+        // project's own convention: a field attribute whose type name starts with Required, as used by
+        // Odin's [Required] and NaughtyAttributes' [Required]. A project with no such convention gets an
+        // empty required report rather than a guessed one. Nested members are not attribute-scanned.
+        static bool IsMarkedRequired(Component component, string propertyPath)
+        {
+            if (propertyPath.IndexOf('.') >= 0)
+            {
+                return false;
+            }
+
+            var type = component.GetType();
+            while (type != null)
+            {
+                var field = type.GetField(
+                    propertyPath,
+                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly);
+                if (field != null)
+                {
+                    foreach (var attribute in field.GetCustomAttributes(false))
+                    {
+                        if (attribute.GetType().Name.StartsWith("Required", StringComparison.Ordinal))
+                        {
+                            return true;
+                        }
+                    }
+
+                    return false;
+                }
+
+                type = type.BaseType;
+            }
+
+            return false;
         }
 
         static void ClassifyAssignedReference(
@@ -229,7 +343,7 @@ namespace XUUnity.LightMcp.Editor.Helpers
             });
         }
 
-        static bool TypeChainContains(Type type, string declared)
+        public static bool TypeChainContains(Type type, string declared)
         {
             var current = type;
             while (current != null)

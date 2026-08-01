@@ -3,6 +3,7 @@ using System.Text.RegularExpressions;
 using NUnit.Framework;
 using UnityEditor;
 using UnityEngine;
+using UnityEngine.TestTools;
 using XUUnity.LightMcp.Editor.Core;
 using XUUnity.LightMcp.Editor.Operations;
 
@@ -52,6 +53,7 @@ namespace XUUnity.LightMcp.Tests.EditMode
                 _prefabPath = "";
             }
             AssetDatabase.Refresh();
+            LogAssert.ignoreFailingMessages = false;
         }
 
         [Test]
@@ -66,6 +68,9 @@ namespace XUUnity.LightMcp.Tests.EditMode
         [Test]
         public void Validate_FailsWhenAScriptGuidNoLongerResolves()
         {
+            // Importing a deliberately broken prefab logs an import error, and the test framework
+            // fails a test on any unhandled error log. The broken import is the point of the test.
+            LogAssert.ignoreFailingMessages = true;
             InjectUnresolvableScriptGuid();
 
             var payload = RunValidate();
@@ -76,6 +81,43 @@ namespace XUUnity.LightMcp.Tests.EditMode
                 "an unresolvable script GUID leaves a missing component and must fail before PlayMode");
             CollectionAssert.Contains(payload.defect_types, "missing_script_guid");
             Assert.That(payload.status, Is.EqualTo("failed"));
+        }
+
+        [Test]
+        public void Validate_ScopesTheUnassignedReferenceReportAwayFromEngineDefaults()
+        {
+            // Every empty optional field on a built-in component is legal and normal, so an unscoped
+            // report buries the one finding an operator cares about: an unfilled project [SerializeField].
+            var scoped = RunValidate("\"reportUnassignedReferences\":true");
+            var all = RunValidate("\"reportUnassignedReferences\":true,\"unassignedReferenceScope\":\"all\"");
+
+            Assert.That(scoped.unassigned_reference_scope, Is.EqualTo("project_scripts"));
+            Assert.That(all.unassigned_reference_scope, Is.EqualTo("all"));
+            Assert.That(
+                all.unassigned_reference_count,
+                Is.EqualTo(scoped.unassigned_reference_count),
+                "the scope must change what is reported, never what is inspected");
+            Assert.That(
+                scoped.unassigned_reference_suppressed_count,
+                Is.EqualTo(scoped.unassigned_reference_count),
+                "this probe prefab carries only engine components, so every empty field is out of scope");
+            Assert.That(CountUnassigned(all), Is.GreaterThanOrEqualTo(CountUnassigned(scoped)));
+            Assert.That(CountUnassigned(scoped), Is.Zero);
+        }
+
+        [Test]
+        public void Validate_DoesNotReportUnassignedReferencesUnlessAsked()
+        {
+            var payload = RunValidate();
+
+            Assert.That(payload.unassigned_reference_scope, Is.EqualTo("not_reported"));
+            Assert.That(payload.unassigned_reference_count, Is.Zero);
+        }
+
+        static int CountUnassigned(XUUnityLightMcpPrefabValidatePayload payload)
+        {
+            return payload.defects.FindAll(
+                defect => defect.defect_type == "serialized_reference_unassigned").Count;
         }
 
         /// <summary>
@@ -109,13 +151,14 @@ namespace XUUnity.LightMcp.Tests.EditMode
             AssetDatabase.Refresh();
         }
 
-        XUUnityLightMcpPrefabValidatePayload RunValidate()
+        XUUnityLightMcpPrefabValidatePayload RunValidate(string extraArgsJson = "")
         {
             var response = new XUUnityLightMcpPrefabValidateOperation().Execute(new XUUnityLightMcpRequest
             {
                 request_id = "prefab-defect-selftest",
                 operation = "unity.prefab.validate",
-                args_json = "{\"prefabPath\":\"" + _prefabPath + "\"}"
+                args_json = "{\"prefabPath\":\"" + _prefabPath + "\""
+                            + (string.IsNullOrEmpty(extraArgsJson) ? "" : "," + extraArgsJson) + "}"
             });
             Assert.That(response.status, Is.EqualTo("ok"));
             return JsonUtility.FromJson<XUUnityLightMcpPrefabValidatePayload>(response.payload_json);

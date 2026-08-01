@@ -40,7 +40,7 @@ Commits `v0.3.48..v0.3.49` — `5349370`, `df337a3`, `635d8fc`, `c7bdc74`. Rough
 and 15.9k inserted lines under `templates/`, `packages/com.xuunity.light-mcp/`, and
 `tests/`.
 
-Out of scope: the BlockPuzzle Flying Gift UI task that motivated the retro. You are
+Out of scope: the consumer-project UI task that motivated the retro. You are
 auditing the tooling, not the screen.
 
 ## What the system is supposed to do
@@ -86,6 +86,29 @@ findings unverified:**
 A test suite passing tells you the assertions hold. It does not tell you the assertions are
 the right ones. Read the tests as evidence to be judged, and ask what a test would have to
 look like to catch the failure you are imagining.
+
+**Tier 3 — when the audit includes bringing a real screen to parity, iterate by measurement,
+not by eye.** Eyeball iteration was the slowest part of the session this prompt came from;
+measured iteration converged in three passes.
+
+- Before measuring anything, derive the canvas-to-reference scale. Read the reference
+  resolution and match mode off the `CanvasScaler` that will actually be in effect. One check
+  of the scaler settings is cheaper than a full correction pass: assuming a scale the project
+  did not use produced a whole set of target values that had to be discarded.
+- Take the render and the reference frame, measure the same feature in both, and derive each
+  correction from the ratio. Do not nudge a value and re-render to see whether it looks better.
+- Measure the sprite the prefab actually references, including its sub-rect and its
+  transparent margins — not the source PNG. A `spriteMode: 2` sheet's sub-rect can crop the
+  artwork and change its aspect, which renders as what looks like a layout bug and is not one.
+  Padding baked into a frame sprite likewise offsets every child by a constant that must be
+  converted, not guessed.
+- Read `acceptance_lanes.*.status`, `failed_lanes`, `pending_lanes`, and `decision_ready`
+  rather than the similarity scalar. The layout sub-verdict (`offset_x_ratio`,
+  `offset_y_ratio`, `width_ratio`, `height_ratio`) is what proves parity; a high similarity
+  number with a shifted layout verdict is not parity.
+- Do not mask the region under review to make a score pass. A broad mask hides the very area
+  being judged; the correct fix for a non-deterministic region is a low weight plus a
+  deterministic fixture.
 
 ## Questions the audit must answer
 

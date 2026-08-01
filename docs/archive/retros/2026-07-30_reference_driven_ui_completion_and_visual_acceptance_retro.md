@@ -62,14 +62,14 @@ The target state is explicit:
 
 ## 2. Incident evidence
 
-The session provided a 1440×3200 mobile reference for a Flying Gift popup and
+The session provided a 1440×3200 mobile reference for a reward popup and
 requested that the resulting UI match it. The actual validation lane was able
 to do the following correctly:
 
 - refresh Unity and establish `post_settle_compile=passed`;
 - compile Android player scripts;
-- enter a fresh BlockPuzzle Dev PlayMode session;
-- load live Flying Gift data and log `GetGiftChases` then `GetNextMilestone`;
+- enter a fresh consumer-project Dev PlayMode session;
+- load live feature data and log the two service calls the flow depends on;
 - capture a 1440×3200 Game View screenshot;
 - exit PlayMode cleanly.
 
@@ -99,7 +99,7 @@ acceptance pending**, not “the reference is implemented.”
 | --- | --- | --- |
 | Refresh/compile gate | Refresh reported zero compiler errors; Android script compile passed | Prevented shipping a source-level regression. |
 | PlayMode lifecycle | Fresh enter, wait, capture, exit, and return-to-Edit all passed | Produced reproducible runtime evidence. |
-| Runtime breadcrumbs | `FlyingGift` logs showed the server sequence and reward-ready state | Distinguished flow/data failure from visual failure. |
+| Runtime breadcrumbs | Feature logs showed the server sequence and reward-ready state | Distinguished flow/data failure from visual failure. |
 | Game View capture | Captured the target 1440×3200 viewport | Made the visual discrepancy observable. |
 | Human visual review | Screenshot exposed the unrendered body label and incorrect geometry | Caught issues not visible to compile/test tools. |
 
@@ -145,7 +145,7 @@ and time. The feature contains a timer and server-selected milestone, so this
 is particularly fragile. The session had no project hook/fixture that could
 atomically set:
 
-- available Flying Gift with a known duration and reward action;
+- an available reward with a known duration and reward action;
 - active boost with a fixed remaining duration;
 - cooldown state with a fixed unlock duration;
 - known ad unit and rewarded-video readiness;
@@ -251,7 +251,7 @@ in an explicitly approved test-artifact location. It contains:
 ```json
 {
   "reference_id": "flying-gift-available-v1",
-  "expected_image": "Artifacts/UIReference/FlyingGift/available.png",
+  "expected_image": "Artifacts/UIReference/RewardPopup/available.png",
   "sha256": "...",
   "viewport": { "width": 1440, "height": 3200, "orientation": "portrait" },
   "safe_area": "full_screen",

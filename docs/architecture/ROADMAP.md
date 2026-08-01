@@ -66,7 +66,7 @@ survival and more about:
 
 Already implemented:
 
-- standalone public repository and current `v0.3.50` Git UPM package path under
+- standalone public repository and current `v0.3.51` Git UPM package path under
   `packages/com.xuunity.light-mcp`
 - bridge enable/disable lifecycle
 - status and capability probing
@@ -155,7 +155,7 @@ This is enough for:
 - controlled screenshot capture
 - early automation experiments
 - repeatable same-host multi-project routing and recovery
-- production Git UPM consumption through `v0.3.50`
+- production Git UPM consumption through `v0.3.51`
 
 This is not yet enough for:
 
@@ -196,6 +196,35 @@ Near-term emphasis after the architecture milestone:
 
 ## Current Priority Milestone
 
+Mutation-receipt honesty sits above the remaining UI work, because it does not
+merely slow that work down — it invalidates its evidence. `expectedSha256`, atomic
+rollback, `post_validation`, and `reversible_patch_json` all presume the change
+table is truthful, so a receipt that reports `applied` for a write that changed
+nothing defeats every guardrail on the surface at once. The first post-release
+consumer run of the reference-driven UI slice hit exactly that on a TMP font
+weight and only caught it by re-measuring the render.
+
+Shipped for that reason ahead of the remaining UI breadth:
+
+- ineffective writes report `no_op` with a transaction-level `no_op_count`
+- enum properties are index-addressed, refuse out-of-range input, and accept a
+  member name through `stringValue`
+- the isolated render persists its `ui.read.v1` snapshot and returns
+  `snapshot_path`, so `acceptance.semantic: "required"` is satisfiable without a
+  Play-mode run
+- transient render `overrides` remove the mutate/restore round trip on a shared
+  asset
+- asset-typed object references are writable, which retires the last reason to
+  hand-edit prefab YAML
+
+Still open on that lane:
+
+- interaction and fixture lanes still need a Play-mode scenario per consumer
+  project; a `visual`-only pass is a handoff state, not acceptance
+- an independent vision judge; a self-review is stored but never counts as proof
+- `unassignedReferenceScope: required` reports only fields carrying a `Required*`
+  attribute, so a project using no such convention gets an empty required report
+
 Current recommendation:
 
 - close package-discovery publication work and then broaden host/client proof
@@ -206,7 +235,7 @@ Most valuable next milestone:
 
 Why this is next:
 
-- `v0.3.12` moved the package to the registry-native path and `v0.3.50` is the
+- `v0.3.12` moved the package to the registry-native path and `v0.3.51` is the
   current public Git UPM line
 - macOS validation is strong enough for current same-host use
 - Linux and Windows claims should remain conservative until executed on those hosts

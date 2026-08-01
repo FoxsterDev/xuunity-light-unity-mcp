@@ -27,6 +27,13 @@ EDITOR_LOG_TAIL_CAVEAT = (
     "source=editor_log for compile-error decisions."
 )
 API_UPDATER_RECOMMENDED_ACTION = "relaunch_noninteractive_accept_apiupdate"
+# Mirrors XUUnityLightMcpConsoleNoise.BuildPipelineProgressPattern in the editor package. Build-pipeline
+# progress lines match whatever feature name the compile job carries, so a feature-keyword grep drowns in
+# them; keep the two patterns in step.
+BUILD_PIPELINE_PROGRESS_PATTERN = (
+    r"(^\s*(CopyFiles|CopyDirs|CopyFile|MoveFiles|WriteFile|Compile|Link|Strip)\s)|(^\s*\[\s*\d+\s*/\s*\d+\s)"
+)
+BUILD_PIPELINE_PROGRESS = re.compile(BUILD_PIPELINE_PROGRESS_PATTERN)
 
 
 def truncate_text(value: Any, max_length: int = 240) -> str:
@@ -201,9 +208,11 @@ def grep_editor_log_payload(
     log_path: Path,
     *,
     pattern: str,
+    exclude_pattern: str = "",
     regex: bool = False,
     ignore_case: bool = True,
     include_stack_traces: bool = False,
+    include_build_pipeline_noise: bool = False,
     limit: int = 20,
     max_chars: int = EDITOR_LOG_GREP_MAX_CHARS,
 ) -> dict[str, Any]:
@@ -219,17 +228,34 @@ def grep_editor_log_payload(
         except re.error as exc:
             raise ValueError(f"editor_log regex pattern is invalid: {exc}") from exc
 
+    exclude_pattern = str(exclude_pattern or "").strip()
+    compiled_exclude = None
+    if regex and exclude_pattern:
+        try:
+            compiled_exclude = re.compile(exclude_pattern, options)
+        except re.error as exc:
+            raise ValueError(f"editor_log regex excludePattern is invalid: {exc}") from exc
+
+    def line_matches(line: str, needle: str, compiled_needle: "re.Pattern[str] | None") -> bool:
+        if compiled_needle is not None:
+            return compiled_needle.search(line) is not None
+        if ignore_case:
+            return needle.lower() in line.lower()
+        return needle in line
+
     text = read_editor_log_tail(log_path, max_chars=max_chars)
     matches: list[dict[str, Any]] = []
+    excluded_count = 0
+    build_pipeline_suppressed_count = 0
     for line_number, raw_line in enumerate(text.splitlines(), start=1):
         line = raw_line.rstrip("\n")
-        if compiled is not None:
-            matched = compiled.search(line) is not None
-        elif ignore_case:
-            matched = pattern.lower() in line.lower()
-        else:
-            matched = pattern in line
-        if not matched:
+        if not line_matches(line, pattern, compiled):
+            continue
+        if exclude_pattern and line_matches(line, exclude_pattern, compiled_exclude):
+            excluded_count += 1
+            continue
+        if not include_build_pipeline_noise and BUILD_PIPELINE_PROGRESS.search(line) is not None:
+            build_pipeline_suppressed_count += 1
             continue
         matches.append(
             {
@@ -250,10 +276,13 @@ def grep_editor_log_payload(
         "source": "editor_log",
         "editor_log_path": str(log_path),
         "pattern": pattern,
+        "exclude_pattern": exclude_pattern,
         "regex": bool(regex),
         "ignore_case": bool(ignore_case),
         "include_stack_traces": bool(include_stack_traces),
         "match_count": len(matches),
+        "excluded_count": excluded_count,
+        "build_pipeline_suppressed_count": build_pipeline_suppressed_count,
         "items": visible_matches,
         "truncated": truncated,
         "searched_tail_chars": max_chars,
