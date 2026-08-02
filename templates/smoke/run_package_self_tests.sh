@@ -370,6 +370,7 @@ run_playmode() {
     "$WRAPPER" request-playmode-tests \
     --project-root "$PROJECT_ROOT" \
     --assembly-name com.xuunity.light-mcp.PlayMode.Tests \
+    --assembly-name com.xuunity.light-mcp.Editor.Ugui.PlayMode.Tests \
     --category-name "$category" \
     --timeout-ms "$TIMEOUT_MS"
 }

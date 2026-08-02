@@ -1,9 +1,16 @@
 # XUUnity Light Unity MCP Retro — First Post-Release Run of the UI Acceptance Toolchain
 
 Date: `2026-07-31`
-Status: `active public retro`
+Status: `completed public retro; reusable residuals released in v0.3.51`
 Source line under test: `v0.3.49`
 Retro prompt: [`CHAT_RETRO_PROMPT.md`](CHAT_RETRO_PROMPT.md)
+
+Closure update (`2026-08-02`): all nine reusable priority improvements from
+this retro shipped in `v0.3.51`. Current source additionally executes the
+generic guarded uGUI click in Play mode and proves delivery, semantic state
+change, receipt fields, and refusal. Consumer-specific fixtures, interaction
+scenarios, and independent vision judges remain consumer adoption work rather
+than reusable MCP implementation backlog.
 
 ## Why this retro exists
 
@@ -397,5 +404,6 @@ reported `applied` for a write that changed nothing. Every other guardrail on
 that surface presumes the change report is truthful. P0.1 and P0.2 should land
 before further UI authoring work leans on this lane.
 
-Registry action: keep the reference-driven UI slice in completed history and add
-this retro as an active row scoped to the four residuals.
+Registry action (updated `2026-08-02`): keep this retro in completed public
+history. Track consumer-specific fixture, interaction, and independent-judge
+work only in the appropriate host-private registry.

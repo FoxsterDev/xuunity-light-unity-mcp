@@ -1,6 +1,6 @@
 # Status
 
-Date: `2026-07-31`
+Date: `2026-08-02`
 Status: `active public status snapshot`
 
 XUUnity Light Unity MCP is a working same-host Unity Editor automation service
@@ -48,6 +48,11 @@ Migration note:
 - Current source also keeps a terminal scenario inconclusive when a confirmed
   project-hook `*_applied` mutation is followed by a refresh-settle timeout,
   while explicitly separating the applied mutation from the unproven settle.
+- Current source adds a capability-gated uGUI PlayMode package test assembly.
+  It drives the real guarded-click scenario-step path and proves exactly-once
+  delivery, a decision-bearing receipt, semantic state change, the runtime
+  Play Mode claim, and refusal without a receipt. The dependency-free core
+  PlayMode lane remains available to projects without uGUI.
 - Current source keeps passive `project_defined_hook_poll_until` readiness
   snapshots running through `status: not_started`; explicit pass/fail
   predicates still win, unmatched statuses still fail closed, and timeout stays
@@ -252,9 +257,11 @@ Latest release and current-source validation for `v0.3.51`:
 | Area | Evidence | Result |
 | --- | --- | --- |
 | Package metadata | `packages/com.xuunity.light-mcp/package.json` | `name=com.xuunity.light-mcp`, `version=0.3.51`, `unity=2021.3`, no hard Test Framework dependency |
-| Host Python tests | `scripts/testing/run_host_python_tests.sh` (release checks plus full discovery) | The full host suite passes `634` tests with 13 expected platform skips. |
+| Host Python tests | `scripts/testing/run_host_python_tests.sh` (release checks plus full discovery) | The full host suite passes `694` tests with 13 expected platform skips. |
 | Compact MCP envelopes | Changelog and regression coverage for `0.3.32`-`0.3.51` | Scenario decision verdicts, compact operation/readiness/status summaries, authoritative post-settle compile/test/refresh fields, editor-log identity, scenario step-payload opt-ins, PlayMode already-playing stale-risk summaries, deterministic scene-open setup, opt-in compact batch helper output, safer `Editor.log` console grep/tail defaults, compact transport/idle timeout errors, compile-first post-change validation, lane-agnostic GUI-fallback compile evidence, and requested-filter zero-match verdicts are documented with full-payload recovery. |
-| Package self-tests | Clean devmode projects on installed Unity editors | Current source passes EditMode `24/24` and PlayMode `5/5` on Unity `2022.3`, including typed resolver argument/signature/registration/bounded-work coverage. A development-system consumer on its release pin passes EditMode `14/14` and PlayMode `5/5`. |
+| `v0.3.51` release package tests | Clean devmode projects on installed Unity editors | Unity `2021.3.45f2` and `6000.0.58f2` each discovered 99 EditMode tests: 98 passed, 0 failed, and 1 graphics-dependent render test self-skipped headless. |
+| Current-source guarded interaction proof | Development-system Unity `2022.3.62f3` and main-consumer Unity `6000.0.58f2`, both in devmode | Package PlayMode tests pass `7/7` on each consumer, including the uGUI-gated guarded-click delivery and refusal tests; each project was restored to its original Git UPM pin afterwards. |
+| Current-source full package gate | Clean devmode projects on Unity `2022.3.62f3` and `6000.0.58f2` | Both versions pass EditMode `62/62` and dependency-free PlayMode `5/5`, with authoritative post-settle compile green and verified editor closeout. The former prefab-mutation failure was a test dependency leak: the core test requested uGUI's `LayoutElement` in a no-uGUI project. It now uses built-in `MeshFilter` and proves both add and remove transactions. |
 | Reference-driven UI acceptance | Unity `2021.3` and `6000.0` EditMode over `XUUnity.MCP.SelfTest` | `77/78` pass on both editors with one graphics-device-dependent test correctly self-skipping; the graphics-enabled `XUUnity.MCP.UiRenderClick` category passes `11/11`; a project without `com.unity.ugui` compiles with zero errors and builds only the core editor assembly. |
 | Typed resolver oracle | Current-source Unity `2022.3` + EDM4U callback adapter | Inactive Android and resolver callback failure fail closed; a project-local Maven coordinate passes with callback success, two stable SHA-256 samples, explicit dependency proof, `trust_class=decision_grade`, and a cleared package-operation busy flag. |
 | Consumer regression route | Compile preflight + scenario/contract + PlayMode lifecycle + consistency | Unity `6000.0` passes compile preflight `6/6`, acceptance `10/10`, refresh/compile contract, settled-state and lifecycle recovery, healthy final Edit Mode with zero compiler errors/unrecovered abandons, and project-action consistency. |

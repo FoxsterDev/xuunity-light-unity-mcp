@@ -219,6 +219,10 @@ Shipped for that reason ahead of the remaining UI breadth:
 
 Still open on that lane:
 
+- the reusable package lane now executes guarded uGUI interaction in Play mode
+  and proves the receipt, exactly-once delivery, semantic state change, and
+  refusal path; current source passes that assembly on Unity `2022.3` and
+  `6000.0`
 - interaction and fixture lanes still need a Play-mode scenario per consumer
   project; a `visual`-only pass is a handoff state, not acceptance
 - an independent vision judge; a self-review is stored but never counts as proof

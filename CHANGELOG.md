@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+### Added
+
+- Added a capability-gated uGUI PlayMode test assembly that exercises the real
+  guarded-click scenario-step path. The tests prove exactly-once delivery, a
+  decision-bearing `ui.interaction.v1` receipt, before/after semantic state
+  change, `playmode_state=playing`, and refusal without a minted receipt. The
+  package self-test runner now includes the assembly when `com.unity.ugui` is
+  available while retaining the dependency-free core PlayMode lane.
+
+### Fixed
+
+- Fixed the clean-project EditMode gate by removing an accidental uGUI
+  dependency from the core prefab-mutation test. The allowlisted component test
+  now uses Unity's built-in `MeshFilter` and proves both the add and remove
+  transactions. Clean Unity `2022.3.62f3` and `6000.0.58f2` projects each pass
+  EditMode `62/62` and the dependency-free PlayMode lane `5/5`.
+
 ## 0.3.51
 
 Release tag: `v0.3.51`

@@ -268,12 +268,27 @@ namespace XUUnity.LightMcp.Tests.EditMode
         {
             var added = Mutate(
                 "{\"prefabPath\":\"" + _prefabPath + "\",\"approve\":true,\"previewOnly\":false,"
-                + "\"allowedComponentTypes\":[\"LayoutElement\"],\"operations\":["
-                + "{\"op\":\"add_component\",\"path\":\"XUUnityMcp_MutationRoot/Panel\",\"componentType\":\"LayoutElement\"}"
+                + "\"allowedComponentTypes\":[\"MeshFilter\"],\"operations\":["
+                + "{\"op\":\"add_component\",\"path\":\"XUUnityMcp_MutationRoot/Panel\",\"componentType\":\"MeshFilter\"}"
                 + "]}");
 
             Assert.That(added.status, Is.EqualTo("applied"), string.Join("; ", added.errors.ConvertAll(e => e.message)));
             Assert.That(added.changes[0].inverse_op, Is.EqualTo("remove_component"));
+
+            var withComponent = AssetDatabase.LoadAssetAtPath<GameObject>(_prefabPath);
+            Assert.That(withComponent.transform.Find("Panel").GetComponent<MeshFilter>(), Is.Not.Null);
+
+            var removed = Mutate(
+                "{\"prefabPath\":\"" + _prefabPath + "\",\"approve\":true,\"previewOnly\":false,"
+                + "\"allowedComponentTypes\":[\"MeshFilter\"],\"operations\":["
+                + "{\"op\":\"remove_component\",\"path\":\"XUUnityMcp_MutationRoot/Panel\",\"componentType\":\"MeshFilter\"}"
+                + "]}");
+
+            Assert.That(removed.status, Is.EqualTo("applied"), string.Join("; ", removed.errors.ConvertAll(e => e.message)));
+            Assert.That(removed.changes[0].inverse_op, Is.EqualTo("add_component"));
+
+            var withoutComponent = AssetDatabase.LoadAssetAtPath<GameObject>(_prefabPath);
+            Assert.That(withoutComponent.transform.Find("Panel").GetComponent<MeshFilter>(), Is.Null);
         }
 
         [Test]

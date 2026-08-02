@@ -1,8 +1,8 @@
 # XUUnity Light Unity MCP Public Retro Registry
 
 Status: active public registry
-Last triage: 2026-07-29 (re-evaluated against released source line `v0.3.47` plus current source at `0d3a460` and the uncommitted typed Android resolver slice)
-Current released source line: `v0.3.47`
+Last triage: 2026-08-02 (re-evaluated against released source line `v0.3.51` plus current source at `b33ec84` and the guarded-interaction PlayMode proof slice)
+Current released source line: `v0.3.51`
 
 Update this file whenever a public-safe MCP retro is added, moved, renamed, or
 deleted. Host-private and project-specific retros belong in the host's single
@@ -26,6 +26,20 @@ host-local registry.
   implemented, applied, superseded, or retained only for history.
 - Prompt templates are listed separately and are not backlog items.
 
+## Re-Evaluation 2026-08-02
+
+- `master`, `origin/master`, and release tag `v0.3.51` align at `b33ec84`.
+  The nine reusable improvements from the 2026-07-31 UI acceptance retro are
+  released, so that retro moves from active backlog to completed history.
+- Current source closes the reusable runtime-interaction execution gap with a
+  uGUI-gated PlayMode package assembly. The guarded-click delivery and refusal
+  tests pass as part of `7/7` PlayMode lanes on Unity `2022.3.62f3` and
+  `6000.0.58f2`; a clean no-uGUI project retains the `5/5` core lane.
+- Per-consumer fixtures and interaction scenarios plus independent vision
+  judges remain host-private adoption work, not a reusable public toolchain
+  residual. Decision verdicts, authoritative post-settle truth, UI-smoke/path
+  proof, and infrastructure-vs-product classification remain closed.
+
 ## Re-Evaluation 2026-07-31
 
 - First post-release consumer run of the `v0.3.49` UI acceptance slice is
@@ -39,7 +53,7 @@ host-local registry.
   other mutation guardrails, which all assume the change report is truthful.
 - Same day, later: all nine of that retro's priority improvements are
   implemented in current unreleased source and validated on a live editor
-  (99/99 package EditMode self-tests on `6000.0.58f2`, 694 host tests, parity
+  (99 EditMode tests: 98 passed and one graphics skip on `6000.0.58f2`; 694 host tests; parity
   baseline regenerated). P1.3 landed in an adjusted form after live runs proved
   the inferred drift check refuses legitimate writes — see the active row for
   the reasoning. The row stays active pending release and pending the
@@ -163,40 +177,22 @@ validation through it. Value here is ranked by how much a lesson reduces
 false-positive validation, false-negative validation, token/result cost, or
 install/readiness failure.
 
-Re-checked against released `v0.3.47` plus current source, most of the prior
-`active / needs-triage` list had actually shipped across `v0.3.32`-`v0.3.44`
-and was simply never re-triaged. Eleven rows graduated to completed history in
-this pass and two previously-unregistered 2026-06-09 Windows install artifacts
-were added. Three themes remained open from prior triage, and **one new theme was
-added 2026-07-17 and triaged in this pass** (item 4). Open themes, in priority order:
+Re-checked against released `v0.3.51` plus current source on 2026-08-02. The
+reference-driven UI acceptance residuals are released, and the generic runtime
+interaction path now has local PlayMode execution proof. Open public themes, in
+priority order:
 
 1. **P1 - SDK / EDM4U rollout validation lane (highest open ROI).**
    `2026-05-14_sdk_rollout_mcp_portfolio_retro.md`. A typed SDK-resolver lane
    with an active-Android-target precondition and resolver-freshness check, a
    generated-Gradle diff guard, a GUI process pool with quit-and-wait closeout,
    and a portfolio SDK-validation summary were the missing proof chain in
-   `v0.3.44`. The Git-tracked guard shipped in `v0.3.45`; `v0.3.46` added
-   XML/Gradle structure-aware comparison and comment-safe marker proof. Current
-   source adds fingerprint-bound capture/comparison for Git-untracked generated
-   outputs and registers published pass/fail reports in the artifact registry.
-   Typed resolver freshness and portfolio orchestration remain the standout
-   false-positive-validation risk.
+   `v0.3.44`. The generated-diff guard, callback-backed typed resolver, and
+   closed-project package restore are implemented through current source. GUI
+   admission, batch resolve, closeout orchestration, and portfolio summary
+   remain; the orchestration tail is now the outstanding reusable work.
 
-2. **P1/P2 (updated 2026-07-21) - Mutation-delta adoption, then prefab/UI authoring.**
-   `2026-07-17_prefab_ui_authoring_and_visual_iteration_gap_retro.md`. Execution is
-   reliable, but the toolset can *validate* UI and not *author* or cheaply *preview*
-   it: no prefab-structure read (serialized fields/RectTransform), no prefab/scene
-   mutation surface, and no isolated prefab/Canvas render, so a UI rework degrades
-   into raw-YAML editing judged only through ~40 s full-boot screenshots. Current
-   source implements the smaller false-negative fix: passive `not_started` poll
-   payloads keep waiting, explicit pass/fail predicates retain precedence, and
-   timeout remains authoritative. Current source also implements the typed-invoke
-   mutation-delta/destructive-drop trust contract. Still open: project-hook
-   adoption and raw-scenario catalog-aware warnings, then the broader P2 prefab
-   read/author/render capability because verdict correctness outranks authoring
-   convenience.
-
-3. **P2 - Token-efficiency tail.**
+2. **P2 - Token-efficiency tail.**
    `2026-06-02_token_efficiency_response_envelope_retro.md` and
    `2026-06-11_token_accounting_and_fast_path_retro.md`. Compact-by-default
    envelopes are fully shipped (scenario, refresh, compile, test, status,
@@ -204,7 +200,7 @@ added 2026-07-17 and triaged in this pass** (item 4). Open themes, in priority o
    remains is broader multi-project compact ceilings, a real token-accounting
    ledger, a one-shot package-pin verifier, and fast-path prompt profiles.
 
-4. **P2 - Cross-platform live-host proof.**
+3. **P2 - Cross-platform live-host proof.**
    `2026-06-17_windows_setup_failure_retro.md`. The Windows helper root causes
    are fixed and CI-exercised (MCP stdio e2e, installed delegate, PowerShell
    quickstart, file-IPC simulator, hostile codepage). A live Windows/Linux host
@@ -225,7 +221,6 @@ the entire Windows install root-cause set (python3 delegation, UTF-8 BOM,
 
 | Date | File | Scope | Registry Status | Why It Is Not Completed History |
 | --- | --- | --- | --- | --- |
-| 2026-07-31 | `2026-07-31_shipped_ui_acceptance_toolchain_first_run_retro.md` | First post-release consumer run of the `v0.3.49` reference-driven UI acceptance slice: mutation-receipt honesty, prefab-render-to-semantic-lane wiring, transient render overrides, unassigned-reference noise | **all nine priority improvements implemented in current source (unreleased); P1.3 landed in an adjusted form; consumer Play-mode lanes remain open** | Verifies the 2026-07-30 slice end to end (card similarity `0.9952`, exact layout verdict, stability `proven`, vision 4/4, 31/31 requests, zero false negatives) and keeps that slice in completed history. P0.1/P0.2 (`no_op` status, `no_op_count`, enum index rejection, enum-by-name, member-named receipts), P1.1 (`snapshot_path` on render and prefab snapshot, `includeSnapshot` now off by default), P1.2 (transient render `overrides`, `applied_overrides`, fail-closed on a failing override), P2.1 (asset-typed object references by path/GUID with sub-asset support; component and `GameObject` still refused), P2.2 (a comparison that ran returns a successful envelope), P2.3 (`unassignedReferenceScope` defaulting to `project_scripts` plus `unassigned_reference_suppressed_count`), and P3.1 (`excludePattern` plus default build-pipeline suppression on both grep lanes, pinned cross-language) are implemented and validated on a live editor: 99/99 package EditMode self-tests on `6000.0.58f2`, 694 host tests. **P1.3 deviates deliberately**: an inferred "editor copy versus disk" check was implemented, proved to falsely refuse legitimate writes under live EditMode runs, and removed. From inside the editor an external rewrite and Unity's own reimport are indistinguishable, so drift is refused only against the caller's `expectedSha256` (now typed `prefab_mutation_asset_drifted`, naming `unity_project_refresh`), and an unguarded transaction reports `drift_guard: "unguarded"` instead of implying the check ran. Row stays active because release/tagging is pending and because the interaction and fixture lanes still need a per-consumer Play-mode scenario, and the vision lane an independent judge. |
 | 2026-05-14 | `2026-05-14_sdk_rollout_mcp_portfolio_retro.md` | SDK/EDM4U rollout validation lane: typed resolver preconditions, package restore, generated-Gradle diff guard, GUI process pool + quit-and-wait closeout, portfolio SDK summary | **generated-diff + typed resolver/package-restore P0 complete in current source; orchestration remains P1** | `v0.3.45`-`v0.3.48` shipped and hardened generated-diff plus callback-backed Android resolution. Current source adds fail-closed closed-project `unity.sdk.package_restore` with an idle-stable registered package graph, atomic package/dependency receipt, and proven process exit. Still open: GUI process pool, batch resolve, closeout orchestration, and portfolio summary. Device lanes remain ROADMAP Wave 5. |
 | 2026-06-02 | `2026-06-02_token_efficiency_response_envelope_retro.md` | Response-envelope token efficiency: compact-by-default across MCP tool surfaces | mostly implemented; P2 residual | Compact-by-default shipped `v0.3.32`-`v0.3.44` for scenario, refresh, compile, build-config compile, test, `unity_status_summary`, `ensure-ready`, and batch CLI, each with `includeFullPayload`/`--output` opt-in (STATUS.md "Compact MCP envelopes"). Remaining (ROADMAP.md "Phase 2" residual): broader multi-project compact ceilings, a token ledger, and fast-path profiles. |
 | 2026-06-11 | `2026-06-11_token_accounting_and_fast_path_retro.md` | Token-accounting ledger, one-shot package-pin verifier, fast-path prompt profile | partial; P2 | The biggest win (compact output) shipped through `v0.3.40`/`v0.3.44`, and the fast path is documented in `docs/agents/PACKAGE_BUMP_FAST_PATH.md`, but no token-accounting ledger, one-shot verify-package-pin verifier, or runner token-budget hints exist in source or ROADMAP/STATUS. Overlaps the response-envelope row above as the token-efficiency tail. |
@@ -244,6 +239,7 @@ the entire Windows install root-cause set (python3 delegation, UTF-8 BOM,
 
 | Date | File | Scope | Registry Status | Notes |
 | --- | --- | --- | --- | --- |
+| 2026-07-31 | `2026-07-31_shipped_ui_acceptance_toolchain_first_run_retro.md` | First post-release consumer run of the `v0.3.49` reference-driven UI acceptance slice | reusable residuals released in `v0.3.51`; generic runtime-interaction proof added in current source | All nine priority improvements shipped. Current source adds a uGUI-gated PlayMode guarded-click test proving receipt, exactly-once delivery, semantic state change, and refusal on Unity `2022.3` and `6000.0`. Consumer-specific fixtures/interactions and independent vision judges remain host-private adoption work. |
 | 2026-07-30 | `2026-07-30_reference_driven_ui_completion_and_visual_acceptance_retro.md` | Reference-image contract, deterministic fixture, semantic/prefab inspection, isolated render, comparison, guarded interaction, AI vision, and device lane | implemented and released in `v0.3.49` | The complete P0/P1/P2 dependency chain is released. Comparison is resolution-independent similarity rather than pixel equality, and visual/semantic/interaction/vision/device lanes fail closed when required evidence is absent. |
 | 2026-07-17 | `2026-07-17_prefab_ui_authoring_and_visual_iteration_gap_retro.md` | Prefab/UI inspection, mutation, isolated render, passive readiness, and mutation-delta safety | implemented through `v0.3.49` | Passive polling and mutation-delta trust shipped before `v0.3.49`; the release adds prefab/UI semantic read, binding validation, isolated render, guarded mutation, and guarded semantic click. Project-specific hook adoption remains consumer work, not a reusable MCP capability gap. |
 | 2026-07-15 | `2026-07-15_editmode_targeted_filter_zero_match_retro.md` | Direct EditMode test filter returns zero selected tests after external source edits | implemented and released in `v0.3.47` | Filtered zero totals persist and report `test_filter_no_match`, including direct counts, requested-filter summary, and one-refresh recovery guidance while transport delivery remains distinct. Consumer-project proof passed the cold-discovery targeted smoke plus package EditMode `16/16` and PlayMode `5/5` lanes. |

@@ -28,10 +28,19 @@ templates/smoke/run_package_self_tests.sh \
   --mode all
 ```
 
-The lane must include both package assemblies:
+The lane must include both core package assemblies:
 
 - `com.xuunity.light-mcp.Editor.Tests`
 - `com.xuunity.light-mcp.PlayMode.Tests`
+
+When the consumer has the corresponding optional dependency, the lane must
+also include each capability-gated package assembly. Current source includes:
+
+- `com.xuunity.light-mcp.Editor.Ugui.PlayMode.Tests` when `com.unity.ugui` is
+  available
+
+This split keeps the runtime uGUI interaction path under execution proof
+without making uGUI a hard package dependency.
 
 If the package self-test lane cannot run, report that as an explicit MCP
 validation gap instead of calling the MCP change fully validated.

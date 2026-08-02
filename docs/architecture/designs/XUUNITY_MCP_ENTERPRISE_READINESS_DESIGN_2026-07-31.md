@@ -1,7 +1,7 @@
 # XUUnity MCP Enterprise Readiness Design
 
 Date: `2026-07-31`
-Status: `design; no blocker started`
+Status: `active implementation; B5 runtime-interaction proof partially closed`
 Scope: `Operations/XUUnityLightUnityMcp`
 Source: gap assessment following the external audit of the reference-driven UI acceptance
 surface and its remediation in `v0.3.51`
@@ -48,9 +48,10 @@ Python host suite only. No consuming project references the package sources by p
 twelve pin it by git tag — so a change to the editor assemblies can be committed, released
 and tagged without ever being compiled.
 
-This is not hypothetical. The `v0.3.51` release ships three editor-side fixes and two new
-EditMode test files that no machine has built. The release commit says so explicitly, which
-is honest but is not a substitute.
+This was not hypothetical. `v0.3.50` shipped a TMP test assembly that did not compile.
+`v0.3.51` repaired that defect and was compiled and tested locally on two Unity lines before
+tagging, but the repository still has no automated Unity gate. Local release discipline is
+evidence; it is not the CI control this blocker requires.
 
 Compounding it: the integration workflow was already failing on all three runner platforms
 from the `v0.3.49` release onward, for two separate platform-portability defects in tests,
@@ -72,6 +73,12 @@ self-hosted runner with a seat, or one of the established Unity CI actions with 
 secret, are both acceptable; pick one and document the constraint. Until this exists, every
 other claim in this repository is asserted rather than demonstrated, which is why it is
 first.
+
+**Current local evidence (2026-08-02).** The clean-package matrix is green on Unity
+`2022.3.62f3` and `6000.0.58f2`: each passes EditMode `62/62` and dependency-free PlayMode
+`5/5`, with post-settle compile green and verified editor closeout. This closes the local
+release-gate failure but does not close B1: the same matrix still needs to run automatically
+on pull requests and gate tags.
 
 **Effort.** Small-to-medium, dominated by licensing and runner setup rather than code.
 
@@ -194,6 +201,15 @@ improved several but did not close the matrix.
   uGUI and TMP satellites, or the limitation is stated prominently in the public
   positioning so no evaluator discovers it during a pilot.
 - The twelve-case matrix has a published coverage table, honestly marked, kept current.
+
+**Current progress (2026-08-02).** Current source adds a uGUI-gated PlayMode test assembly
+that drives the real scenario-step dispatcher and proves exactly-once guarded-click
+delivery, the `ui.interaction.v1` receipt, before/after semantic state change,
+`playmode_state=playing`, and refusal without a receipt. It passes `7/7` package PlayMode
+tests in Unity `2022.3.62f3` and `6000.0.58f2` consumer projects; a no-uGUI clean project
+retains the dependency-free `5/5` core lane. The reusable runtime-interaction execution gap
+is therefore closed locally, but B5 remains open for the B1 CI workflow, UI Toolkit scope,
+the published coverage matrix, and per-consumer fixture/interaction proof.
 
 **Effort.** Medium for the tests, large for UI Toolkit. Deciding *not* to do UI Toolkit is a
 legitimate answer, but it must be a stated scope boundary rather than a silence.
