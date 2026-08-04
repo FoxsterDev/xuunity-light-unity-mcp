@@ -19,6 +19,8 @@ namespace XUUnity.LightMcp.Editor.Operations
             {
                 TargetKind = args.targetKind,
                 TargetValue = args.targetValue,
+                SceneName = args.sceneName,
+                IncludeDontDestroyOnLoad = args.includeDontDestroyOnLoad,
                 MaxDepth = args.maxDepth,
                 MaxNodes = args.maxNodes,
                 IncludeInactive = args.includeInactive,

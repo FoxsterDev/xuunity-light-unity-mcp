@@ -839,10 +839,31 @@ TOOLS: dict[str, dict[str, Any]] = {
                 "approve": {"type": "boolean", "default": False},
                 "targetKind": {
                     "type": "string",
-                    "enum": ["active_scene", "game_object_path", "game_object_name"],
-                    "default": "active_scene"
+                    "enum": ["active_scene", "all_loaded_scenes", "game_object_path", "game_object_name"],
+                    "default": "active_scene",
+                    "description": (
+                        "Which roots to build the UI tree from. active_scene uses the active scene only, which is "
+                        "the wrong scope in a bootstrap-plus-additive project; all_loaded_scenes walks every loaded "
+                        "scene plus the DontDestroyOnLoad scene."
+                    )
                 },
                 "targetValue": {"type": "string"},
+                "sceneName": {
+                    "type": "string",
+                    "description": (
+                        "Restrict the searched scope to one loaded scene, by scene name or scene path. Applies to "
+                        "every targetKind and overrides the active_scene default."
+                    )
+                },
+                "includeDontDestroyOnLoad": {
+                    "type": "boolean",
+                    "default": True,
+                    "description": (
+                        "Include the DontDestroyOnLoad scene in the searched scope and in out-of-scope diagnostics. "
+                        "Resolving it creates and immediately destroys one hidden probe GameObject, and only works "
+                        "in Play Mode."
+                    )
+                },
                 "maxDepth": {"type": "integer", "default": 12, "minimum": 1},
                 "maxNodes": {"type": "integer", "default": 500, "minimum": 1},
                 "timeoutMs": {"type": "integer", "default": 30000, "minimum": 1000}
@@ -864,10 +885,31 @@ TOOLS: dict[str, dict[str, Any]] = {
                 "projectRoot": {"type": "string"},
                 "targetKind": {
                     "type": "string",
-                    "enum": ["active_scene", "game_object_path", "game_object_name"],
-                    "default": "active_scene"
+                    "enum": ["active_scene", "all_loaded_scenes", "game_object_path", "game_object_name"],
+                    "default": "active_scene",
+                    "description": (
+                        "Which roots to build the UI tree from. active_scene uses the active scene only, which is "
+                        "the wrong scope in a bootstrap-plus-additive project; all_loaded_scenes walks every loaded "
+                        "scene plus the DontDestroyOnLoad scene."
+                    )
                 },
                 "targetValue": {"type": "string"},
+                "sceneName": {
+                    "type": "string",
+                    "description": (
+                        "Restrict the searched scope to one loaded scene, by scene name or scene path. Applies to "
+                        "every targetKind and overrides the active_scene default."
+                    )
+                },
+                "includeDontDestroyOnLoad": {
+                    "type": "boolean",
+                    "default": True,
+                    "description": (
+                        "Include the DontDestroyOnLoad scene in the searched scope and in out-of-scope diagnostics. "
+                        "Resolving it creates and immediately destroys one hidden probe GameObject, and only works "
+                        "in Play Mode."
+                    )
+                },
                 "maxDepth": {"type": "integer", "default": 12, "minimum": 1},
                 "maxNodes": {"type": "integer", "default": 500, "minimum": 1},
                 "includeInactive": {"type": "boolean", "default": False},
@@ -891,10 +933,31 @@ TOOLS: dict[str, dict[str, Any]] = {
                 "projectRoot": {"type": "string"},
                 "targetKind": {
                     "type": "string",
-                    "enum": ["active_scene", "game_object_path", "game_object_name"],
-                    "default": "active_scene"
+                    "enum": ["active_scene", "all_loaded_scenes", "game_object_path", "game_object_name"],
+                    "default": "active_scene",
+                    "description": (
+                        "Which roots to build the UI tree from. active_scene uses the active scene only, which is "
+                        "the wrong scope in a bootstrap-plus-additive project; all_loaded_scenes walks every loaded "
+                        "scene plus the DontDestroyOnLoad scene."
+                    )
                 },
                 "targetValue": {"type": "string"},
+                "sceneName": {
+                    "type": "string",
+                    "description": (
+                        "Restrict the searched scope to one loaded scene, by scene name or scene path. Applies to "
+                        "every targetKind and overrides the active_scene default."
+                    )
+                },
+                "includeDontDestroyOnLoad": {
+                    "type": "boolean",
+                    "default": True,
+                    "description": (
+                        "Include the DontDestroyOnLoad scene in the searched scope and in out-of-scope diagnostics. "
+                        "Resolving it creates and immediately destroys one hidden probe GameObject, and only works "
+                        "in Play Mode."
+                    )
+                },
                 "selector": {"type": "object"},
                 "maxDepth": {"type": "integer", "default": 12, "minimum": 1},
                 "maxNodes": {"type": "integer", "default": 500, "minimum": 1},
@@ -917,10 +980,31 @@ TOOLS: dict[str, dict[str, Any]] = {
                 "projectRoot": {"type": "string"},
                 "targetKind": {
                     "type": "string",
-                    "enum": ["active_scene", "game_object_path", "game_object_name"],
-                    "default": "active_scene"
+                    "enum": ["active_scene", "all_loaded_scenes", "game_object_path", "game_object_name"],
+                    "default": "active_scene",
+                    "description": (
+                        "Which roots to build the UI tree from. active_scene uses the active scene only, which is "
+                        "the wrong scope in a bootstrap-plus-additive project; all_loaded_scenes walks every loaded "
+                        "scene plus the DontDestroyOnLoad scene."
+                    )
                 },
                 "targetValue": {"type": "string"},
+                "sceneName": {
+                    "type": "string",
+                    "description": (
+                        "Restrict the searched scope to one loaded scene, by scene name or scene path. Applies to "
+                        "every targetKind and overrides the active_scene default."
+                    )
+                },
+                "includeDontDestroyOnLoad": {
+                    "type": "boolean",
+                    "default": True,
+                    "description": (
+                        "Include the DontDestroyOnLoad scene in the searched scope and in out-of-scope diagnostics. "
+                        "Resolving it creates and immediately destroys one hidden probe GameObject, and only works "
+                        "in Play Mode."
+                    )
+                },
                 "selector": {"type": "object"},
                 "includeInactive": {"type": "boolean", "default": False},
                 "maxDepth": {"type": "integer", "default": 12, "minimum": 1},
@@ -943,10 +1027,31 @@ TOOLS: dict[str, dict[str, Any]] = {
                 "projectRoot": {"type": "string"},
                 "targetKind": {
                     "type": "string",
-                    "enum": ["active_scene", "game_object_path", "game_object_name"],
-                    "default": "active_scene"
+                    "enum": ["active_scene", "all_loaded_scenes", "game_object_path", "game_object_name"],
+                    "default": "active_scene",
+                    "description": (
+                        "Which roots to build the UI tree from. active_scene uses the active scene only, which is "
+                        "the wrong scope in a bootstrap-plus-additive project; all_loaded_scenes walks every loaded "
+                        "scene plus the DontDestroyOnLoad scene."
+                    )
                 },
                 "targetValue": {"type": "string"},
+                "sceneName": {
+                    "type": "string",
+                    "description": (
+                        "Restrict the searched scope to one loaded scene, by scene name or scene path. Applies to "
+                        "every targetKind and overrides the active_scene default."
+                    )
+                },
+                "includeDontDestroyOnLoad": {
+                    "type": "boolean",
+                    "default": True,
+                    "description": (
+                        "Include the DontDestroyOnLoad scene in the searched scope and in out-of-scope diagnostics. "
+                        "Resolving it creates and immediately destroys one hidden probe GameObject, and only works "
+                        "in Play Mode."
+                    )
+                },
                 "selector": {"type": "object"},
                 "allowMany": {"type": "boolean", "default": False},
                 "includeInactive": {"type": "boolean", "default": False},
@@ -969,10 +1074,31 @@ TOOLS: dict[str, dict[str, Any]] = {
                 "projectRoot": {"type": "string"},
                 "targetKind": {
                     "type": "string",
-                    "enum": ["active_scene", "game_object_path", "game_object_name"],
-                    "default": "active_scene"
+                    "enum": ["active_scene", "all_loaded_scenes", "game_object_path", "game_object_name"],
+                    "default": "active_scene",
+                    "description": (
+                        "Which roots to build the UI tree from. active_scene uses the active scene only, which is "
+                        "the wrong scope in a bootstrap-plus-additive project; all_loaded_scenes walks every loaded "
+                        "scene plus the DontDestroyOnLoad scene."
+                    )
                 },
                 "targetValue": {"type": "string"},
+                "sceneName": {
+                    "type": "string",
+                    "description": (
+                        "Restrict the searched scope to one loaded scene, by scene name or scene path. Applies to "
+                        "every targetKind and overrides the active_scene default."
+                    )
+                },
+                "includeDontDestroyOnLoad": {
+                    "type": "boolean",
+                    "default": True,
+                    "description": (
+                        "Include the DontDestroyOnLoad scene in the searched scope and in out-of-scope diagnostics. "
+                        "Resolving it creates and immediately destroys one hidden probe GameObject, and only works "
+                        "in Play Mode."
+                    )
+                },
                 "selector": {"type": "object"},
                 "allowMany": {"type": "boolean", "default": False},
                 "includeInactive": {"type": "boolean", "default": False},

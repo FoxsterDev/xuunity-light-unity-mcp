@@ -10,6 +10,8 @@ namespace XUUnity.LightMcp.Editor.Helpers
     {
         public string TargetKind = XUUnityLightMcpUiRead.TargetActiveScene;
         public string TargetValue = "";
+        public string SceneName = "";
+        public bool IncludeDontDestroyOnLoad = true;
         public int MaxDepth = XUUnityLightMcpUiRead.DefaultMaxDepth;
         public int MaxNodes = XUUnityLightMcpUiRead.DefaultMaxNodes;
         public bool IncludeInactive;
@@ -21,12 +23,41 @@ namespace XUUnity.LightMcp.Editor.Helpers
     {
         public XUUnityLightMcpUiTargetInfo Target = new();
         public List<XUUnityLightMcpUiNode> Nodes = new();
+        public List<Transform> NodeTransforms = new();
         public List<string> RootPaths = new();
         public List<XUUnityLightMcpUiDiagnostic> Warnings = new();
         public List<XUUnityLightMcpUiDiagnostic> Errors = new();
         public bool Truncated;
         public string TruncationReason = "";
         public bool ComponentDetailsComplete = true;
+
+        public Transform ResolveTransform(XUUnityLightMcpUiNode node)
+        {
+            if (node == null)
+            {
+                return null;
+            }
+
+            var index = Nodes.IndexOf(node);
+            if (index < 0 || index >= NodeTransforms.Count)
+            {
+                return null;
+            }
+
+            return NodeTransforms[index];
+        }
+    }
+
+    internal sealed class XUUnityLightMcpUiSceneScope
+    {
+        public List<Scene> Searched = new();
+        public List<Scene> AllLoaded = new();
+        public string Kind = XUUnityLightMcpUiRead.SceneScopeActiveScene;
+        public bool DontDestroyOnLoadSearched;
+        public string DontDestroyOnLoadStatus = XUUnityLightMcpUiRead.DontDestroyOnLoadNotRequested;
+        public bool RequestedSceneMissing;
+
+        public bool IsNarrowerThanAllLoaded => Searched.Count < AllLoaded.Count;
     }
 
     internal static class XUUnityLightMcpUiTreeBuilder
@@ -50,8 +81,10 @@ namespace XUUnity.LightMcp.Editor.Helpers
                 : "transform_only";
             result.Target.capture_width = Screen.width;
             result.Target.capture_height = Screen.height;
+            result.Target.requested_scene_name = (effective.SceneName ?? "").Trim();
 
-            var roots = ResolveRoots(result, effective);
+            var scope = ResolveSceneScope(result, effective);
+            var roots = ResolveRoots(result, effective, scope);
             result.Target.resolved_root_count = roots.Count;
             if (roots.Count == 0)
             {
@@ -88,28 +121,127 @@ namespace XUUnity.LightMcp.Editor.Helpers
             return result;
         }
 
-        static List<GameObject> ResolveRoots(XUUnityLightMcpUiTreeResult result, XUUnityLightMcpUiTreeOptions options)
+        static XUUnityLightMcpUiSceneScope ResolveSceneScope(
+            XUUnityLightMcpUiTreeResult result,
+            XUUnityLightMcpUiTreeOptions options)
+        {
+            var scope = new XUUnityLightMcpUiSceneScope();
+            for (var i = 0; i < SceneManager.sceneCount; i++)
+            {
+                var scene = SceneManager.GetSceneAt(i);
+                if (scene.IsValid() && scene.isLoaded)
+                {
+                    scope.AllLoaded.Add(scene);
+                }
+            }
+
+            if (options.IncludeDontDestroyOnLoad)
+            {
+                if (!Application.isPlaying)
+                {
+                    scope.DontDestroyOnLoadStatus = XUUnityLightMcpUiRead.DontDestroyOnLoadEditModeUnavailable;
+                }
+                else if (TryResolveDontDestroyOnLoadScene(out var dontDestroyScene))
+                {
+                    scope.AllLoaded.Add(dontDestroyScene);
+                    scope.DontDestroyOnLoadStatus = XUUnityLightMcpUiRead.DontDestroyOnLoadIncluded;
+                }
+                else
+                {
+                    scope.DontDestroyOnLoadStatus = XUUnityLightMcpUiRead.DontDestroyOnLoadProbeFailed;
+                }
+            }
+
+            var requestedScene = (options.SceneName ?? "").Trim();
+            var wantsAllLoaded = string.Equals(
+                result.Target.kind,
+                XUUnityLightMcpUiRead.TargetAllLoadedScenes,
+                StringComparison.Ordinal);
+
+            if (requestedScene.Length > 0)
+            {
+                scope.Kind = XUUnityLightMcpUiRead.SceneScopeNamedScene;
+                foreach (var scene in scope.AllLoaded)
+                {
+                    if (MatchesSceneSelector(scene, requestedScene))
+                    {
+                        scope.Searched.Add(scene);
+                    }
+                }
+
+                scope.RequestedSceneMissing = scope.Searched.Count == 0;
+            }
+            else if (wantsAllLoaded)
+            {
+                scope.Kind = XUUnityLightMcpUiRead.SceneScopeAllLoadedScenes;
+                scope.Searched.AddRange(scope.AllLoaded);
+            }
+            else
+            {
+                scope.Kind = XUUnityLightMcpUiRead.SceneScopeActiveScene;
+                var active = SceneManager.GetActiveScene();
+                if (active.IsValid())
+                {
+                    scope.Searched.Add(active);
+                }
+            }
+
+            foreach (var scene in scope.Searched)
+            {
+                if (IsDontDestroyOnLoadScene(scene))
+                {
+                    scope.DontDestroyOnLoadSearched = true;
+                    break;
+                }
+            }
+
+            ApplyScopeToTarget(result, scope);
+            return scope;
+        }
+
+        static string ResolveDontDestroyOnLoadStatus(XUUnityLightMcpUiSceneScope scope)
+        {
+            if (scope.DontDestroyOnLoadSearched)
+            {
+                return XUUnityLightMcpUiRead.DontDestroyOnLoadIncluded;
+            }
+
+            return scope.DontDestroyOnLoadStatus == XUUnityLightMcpUiRead.DontDestroyOnLoadIncluded
+                ? XUUnityLightMcpUiRead.DontDestroyOnLoadOutOfScope
+                : scope.DontDestroyOnLoadStatus;
+        }
+
+        static void ApplyScopeToTarget(XUUnityLightMcpUiTreeResult result, XUUnityLightMcpUiSceneScope scope)
+        {
+            result.Target.scene_scope = scope.Kind;
+            result.Target.dont_destroy_on_load_included = scope.DontDestroyOnLoadSearched;
+            result.Target.dont_destroy_on_load_status = ResolveDontDestroyOnLoadStatus(scope);
+
+            foreach (var scene in scope.Searched)
+            {
+                result.Target.searched_scenes.Add(DescribeScene(scene));
+            }
+
+            foreach (var scene in scope.AllLoaded)
+            {
+                result.Target.loaded_scenes.Add(DescribeScene(scene));
+            }
+
+            var primary = scope.Searched.Count > 0 ? scope.Searched[0] : SceneManager.GetActiveScene();
+            if (primary.IsValid())
+            {
+                result.Target.scene_name = primary.name ?? "";
+                result.Target.scene_path = primary.path ?? "";
+            }
+        }
+
+        static List<GameObject> ResolveRoots(
+            XUUnityLightMcpUiTreeResult result,
+            XUUnityLightMcpUiTreeOptions options,
+            XUUnityLightMcpUiSceneScope scope)
         {
             var kind = result.Target.kind;
             var value = (options.TargetValue ?? "").Trim();
-
-            if (string.Equals(kind, XUUnityLightMcpUiRead.TargetGameObjectPath, StringComparison.Ordinal))
-            {
-                var found = GameObject.Find(value);
-                if (found == null)
-                {
-                    result.Errors.Add(Diagnostic("ui_target_not_found", $"No GameObject at path '{value}'."));
-                    return new List<GameObject>();
-                }
-
-                CaptureSceneInfo(result, found.scene);
-                return new List<GameObject> { found };
-            }
-
-            if (string.Equals(kind, XUUnityLightMcpUiRead.TargetGameObjectName, StringComparison.Ordinal))
-            {
-                return ResolveByName(result, value, options.IncludeInactive);
-            }
 
             if (string.Equals(kind, XUUnityLightMcpUiRead.TargetPrefabAsset, StringComparison.Ordinal))
             {
@@ -119,31 +251,98 @@ namespace XUUnity.LightMcp.Editor.Helpers
                 return new List<GameObject>();
             }
 
-            return ResolveActiveSceneCanvases(result, options.IncludeInactive);
+            if (scope.RequestedSceneMissing)
+            {
+                result.Errors.Add(Diagnostic(
+                    "ui_target_out_of_scope",
+                    $"No loaded scene matches sceneName '{result.Target.requested_scene_name}'.",
+                    DescribeScopeGap(scope)));
+                return new List<GameObject>();
+            }
+
+            if (scope.Searched.Count == 0)
+            {
+                result.Errors.Add(Diagnostic("ui_target_not_found", "No valid loaded scene to search."));
+                return new List<GameObject>();
+            }
+
+            if (string.Equals(kind, XUUnityLightMcpUiRead.TargetGameObjectPath, StringComparison.Ordinal))
+            {
+                return ResolveByPath(result, scope, value, options.IncludeInactive);
+            }
+
+            if (string.Equals(kind, XUUnityLightMcpUiRead.TargetGameObjectName, StringComparison.Ordinal))
+            {
+                return ResolveByName(result, scope, value, options.IncludeInactive);
+            }
+
+            return ResolveRootCanvases(result, scope, options.IncludeInactive);
+        }
+
+        static List<GameObject> ResolveByPath(
+            XUUnityLightMcpUiTreeResult result,
+            XUUnityLightMcpUiSceneScope scope,
+            string value,
+            bool includeInactive)
+        {
+            var found = GameObject.Find(value);
+            if (found != null && ContainsScene(scope.Searched, found.scene))
+            {
+                return new List<GameObject> { found };
+            }
+
+            var inScope = FindByPathInScenes(scope.Searched, value, includeInactive);
+            if (inScope != null)
+            {
+                return new List<GameObject> { inScope };
+            }
+
+            var elsewhere = FindByPathInScenes(scope.AllLoaded, value, includeInactive);
+            if (elsewhere == null && found != null)
+            {
+                elsewhere = found;
+            }
+
+            if (elsewhere != null)
+            {
+                result.Errors.Add(Diagnostic(
+                    "ui_target_out_of_scope",
+                    $"GameObject path '{value}' exists in scene '{DescribeScene(elsewhere.scene)}', which is outside the searched scope.",
+                    DescribeScopeGap(scope)));
+                return new List<GameObject>();
+            }
+
+            result.Errors.Add(Diagnostic(
+                "ui_target_not_found",
+                $"No GameObject at path '{value}'.",
+                DescribeSearchedScenes(scope)));
+            return new List<GameObject>();
         }
 
         static List<GameObject> ResolveByName(
             XUUnityLightMcpUiTreeResult result,
+            XUUnityLightMcpUiSceneScope scope,
             string value,
             bool includeInactive)
         {
-            var matches = new List<GameObject>();
-            var scene = SceneManager.GetActiveScene();
-            CaptureSceneInfo(result, scene);
-            if (!scene.IsValid())
-            {
-                result.Errors.Add(Diagnostic("ui_target_not_found", "No valid active scene."));
-                return matches;
-            }
-
-            foreach (var root in scene.GetRootGameObjects())
-            {
-                CollectByName(root.transform, value, includeInactive, matches);
-            }
-
+            var matches = CollectByNameInScenes(scope.Searched, value, includeInactive);
             if (matches.Count == 0)
             {
-                result.Errors.Add(Diagnostic("ui_target_not_found", $"No GameObject named '{value}'."));
+                var elsewhere = CollectByNameInScenes(scope.AllLoaded, value, includeInactive);
+                if (elsewhere.Count > 0)
+                {
+                    result.Errors.Add(Diagnostic(
+                        "ui_target_out_of_scope",
+                        $"GameObject name '{value}' matched {elsewhere.Count} object(s) in {DescribeScenesOf(elsewhere)}, "
+                        + "which is outside the searched scope.",
+                        DescribeScopeGap(scope)));
+                    return matches;
+                }
+
+                result.Errors.Add(Diagnostic(
+                    "ui_target_not_found",
+                    $"No GameObject named '{value}'.",
+                    DescribeSearchedScenes(scope)));
                 return matches;
             }
 
@@ -153,7 +352,29 @@ namespace XUUnity.LightMcp.Editor.Helpers
                 result.Warnings.Add(Diagnostic(
                     "ui_target_ambiguous",
                     $"GameObject name '{value}' matched {matches.Count} objects.",
-                    "Prefer targetKind=game_object_path for a unique target."));
+                    "Prefer targetKind=game_object_path, or narrow the scope with sceneName, for a unique target."));
+            }
+
+            return matches;
+        }
+
+        static List<GameObject> CollectByNameInScenes(
+            List<Scene> scenes,
+            string value,
+            bool includeInactive)
+        {
+            var matches = new List<GameObject>();
+            foreach (var scene in scenes)
+            {
+                if (!scene.IsValid())
+                {
+                    continue;
+                }
+
+                foreach (var root in scene.GetRootGameObjects())
+                {
+                    CollectByName(root.transform, value, includeInactive, matches);
+                }
             }
 
             return matches;
@@ -182,56 +403,270 @@ namespace XUUnity.LightMcp.Editor.Helpers
             }
         }
 
-        static List<GameObject> ResolveActiveSceneCanvases(XUUnityLightMcpUiTreeResult result, bool includeInactive)
+        static GameObject FindByPathInScenes(List<Scene> scenes, string path, bool includeInactive)
         {
-            var roots = new List<GameObject>();
-            var scene = SceneManager.GetActiveScene();
-            CaptureSceneInfo(result, scene);
-            if (!scene.IsValid())
+            var segments = SplitPath(path);
+            if (segments.Count == 0)
             {
-                result.Errors.Add(Diagnostic("ui_target_not_found", "No valid active scene."));
-                return roots;
+                return null;
             }
 
-            foreach (var root in scene.GetRootGameObjects())
+            foreach (var scene in scenes)
             {
-                var canvases = root.GetComponentsInChildren<Canvas>(true);
-                foreach (var canvas in canvases)
+                if (!scene.IsValid())
                 {
-                    if (canvas == null || !canvas.isRootCanvas)
+                    continue;
+                }
+
+                foreach (var root in scene.GetRootGameObjects())
+                {
+                    if (!string.Equals(root.name, segments[0], StringComparison.Ordinal))
                     {
                         continue;
                     }
 
-                    if (!includeInactive && !canvas.gameObject.activeInHierarchy)
+                    var current = root.transform;
+                    for (var i = 1; i < segments.Count && current != null; i++)
+                    {
+                        current = FindChild(current, segments[i]);
+                    }
+
+                    if (current == null)
                     {
                         continue;
                     }
 
-                    roots.Add(canvas.gameObject);
+                    if (!includeInactive && !current.gameObject.activeInHierarchy)
+                    {
+                        continue;
+                    }
+
+                    return current.gameObject;
                 }
             }
 
-            if (roots.Count == 0)
+            return null;
+        }
+
+        static Transform FindChild(Transform parent, string name)
+        {
+            for (var i = 0; i < parent.childCount; i++)
             {
-                result.Warnings.Add(Diagnostic(
-                    "ui_snapshot_empty",
-                    "The active scene has no root Canvas.",
-                    "uGUI is the only supported backend in this slice."));
+                var child = parent.GetChild(i);
+                if (child != null && string.Equals(child.gameObject.name, name, StringComparison.Ordinal))
+                {
+                    return child;
+                }
+            }
+
+            return null;
+        }
+
+        static List<string> SplitPath(string path)
+        {
+            var segments = new List<string>();
+            var text = (path ?? "").Trim().TrimStart('/');
+            if (text.Length == 0)
+            {
+                return segments;
+            }
+
+            var builder = new System.Text.StringBuilder();
+            for (var i = 0; i < text.Length; i++)
+            {
+                var character = text[i];
+                if (character == '\\' && i + 1 < text.Length && text[i + 1] == '/')
+                {
+                    builder.Append('/');
+                    i++;
+                    continue;
+                }
+
+                if (character == '/')
+                {
+                    segments.Add(builder.ToString());
+                    builder.Length = 0;
+                    continue;
+                }
+
+                builder.Append(character);
+            }
+
+            segments.Add(builder.ToString());
+            return segments;
+        }
+
+        static List<GameObject> ResolveRootCanvases(
+            XUUnityLightMcpUiTreeResult result,
+            XUUnityLightMcpUiSceneScope scope,
+            bool includeInactive)
+        {
+            var roots = CollectRootCanvases(scope.Searched, includeInactive);
+            if (roots.Count > 0)
+            {
+                return roots;
+            }
+
+            if (scope.IsNarrowerThanAllLoaded)
+            {
+                var elsewhere = CollectRootCanvases(scope.AllLoaded, includeInactive);
+                if (elsewhere.Count > 0)
+                {
+                    result.Warnings.Add(Diagnostic(
+                        "ui_target_out_of_scope",
+                        $"The searched scope has no root Canvas, but {elsewhere.Count} root Canvas object(s) exist in "
+                        + "other loaded scenes.",
+                        DescribeScopeGap(scope)));
+                    return roots;
+                }
+            }
+
+            result.Warnings.Add(Diagnostic(
+                "ui_snapshot_empty",
+                "The searched scope has no root Canvas.",
+                "uGUI is the only supported backend in this slice."));
+            return roots;
+        }
+
+        static List<GameObject> CollectRootCanvases(List<Scene> scenes, bool includeInactive)
+        {
+            var roots = new List<GameObject>();
+            foreach (var scene in scenes)
+            {
+                if (!scene.IsValid())
+                {
+                    continue;
+                }
+
+                foreach (var root in scene.GetRootGameObjects())
+                {
+                    var canvases = root.GetComponentsInChildren<Canvas>(true);
+                    foreach (var canvas in canvases)
+                    {
+                        if (canvas == null || !canvas.isRootCanvas)
+                        {
+                            continue;
+                        }
+
+                        if (!includeInactive && !canvas.gameObject.activeInHierarchy)
+                        {
+                            continue;
+                        }
+
+                        roots.Add(canvas.gameObject);
+                    }
+                }
             }
 
             return roots;
         }
 
-        static void CaptureSceneInfo(XUUnityLightMcpUiTreeResult result, Scene scene)
+        static bool TryResolveDontDestroyOnLoadScene(out Scene scene)
+        {
+            scene = default;
+            GameObject probe = null;
+            try
+            {
+                probe = new GameObject("XUUnityLightMcpDontDestroyOnLoadProbe")
+                {
+                    hideFlags = HideFlags.HideAndDontSave
+                };
+                UnityEngine.Object.DontDestroyOnLoad(probe);
+                scene = probe.scene;
+                return scene.IsValid() && IsDontDestroyOnLoadScene(scene);
+            }
+            catch
+            {
+                return false;
+            }
+            finally
+            {
+                if (probe != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(probe);
+                }
+            }
+        }
+
+        static bool IsDontDestroyOnLoadScene(Scene scene)
+        {
+            return scene.IsValid()
+                   && scene.buildIndex == -1
+                   && string.Equals(scene.name, "DontDestroyOnLoad", StringComparison.Ordinal);
+        }
+
+        static bool MatchesSceneSelector(Scene scene, string selector)
+        {
+            return string.Equals(scene.name ?? "", selector, StringComparison.OrdinalIgnoreCase)
+                   || string.Equals(scene.path ?? "", selector, StringComparison.OrdinalIgnoreCase);
+        }
+
+        static bool ContainsScene(List<Scene> scenes, Scene scene)
+        {
+            foreach (var candidate in scenes)
+            {
+                if (candidate.handle == scene.handle)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        static string DescribeScene(Scene scene)
         {
             if (!scene.IsValid())
             {
-                return;
+                return "";
             }
 
-            result.Target.scene_name = scene.name ?? "";
-            result.Target.scene_path = scene.path ?? "";
+            var name = scene.name ?? "";
+            return name.Length > 0 ? name : scene.path ?? "";
+        }
+
+        static string DescribeScenesOf(List<GameObject> objects)
+        {
+            var names = new List<string>();
+            foreach (var item in objects)
+            {
+                var name = DescribeScene(item.scene);
+                if (name.Length > 0 && !names.Contains(name))
+                {
+                    names.Add(name);
+                }
+            }
+
+            return names.Count > 0 ? string.Join(", ", names) : "an unnamed scene";
+        }
+
+        static string DescribeSearchedScenes(XUUnityLightMcpUiSceneScope scope)
+        {
+            var names = new List<string>();
+            foreach (var scene in scope.Searched)
+            {
+                names.Add(DescribeScene(scene));
+            }
+
+            return $"Searched scenes: {string.Join(", ", names)}.";
+        }
+
+        static string DescribeScopeGap(XUUnityLightMcpUiSceneScope scope)
+        {
+            var searched = new List<string>();
+            foreach (var scene in scope.Searched)
+            {
+                searched.Add(DescribeScene(scene));
+            }
+
+            var loaded = new List<string>();
+            foreach (var scene in scope.AllLoaded)
+            {
+                loaded.Add(DescribeScene(scene));
+            }
+
+            return $"Searched scenes: {string.Join(", ", searched)}. Loaded scenes: {string.Join(", ", loaded)}. "
+                   + "Retry with targetKind=all_loaded_scenes, or set sceneName to the owning scene.";
         }
 
         public static void Traverse(
@@ -265,6 +700,7 @@ namespace XUUnity.LightMcp.Editor.Helpers
 
             var node = BuildNode(transform, path, parentPath, depth, siblingIndex, options, result);
             result.Nodes.Add(node);
+            result.NodeTransforms.Add(transform);
 
             if (depth + 1 > maxDepth - 1)
             {
@@ -327,6 +763,7 @@ namespace XUUnity.LightMcp.Editor.Helpers
                 child_count = transform.childCount,
                 name = gameObject.name ?? "",
                 type = transform is RectTransform ? "RectTransform" : "Transform",
+                scene_name = DescribeScene(gameObject.scene),
                 active_self = gameObject.activeSelf,
                 active_in_hierarchy = gameObject.activeInHierarchy,
                 render_order = siblingIndex

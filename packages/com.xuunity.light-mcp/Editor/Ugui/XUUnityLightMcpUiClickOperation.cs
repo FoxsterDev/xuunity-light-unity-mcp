@@ -61,6 +61,8 @@ namespace XUUnity.LightMcp.Editor.Ugui
             {
                 TargetKind = args.targetKind,
                 TargetValue = args.targetValue,
+                SceneName = args.sceneName,
+                IncludeDontDestroyOnLoad = args.includeDontDestroyOnLoad,
                 MaxDepth = args.maxDepth,
                 MaxNodes = args.maxNodes,
                 IncludeInactive = true,
@@ -68,6 +70,14 @@ namespace XUUnity.LightMcp.Editor.Ugui
                 IncludeText = true
             });
             payload.before_snapshot = Summarize(before);
+
+            foreach (var error in before.Errors)
+            {
+                if (string.Equals(error.code, "ui_target_out_of_scope", StringComparison.Ordinal))
+                {
+                    return Refuse(request, payload, error.code, $"{error.message} {error.detail}".Trim());
+                }
+            }
 
             var matches = XUUnityLightMcpUiSelectorMatcher.Match(before.Nodes, args.selector, 8, out _);
             if (matches.Count == 0)
@@ -116,7 +126,8 @@ namespace XUUnity.LightMcp.Editor.Ugui
                     "The target's CanvasGroup does not block raycasts, so a real pointer would pass through it.");
             }
 
-            var targetObject = GameObject.Find(node.path);
+            var targetTransform = before.ResolveTransform(node);
+            var targetObject = targetTransform != null ? targetTransform.gameObject : null;
             if (targetObject == null)
             {
                 return Refuse(
@@ -165,6 +176,8 @@ namespace XUUnity.LightMcp.Editor.Ugui
             {
                 TargetKind = args.targetKind,
                 TargetValue = args.targetValue,
+                SceneName = args.sceneName,
+                IncludeDontDestroyOnLoad = args.includeDontDestroyOnLoad,
                 MaxDepth = args.maxDepth,
                 MaxNodes = args.maxNodes,
                 IncludeInactive = true,

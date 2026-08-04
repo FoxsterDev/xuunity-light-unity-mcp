@@ -33,6 +33,8 @@ namespace XUUnity.LightMcp.Editor.Helpers
                 approve = true,
                 targetKind = string.IsNullOrWhiteSpace(step.targetKind) ? XUUnityLightMcpUiRead.TargetActiveScene : step.targetKind,
                 targetValue = step.targetValue ?? "",
+                sceneName = step.sceneName ?? "",
+                includeDontDestroyOnLoad = step.includeDontDestroyOnLoad,
                 selector = step.selector ?? new XUUnityLightMcpUiSelectorArgs()
             };
 

@@ -166,10 +166,25 @@ SCENARIO_STEP_SCHEMA: dict[str, Any] = {
         },
         "targetKind": {
             "type": "string",
-            "enum": ["active_scene", "game_object_path", "game_object_name"],
-            "description": "ui_click only. Where to build the UI tree from before matching the selector.",
+            "enum": ["active_scene", "all_loaded_scenes", "game_object_path", "game_object_name"],
+            "description": (
+                "ui_click only. Where to build the UI tree from before matching the selector. "
+                "all_loaded_scenes walks every loaded scene plus DontDestroyOnLoad."
+            ),
         },
         "targetValue": {"type": "string"},
+        "sceneName": {
+            "type": "string",
+            "description": "ui_click only. Restrict the searched scope to this loaded scene, by scene name or scene path.",
+        },
+        "includeDontDestroyOnLoad": {
+            "type": "boolean",
+            "default": True,
+            "description": (
+                "ui_click only. Include the DontDestroyOnLoad scene in the searched scope and in out-of-scope "
+                "diagnostics. Resolving it creates and immediately destroys one hidden probe GameObject in Play Mode."
+            ),
+        },
         "selector": {
             "type": "object",
             "description": "ui_click only. Must resolve to exactly one node; an ambiguous selector is refused.",

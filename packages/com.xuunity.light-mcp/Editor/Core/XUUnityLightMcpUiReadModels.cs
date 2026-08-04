@@ -18,9 +18,20 @@ namespace XUUnity.LightMcp.Editor.Core
         public const string BackendUnknown = "unknown";
 
         public const string TargetActiveScene = "active_scene";
+        public const string TargetAllLoadedScenes = "all_loaded_scenes";
         public const string TargetGameObjectPath = "game_object_path";
         public const string TargetGameObjectName = "game_object_name";
         public const string TargetPrefabAsset = "prefab_asset";
+
+        public const string SceneScopeActiveScene = "active_scene";
+        public const string SceneScopeAllLoadedScenes = "all_loaded_scenes";
+        public const string SceneScopeNamedScene = "named_scene";
+
+        public const string DontDestroyOnLoadIncluded = "included";
+        public const string DontDestroyOnLoadNotRequested = "not_requested";
+        public const string DontDestroyOnLoadOutOfScope = "out_of_scope_for_target_kind";
+        public const string DontDestroyOnLoadEditModeUnavailable = "edit_mode_no_dont_destroy_on_load_scene";
+        public const string DontDestroyOnLoadProbeFailed = "probe_failed";
 
         public const int DefaultMaxDepth = 12;
         public const int DefaultMaxNodes = 500;
@@ -58,6 +69,12 @@ namespace XUUnity.LightMcp.Editor.Core
         public bool ambiguous;
         public string scene_name = "";
         public string scene_path = "";
+        public string scene_scope = XUUnityLightMcpUiRead.SceneScopeActiveScene;
+        public string requested_scene_name = "";
+        public List<string> searched_scenes = new();
+        public List<string> loaded_scenes = new();
+        public bool dont_destroy_on_load_included;
+        public string dont_destroy_on_load_status = XUUnityLightMcpUiRead.DontDestroyOnLoadNotRequested;
         public string prefab_path = "";
         public int capture_width;
         public int capture_height;
@@ -75,6 +92,7 @@ namespace XUUnity.LightMcp.Editor.Core
         public int child_count;
         public string name = "";
         public string type = "";
+        public string scene_name = "";
         public List<string> components = new();
         public bool active_self;
         public bool active_in_hierarchy;
@@ -111,6 +129,8 @@ namespace XUUnity.LightMcp.Editor.Core
     {
         public string targetKind = XUUnityLightMcpUiRead.TargetActiveScene;
         public string targetValue = "";
+        public string sceneName = "";
+        public bool includeDontDestroyOnLoad = true;
         public int maxDepth = XUUnityLightMcpUiRead.DefaultMaxDepth;
         public int maxNodes = XUUnityLightMcpUiRead.DefaultMaxNodes;
         public bool includeInactive;
@@ -137,6 +157,8 @@ namespace XUUnity.LightMcp.Editor.Core
     {
         public string targetKind = XUUnityLightMcpUiRead.TargetActiveScene;
         public string targetValue = "";
+        public string sceneName = "";
+        public bool includeDontDestroyOnLoad = true;
         public int maxDepth = XUUnityLightMcpUiRead.DefaultMaxDepth;
         public int maxNodes = XUUnityLightMcpUiRead.DefaultMaxNodes;
         public int maxMatches = XUUnityLightMcpUiRead.DefaultMaxMatches;
@@ -187,6 +209,7 @@ namespace XUUnity.LightMcp.Editor.Core
         public int match_count;
         public bool exists;
         public bool ambiguous;
+        public bool out_of_scope;
         public bool truncated;
         public int scanned_node_count;
         public bool has_text;
@@ -219,6 +242,8 @@ namespace XUUnity.LightMcp.Editor.Core
     {
         public string targetKind = XUUnityLightMcpUiRead.TargetActiveScene;
         public string targetValue = "";
+        public string sceneName = "";
+        public bool includeDontDestroyOnLoad = true;
         public string action = "click";
         public bool approve;
         public int maxDepth = XUUnityLightMcpUiRead.DefaultMaxDepth;

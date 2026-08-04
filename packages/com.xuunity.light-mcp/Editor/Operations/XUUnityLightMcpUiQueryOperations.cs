@@ -44,6 +44,8 @@ namespace XUUnity.LightMcp.Editor.Operations
             {
                 TargetKind = args.targetKind,
                 TargetValue = args.targetValue,
+                SceneName = args.sceneName,
+                IncludeDontDestroyOnLoad = args.includeDontDestroyOnLoad,
                 MaxDepth = args.maxDepth,
                 MaxNodes = args.maxNodes,
                 IncludeInactive = args.includeInactive,
@@ -90,6 +92,22 @@ namespace XUUnity.LightMcp.Editor.Operations
                     "Narrow the selector or set allowMany when several matches are expected."));
             }
 
+            if (payload.match_count == 0 && payload.success)
+            {
+                var zeroMatch = BuildZeroMatchDiagnostic(args, payload);
+                payload.out_of_scope = zeroMatch.code == "ui_target_out_of_scope";
+                if (RequiresSingleMatch)
+                {
+                    payload.success = false;
+                    payload.proof_class = XUUnityLightMcpUiRead.ProofError;
+                    payload.errors.Add(zeroMatch);
+                }
+                else if (payload.out_of_scope)
+                {
+                    payload.warnings.Add(zeroMatch);
+                }
+            }
+
             if (RequiresSingleMatch && payload.success)
             {
                 EnforceSingleMatch(args, payload);
@@ -107,15 +125,76 @@ namespace XUUnity.LightMcp.Editor.Operations
         {
         }
 
+        static XUUnityLightMcpUiDiagnostic BuildZeroMatchDiagnostic(
+            XUUnityLightMcpUiQueryArgs args,
+            XUUnityLightMcpUiQueryPayload payload)
+        {
+            var owners = FindOwningScenesOutsideScope(args, payload);
+            if (owners.Count == 0)
+            {
+                return XUUnityLightMcpUiTreeBuilder.Diagnostic(
+                    "ui_node_not_found",
+                    "The selector matched no node in any loaded scene.");
+            }
+
+            var searched = string.Join(", ", payload.target.searched_scenes);
+            var owning = string.Join(", ", owners);
+            return XUUnityLightMcpUiTreeBuilder.Diagnostic(
+                "ui_target_out_of_scope",
+                $"The selector matched no node in the searched scope [{searched}], but it does match in [{owning}].",
+                $"Retry with targetKind=all_loaded_scenes, or sceneName={owners[0]}.");
+        }
+
+        static List<string> FindOwningScenesOutsideScope(
+            XUUnityLightMcpUiQueryArgs args,
+            XUUnityLightMcpUiQueryPayload payload)
+        {
+            var owners = new List<string>();
+            if (payload.target == null || IsWidestScope(payload.target))
+            {
+                return owners;
+            }
+
+            var wide = XUUnityLightMcpUiTreeBuilder.Build(new XUUnityLightMcpUiTreeOptions
+            {
+                TargetKind = XUUnityLightMcpUiRead.TargetAllLoadedScenes,
+                SceneName = "",
+                IncludeDontDestroyOnLoad = true,
+                MaxDepth = args.maxDepth,
+                MaxNodes = args.maxNodes,
+                IncludeInactive = args.includeInactive,
+                IncludeBounds = true,
+                IncludeText = true
+            });
+
+            var wideMatches = XUUnityLightMcpUiSelectorMatcher.Match(
+                wide.Nodes,
+                args.selector,
+                args.maxMatches,
+                out _);
+
+            foreach (var node in wideMatches)
+            {
+                var scene = node.scene_name ?? "";
+                if (scene.Length > 0 && !owners.Contains(scene) && !payload.target.searched_scenes.Contains(scene))
+                {
+                    owners.Add(scene);
+                }
+            }
+
+            return owners;
+        }
+
+        static bool IsWidestScope(XUUnityLightMcpUiTargetInfo target)
+        {
+            return target.scene_scope == XUUnityLightMcpUiRead.TargetAllLoadedScenes
+                && target.dont_destroy_on_load_included;
+        }
+
         static void EnforceSingleMatch(XUUnityLightMcpUiQueryArgs args, XUUnityLightMcpUiQueryPayload payload)
         {
             if (payload.match_count == 0)
             {
-                payload.success = false;
-                payload.proof_class = XUUnityLightMcpUiRead.ProofError;
-                payload.errors.Add(XUUnityLightMcpUiTreeBuilder.Diagnostic(
-                    "ui_node_not_found",
-                    "The selector matched no node."));
                 return;
             }
 

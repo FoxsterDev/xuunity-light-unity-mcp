@@ -75,6 +75,8 @@ namespace XUUnity.LightMcp.Editor.Core
             public string interactionId = "";
             public string targetKind = "";
             public string targetValue = "";
+            public string sceneName = "";
+            public bool includeDontDestroyOnLoad = true;
             public bool expectStateChange = true;
             public bool approve;
             public XUUnityLightMcpUiSelectorArgs selector = null;
