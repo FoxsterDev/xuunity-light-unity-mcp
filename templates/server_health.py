@@ -26,6 +26,15 @@ EDITOR_LOG_TAIL_CAVEAT = (
     "Editor.log tail is path-backed but untyped; use error-anchored patterns with unity_console_grep "
     "source=editor_log for compile-error decisions."
 )
+EDITOR_LOG_STALE_MATCH_CAVEAT = (
+    "Editor.log accumulates across editor sessions and play sessions, so an unanchored match may predate the "
+    "current run; pass since=playmode_start or since=bridge_generation to bound the search to this session."
+)
+SINCE_ANCHORS = ("playmode_start", "bridge_generation", "request_id")
+SINCE_ANCHOR_STATE_KEYS = {
+    "playmode_start": "editor_log_offset_at_playmode_start",
+    "bridge_generation": "editor_log_offset_at_bridge_generation_start",
+}
 API_UPDATER_RECOMMENDED_ACTION = "relaunch_noninteractive_accept_apiupdate"
 # Mirrors XUUnityLightMcpConsoleNoise.BuildPipelineProgressPattern in the editor package. Build-pipeline
 # progress lines match whatever feature name the compile job carries, so a feature-keyword grep drowns in
@@ -34,6 +43,13 @@ BUILD_PIPELINE_PROGRESS_PATTERN = (
     r"(^\s*(CopyFiles|CopyDirs|CopyFile|MoveFiles|WriteFile|Compile|Link|Strip)\s)|(^\s*\[\s*\d+\s*/\s*\d+\s)"
 )
 BUILD_PIPELINE_PROGRESS = re.compile(BUILD_PIPELINE_PROGRESS_PATTERN)
+
+
+def _int_or_zero(value: Any) -> int:
+    try:
+        return max(0, int(value or 0))
+    except (TypeError, ValueError):
+        return 0
 
 
 def truncate_text(value: Any, max_length: int = 240) -> str:
@@ -203,6 +219,214 @@ def build_editor_log_identity(
     }
 
 
+def _count_lines_before_offset(log_path: Path, offset: int) -> int:
+    """1-based line number of the first line at or after offset, or 0 when it cannot be derived."""
+
+    if offset <= 0:
+        return 1
+    newlines = 0
+    remaining = offset
+    try:
+        with log_path.open("rb") as handle:
+            while remaining > 0:
+                chunk = handle.read(min(1 << 20, remaining))
+                if not chunk:
+                    break
+                remaining -= len(chunk)
+                newlines += chunk.count(b"\n")
+    except OSError:
+        return 0
+    return newlines + 1
+
+
+def _request_started_log_offset(journal_events: list[dict[str, Any]] | None) -> int:
+    """The Editor.log length the editor recorded when it began handling the request.
+
+    The editor writes this into the `request_started` journal event, so the anchor costs one stat per request
+    the operator actually issued — never a stat inside the 0.5 s request pump.
+    """
+
+    for event in journal_events or []:
+        if str(event.get("event_type") or "") != "request_started":
+            continue
+        offset = _int_or_zero(event.get("editor_log_offset_bytes"))
+        if offset > 0:
+            return offset
+    return 0
+
+
+def _offset_is_line_boundary(log_path: Path, offset: int) -> bool:
+    """True when the recorded offset sits at the start of a line.
+
+    The editor records FileInfo.Length at a moment in time, so it can land inside a partially written line.
+    """
+
+    if offset <= 0:
+        return True
+    try:
+        with log_path.open("rb") as handle:
+            handle.seek(offset - 1)
+            return handle.read(1) == b"\n"
+    except OSError:
+        return True
+
+
+def resolve_editor_log_since_anchor(
+    log_path: Path,
+    *,
+    since: str = "",
+    bridge_state: dict[str, Any] | None = None,
+    host_session_state: dict[str, Any] | None = None,
+    journal_events: list[dict[str, Any]] | None = None,
+    since_request_id: str = "",
+) -> dict[str, Any]:
+    """Resolve a `since` anchor to a byte offset in the Editor.log.
+
+    Editor.log accumulates across editor sessions and play sessions, so an unanchored grep can match a line
+    written by a previous run. The offsets come from the editor package: it records the log length at play-mode
+    entry and at bridge-generation start into bridge_state.json.
+    """
+
+    requested = str(since or "").strip().lower()
+    anchor: dict[str, Any] = {
+        "requested": requested,
+        "resolved": "unanchored",
+        "start_offset_bytes": 0,
+        "anchored": False,
+    }
+    if not requested:
+        return anchor
+
+    if requested not in SINCE_ANCHORS:
+        anchor["resolved"] = "unsupported_anchor"
+        anchor["supported_anchors"] = list(SINCE_ANCHORS)
+        return anchor
+
+    if requested == "request_id":
+        if not str(since_request_id or "").strip():
+            anchor["resolved"] = "anchor_argument_missing"
+            anchor["anchor_argument_missing_reason"] = "since=request_id also needs sinceRequestId"
+            return anchor
+        anchor["since_request_id"] = str(since_request_id).strip()
+        offset = _request_started_log_offset(journal_events)
+        source = "request_journal.request_started.editor_log_offset_bytes"
+    else:
+        state_key = SINCE_ANCHOR_STATE_KEYS[requested]
+        offset = _int_or_zero((bridge_state or {}).get(state_key))
+        source = f"bridge_state.{state_key}"
+
+    stamped_log = str((bridge_state or {}).get("editor_log_path") or "")
+    if stamped_log and not _same_path(Path(stamped_log).expanduser(), log_path.expanduser()):
+        anchor["resolved"] = "anchor_log_mismatch"
+        anchor["anchor_source"] = source
+        anchor["stamped_editor_log_path"] = stamped_log
+        anchor["searched_editor_log_path"] = str(log_path)
+        anchor["anchor_log_mismatch_reason"] = (
+            "the editor measured this offset against its own Editor.log, which is not the log being searched; "
+            "an editor opened outside the host writes to the platform Editor.log while the host defaults to the "
+            "project-local one, and applying an offset across the two would scope the search to an arbitrary byte"
+        )
+        anchor["recommended_next_action"] = (
+            "pass editorLogPath=<the path in bridge_state.editor_log_path>, or reopen the editor through "
+            "ensure-ready --open-editor so both sides agree on one log"
+        )
+        return anchor
+
+    anchor["anchor_source"] = source
+    if offset <= 0:
+        anchor["resolved"] = "anchor_unavailable"
+        if requested == "request_id":
+            anchor["anchor_unavailable_reason"] = (
+                "no request_started journal event for this request id carries an Editor.log offset; the request "
+                "may predate this package version, or its journal entry may have been pruned"
+            )
+            anchor["recommended_next_action"] = (
+                "treat this result as spanning previous sessions; use since=playmode_start or "
+                "since=bridge_generation instead, or rerun the operation and anchor on the new request id"
+            )
+        else:
+            anchor["anchor_unavailable_reason"] = (
+                "the editor has not recorded this anchor yet; it is written when Play Mode is entered and when "
+                "the bridge generation starts, and it needs an editor running the current package version"
+            )
+            anchor["recommended_next_action"] = (
+                "treat this result as spanning previous sessions; enter Play Mode through unity_playmode_set, or "
+                "restart the editor so the bridge records an anchor, then retry"
+            )
+        return anchor
+
+    try:
+        file_size = int(log_path.stat().st_size or 0)
+    except OSError:
+        file_size = 0
+
+    if file_size < offset:
+        anchor["resolved"] = "anchor_stale"
+        anchor["anchor_stale_reason"] = "the Editor.log is smaller than the recorded offset, so it was rotated"
+        anchor["recorded_offset_bytes"] = offset
+        return anchor
+
+    anchor.update(
+        {
+            "resolved": requested,
+            "anchored": True,
+            "start_offset_bytes": offset,
+            "searched_from_line": _count_lines_before_offset(log_path, offset),
+            "scoped_bytes_available": max(0, file_size - offset),
+            "starts_mid_line": not _offset_is_line_boundary(log_path, offset),
+        }
+    )
+    if requested == "playmode_start":
+        anchor["playmode_started_utc"] = str((bridge_state or {}).get("editor_log_playmode_started_utc") or "")
+    if requested == "bridge_generation":
+        anchor["bridge_generation"] = _int_or_zero((bridge_state or {}).get("editor_log_offset_bridge_generation"))
+    return anchor
+
+
+def _read_editor_log_since_anchor(
+    log_path: Path,
+    anchor: dict[str, Any],
+    max_chars: int,
+) -> tuple[str, int]:
+    """Return (text, first_line_number) for the anchored scope, falling back to the plain tail."""
+
+    if not anchor.get("anchored"):
+        return read_editor_log_tail(log_path, max_chars=max_chars), 1
+
+    text, scope = read_editor_log_scope(
+        log_path,
+        session_start_offset_bytes=int(anchor.get("start_offset_bytes") or 0),
+        max_chars=max_chars,
+    )
+    if scope.get("fallback_used"):
+        anchor["resolved"] = "anchor_unusable"
+        anchor["anchored"] = False
+        return text, 1
+
+    first_line = max(1, int(anchor.get("searched_from_line") or 1))
+    if anchor.get("starts_mid_line"):
+        # The offset is a byte length captured while Unity was writing, so it can land inside a line. Keeping the
+        # fragment lets a pattern match text that the real line does not contain: an offset splitting "xxNOMARKER"
+        # leaves "MARKER", which a grep for MARKER reports as a hit on a line that literally says NOMARKER.
+        newline_at = text.find("\n")
+        text = "" if newline_at < 0 else text[newline_at + 1 :]
+        first_line += 1
+        anchor["partial_leading_line_dropped"] = True
+
+    truncated = _int_or_zero(anchor.get("scoped_bytes_available")) > max_chars
+    anchor["scope_truncated"] = truncated
+    if truncated:
+        # read_editor_log_scope keeps the tail of the scope, so the returned window no longer starts at the
+        # anchor and absolute numbering is unrecoverable without a second full read. Numbering goes relative to
+        # the window; keep the anchor's own line under a separate key so the two are not confused.
+        anchor["anchor_line"] = first_line
+        anchor["searched_from_line"] = 1
+        return text, 1
+
+    anchor["searched_from_line"] = first_line
+    return text, first_line
+
+
 def grep_editor_log_payload(
     project_root: Path,
     log_path: Path,
@@ -215,6 +439,11 @@ def grep_editor_log_payload(
     include_build_pipeline_noise: bool = False,
     limit: int = 20,
     max_chars: int = EDITOR_LOG_GREP_MAX_CHARS,
+    since: str = "",
+    bridge_state: dict[str, Any] | None = None,
+    host_session_state: dict[str, Any] | None = None,
+    journal_events: list[dict[str, Any]] | None = None,
+    since_request_id: str = "",
 ) -> dict[str, Any]:
     pattern = str(pattern or "").strip()
     if not pattern:
@@ -243,11 +472,19 @@ def grep_editor_log_payload(
             return needle.lower() in line.lower()
         return needle in line
 
-    text = read_editor_log_tail(log_path, max_chars=max_chars)
+    anchor = resolve_editor_log_since_anchor(
+        log_path,
+        since=since,
+        bridge_state=bridge_state,
+        host_session_state=host_session_state,
+        journal_events=journal_events,
+        since_request_id=since_request_id,
+    )
+    text, first_line_number = _read_editor_log_since_anchor(log_path, anchor, max_chars)
     matches: list[dict[str, Any]] = []
     excluded_count = 0
     build_pipeline_suppressed_count = 0
-    for line_number, raw_line in enumerate(text.splitlines(), start=1):
+    for line_number, raw_line in enumerate(text.splitlines(), start=first_line_number):
         line = raw_line.rstrip("\n")
         if not line_matches(line, pattern, compiled):
             continue
@@ -286,7 +523,17 @@ def grep_editor_log_payload(
         "items": visible_matches,
         "truncated": truncated,
         "searched_tail_chars": max_chars,
+        "since_anchor": anchor,
+        "searched_from_line": first_line_number,
+        "line_numbering_basis": (
+            "anchored_scope_relative" if anchor.get("scope_truncated") else "editor_log_absolute"
+        ),
+        "result_trust_class": (
+            "session_scoped_editor_log" if anchor.get("anchored") else "editor_log_spans_multiple_sessions"
+        ),
         "console_grep_caveat": EDITOR_LOG_CONSOLE_CAVEAT,
+        "stale_match_caveat": "" if anchor.get("anchored") else EDITOR_LOG_STALE_MATCH_CAVEAT,
+        "since_anchor_degraded": bool(since) and not anchor.get("anchored"),
         "validation_evidence": "unity_editor_log",
     }
 
@@ -297,13 +544,26 @@ def tail_editor_log_payload(
     *,
     limit: int = 50,
     max_chars: int = EDITOR_LOG_GREP_MAX_CHARS,
+    since: str = "",
+    bridge_state: dict[str, Any] | None = None,
+    host_session_state: dict[str, Any] | None = None,
+    journal_events: list[dict[str, Any]] | None = None,
+    since_request_id: str = "",
 ) -> dict[str, Any]:
     limit = max(1, int(limit or 50))
-    text = read_editor_log_tail(log_path, max_chars=max_chars)
+    anchor = resolve_editor_log_since_anchor(
+        log_path,
+        since=since,
+        bridge_state=bridge_state,
+        host_session_state=host_session_state,
+        journal_events=journal_events,
+        since_request_id=since_request_id,
+    )
+    text, first_line_number = _read_editor_log_since_anchor(log_path, anchor, max_chars)
     lines = [line.rstrip("\n") for line in text.splitlines() if line.strip()]
     truncated = len(lines) > limit
     visible_lines = lines[-limit:] if truncated else lines
-    start_line = max(1, len(lines) - len(visible_lines) + 1)
+    start_line = max(1, first_line_number + len(lines) - len(visible_lines))
     items = [
         {
             "type": "editor_log",
@@ -323,7 +583,16 @@ def tail_editor_log_payload(
         "truncated": truncated,
         "tail_count": len(items),
         "searched_tail_chars": max_chars,
-        "result_trust_class": "editor_log_path_backed_untyped",
+        "since_anchor": anchor,
+        "searched_from_line": first_line_number,
+        "line_numbering_basis": (
+            "anchored_scope_relative" if anchor.get("scope_truncated") else "editor_log_absolute"
+        ),
+        "result_trust_class": (
+            "session_scoped_editor_log" if anchor.get("anchored") else "editor_log_path_backed_untyped"
+        ),
+        "stale_match_caveat": "" if anchor.get("anchored") else EDITOR_LOG_STALE_MATCH_CAVEAT,
+        "since_anchor_degraded": bool(since) and not anchor.get("anchored"),
         "console_tail_caveat": EDITOR_LOG_TAIL_CAVEAT,
         "recommended_next_action": "use_source_editor_log_grep_for_compile_errors",
         "validation_evidence": "unity_editor_log",

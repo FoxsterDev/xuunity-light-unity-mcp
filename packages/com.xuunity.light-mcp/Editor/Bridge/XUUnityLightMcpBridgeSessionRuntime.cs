@@ -48,6 +48,7 @@ namespace XUUnity.LightMcp.Editor.Bridge
                 var nextGeneration = ResolveNextGeneration();
 
                 ResetSessionFieldsLocked(nextGeneration);
+                XUUnityLightMcpEditorLogAnchors.CaptureBridgeGenerationStart(nextGeneration);
                 XUUnityLightMcpPlayModeTransitionRuntime.RestorePersistedStateLocked();
                 PersistGenerationStateLocked();
             }

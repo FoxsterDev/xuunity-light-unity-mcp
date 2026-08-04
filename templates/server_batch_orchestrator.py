@@ -37,6 +37,7 @@ from server_health import (
     classify_project_health,
     grep_editor_log_payload,
     tail_editor_log_payload,
+    SINCE_ANCHORS,
 )
 from server_license import (
     build_license_capabilities,
@@ -1489,6 +1490,48 @@ def call_unity_loading_timing_tool(arguments: dict[str, Any]) -> dict[str, Any]:
     return mcp_json_result(summary, is_error=not bool(summary.get("succeeded")))
 
 
+def editor_log_anchor_journal(project_root: Path, since: str, since_request_id: str) -> list[dict[str, Any]]:
+    """Journal events for the anchored request, or an empty list when they cannot be read."""
+
+    if since != "request_id" or not since_request_id:
+        return []
+    try:
+        return read_request_journal_events(project_root, since_request_id)
+    except (ToolInvocationError, RuntimeError, OSError):
+        return []
+
+
+def editor_log_anchor_state(project_root: Path, since: str) -> tuple[dict[str, Any], dict[str, Any]]:
+    """State the `since` anchors resolve against, or empty dicts.
+
+    Reading an Editor.log must not require a resolvable Unity project context: the log is path-backed and the
+    tool is often the thing an operator reaches for when the project itself is in a bad state. An unresolvable
+    context degrades to an unanchored search, which the payload reports as `since_anchor_degraded`.
+    """
+
+    if not since:
+        return {}, {}
+    try:
+        return (
+            current_project_context_bridge_state(project_root),
+            current_project_context_host_session_state(project_root),
+        )
+    except (ToolInvocationError, RuntimeError, OSError):
+        return {}, {}
+
+
+def _editor_log_since_argument(arguments: dict[str, Any]) -> str:
+    since = arguments.get("since", "")
+    if since is None:
+        return ""
+    if not isinstance(since, str):
+        raise JsonRpcError(-32602, "since must be a string when provided.")
+    since = since.strip()
+    if since and since not in SINCE_ANCHORS:
+        raise JsonRpcError(-32602, f"since must be one of {', '.join(SINCE_ANCHORS)}.")
+    return since
+
+
 def call_unity_console_grep_tool(arguments: dict[str, Any]) -> dict[str, Any]:
     project_root_value = arguments.get("projectRoot")
     if not isinstance(project_root_value, str) or not project_root_value.strip():
@@ -1528,6 +1571,8 @@ def call_unity_console_grep_tool(arguments: dict[str, Any]) -> dict[str, Any]:
         raise JsonRpcError(-32602, "excludePattern must be a string when provided.")
 
     include_types = _optional_string_list_argument(arguments, "includeTypes")
+    since = _editor_log_since_argument(arguments)
+    since_request_id = str(arguments.get("sinceRequestId") or "").strip()
     project_root = ensure_project_root(project_root_value)
 
     if source == "editor_log":
@@ -1535,6 +1580,8 @@ def call_unity_console_grep_tool(arguments: dict[str, Any]) -> dict[str, Any]:
         if editor_log_path is not None and not isinstance(editor_log_path, str):
             raise JsonRpcError(-32602, "editorLogPath must be a string when provided.")
         log_path = resolve_editor_log_path(project_root, editor_log_path)
+        anchor_bridge_state, anchor_host_session_state = editor_log_anchor_state(project_root, since)
+        anchor_journal_events = editor_log_anchor_journal(project_root, since, since_request_id)
         try:
             payload = grep_editor_log_payload(
                 project_root,
@@ -1546,6 +1593,11 @@ def call_unity_console_grep_tool(arguments: dict[str, Any]) -> dict[str, Any]:
                 include_stack_traces=include_stack_traces,
                 include_build_pipeline_noise=include_build_pipeline_noise,
                 limit=max(1, limit),
+                since=since,
+                bridge_state=anchor_bridge_state,
+                host_session_state=anchor_host_session_state,
+                journal_events=anchor_journal_events,
+                since_request_id=since_request_id,
             )
         except ValueError as exc:
             raise JsonRpcError(-32602, str(exc)) from exc
@@ -1599,6 +1651,8 @@ def call_unity_console_tail_tool(arguments: dict[str, Any]) -> dict[str, Any]:
         raise JsonRpcError(-32602, "limit must be an integer.")
 
     include_types = _optional_string_list_argument(arguments, "includeTypes")
+    since = _editor_log_since_argument(arguments)
+    since_request_id = str(arguments.get("sinceRequestId") or "").strip()
     project_root = ensure_project_root(project_root_value)
 
     if source == "editor_log":
@@ -1606,11 +1660,18 @@ def call_unity_console_tail_tool(arguments: dict[str, Any]) -> dict[str, Any]:
         if editor_log_path is not None and not isinstance(editor_log_path, str):
             raise JsonRpcError(-32602, "editorLogPath must be a string when provided.")
         log_path = resolve_editor_log_path(project_root, editor_log_path)
+        anchor_bridge_state, anchor_host_session_state = editor_log_anchor_state(project_root, since)
+        anchor_journal_events = editor_log_anchor_journal(project_root, since, since_request_id)
         return mcp_json_result(
             tail_editor_log_payload(
                 project_root,
                 log_path,
                 limit=max(1, limit),
+                since=since,
+                bridge_state=anchor_bridge_state,
+                host_session_state=anchor_host_session_state,
+                journal_events=anchor_journal_events,
+                since_request_id=since_request_id,
             )
         )
 

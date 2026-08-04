@@ -124,6 +124,11 @@ namespace XUUnity.LightMcp.Editor.Bridge
 
         static void OnPlayModeStateChanged(PlayModeStateChange stateChange)
         {
+            if (stateChange == PlayModeStateChange.ExitingEditMode)
+            {
+                XUUnityLightMcpEditorLogAnchors.CapturePlayModeStart();
+            }
+
             XUUnityLightMcpBridgeRuntimeState.MarkPlayModeStateChanged(ResolvePlayModeStateLabel(stateChange));
             TryWriteHeartbeat();
         }

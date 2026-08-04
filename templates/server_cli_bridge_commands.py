@@ -386,6 +386,10 @@ def cmd_request_console_grep(args):
     source = str(getattr(args, "source", "editor_log") or "editor_log")
     if source == "editor_log":
         log_path = resolve_editor_log_path(project_root, getattr(args, "editor_log_path", None))
+        since = str(getattr(args, "since", "") or "")
+        since_request_id = str(getattr(args, "since_request_id", "") or "").strip()
+        anchor_bridge_state, anchor_host_session_state = editor_log_anchor_state(project_root, since)
+        anchor_journal_events = editor_log_anchor_journal(project_root, since, since_request_id)
         try:
             payload = grep_editor_log_payload(
                 project_root,
@@ -395,6 +399,11 @@ def cmd_request_console_grep(args):
                 ignore_case=bool(args.ignore_case),
                 include_stack_traces=bool(args.include_stack_traces),
                 limit=max(1, int(args.limit or 20)),
+                since=str(getattr(args, "since", "") or ""),
+                bridge_state=anchor_bridge_state,
+                host_session_state=anchor_host_session_state,
+                journal_events=anchor_journal_events,
+                since_request_id=since_request_id,
             )
         except ValueError as exc:
             raise ToolInvocationError("invalid_editor_log_grep", str(exc)) from exc
@@ -438,10 +447,19 @@ def cmd_request_console_tail(args):
     limit = max(1, int(args.limit or 50))
     if source == "editor_log":
         log_path = resolve_editor_log_path(project_root, getattr(args, "editor_log_path", None))
+        since = str(getattr(args, "since", "") or "")
+        since_request_id = str(getattr(args, "since_request_id", "") or "").strip()
+        anchor_bridge_state, anchor_host_session_state = editor_log_anchor_state(project_root, since)
+        anchor_journal_events = editor_log_anchor_journal(project_root, since, since_request_id)
         payload = tail_editor_log_payload(
             project_root,
             log_path,
             limit=limit,
+            since=str(getattr(args, "since", "") or ""),
+            bridge_state=anchor_bridge_state,
+            host_session_state=anchor_host_session_state,
+            journal_events=anchor_journal_events,
+            since_request_id=since_request_id,
         )
         print_json(
             {

@@ -234,6 +234,13 @@ def build_parser() -> argparse.ArgumentParser:
     console_grep_cmd.add_argument("--include-stack-traces", action="store_true")
     console_grep_cmd.add_argument("--include-type", action="append", default=[])
     console_grep_cmd.add_argument("--limit", type=int, default=20)
+    console_grep_cmd.add_argument(
+        "--since",
+        choices=["playmode_start", "bridge_generation", "request_id"],
+        default="",
+        help="Bound the editor_log search to the current session. Editor.log spans multiple editor and play sessions, so an unanchored match may predate this run.",
+    )
+    console_grep_cmd.add_argument("--since-request-id", default="", help="Request id to anchor on when --since request_id.")
     console_grep_cmd.add_argument("--timeout-ms", type=int, default=5000)
     console_grep_cmd.set_defaults(func_name="cmd_request_console_grep")
 
@@ -243,6 +250,13 @@ def build_parser() -> argparse.ArgumentParser:
     console_tail_cmd.add_argument("--editor-log-path")
     console_tail_cmd.add_argument("--include-type", action="append", default=[])
     console_tail_cmd.add_argument("--limit", type=int, default=50)
+    console_tail_cmd.add_argument(
+        "--since",
+        choices=["playmode_start", "bridge_generation", "request_id"],
+        default="",
+        help="Bound the editor_log search to the current session. Editor.log spans multiple editor and play sessions, so an unanchored match may predate this run.",
+    )
+    console_tail_cmd.add_argument("--since-request-id", default="", help="Request id to anchor on when --since request_id.")
     console_tail_cmd.add_argument("--timeout-ms", type=int, default=5000)
     console_tail_cmd.set_defaults(func_name="cmd_request_console_tail")
 

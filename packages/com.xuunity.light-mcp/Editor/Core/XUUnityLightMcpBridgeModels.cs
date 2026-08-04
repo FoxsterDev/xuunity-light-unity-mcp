@@ -92,6 +92,10 @@ namespace XUUnity.LightMcp.Editor.Core
             public string request_journal_directory = "";
             public string request_journal_head = "";
             public string editor_log_path = "";
+            public long editor_log_offset_at_playmode_start;
+            public string editor_log_playmode_started_utc = "";
+            public long editor_log_offset_at_bridge_generation_start;
+            public int editor_log_offset_bridge_generation;
             public string last_error = "";
             public string health_status = "";
             public int supported_operation_count;
@@ -236,6 +240,7 @@ namespace XUUnity.LightMcp.Editor.Core
             public int pending_request_count;
             public string started_at_utc = "";
             public string completed_at_utc = "";
+            public long editor_log_offset_bytes;
             public string reason = "";
             public bool retryable;
             public string reclassified_status = "";

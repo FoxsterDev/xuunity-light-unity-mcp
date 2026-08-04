@@ -1352,6 +1352,22 @@ TOOLS: dict[str, dict[str, Any]] = {
                     "items": {"type": "string"},
                     "description": "Subset of log, warning, error, exception for source=console. Editor.log tail is untyped."
                 },
+                "since": {
+                    "type": "string",
+                    "enum": ["playmode_start", "bridge_generation", "request_id"],
+                    "description": (
+                        "Bound an editor_log search to the current session. Editor.log accumulates across editor "
+                        "and play sessions, so an unanchored match can be a line from a previous run - the exact "
+                        "false positive a shell wait loop hits. playmode_start and bridge_generation resolve to "
+                        "byte offsets the editor package records in bridge_state.json; session_start uses the "
+                        "offset the host captured when it opened the editor; request_id uses the offset the editor recorded in that request's journal entry and also needs sinceRequestId. The resolved anchor and "
+                        "searched_from_line are echoed back in since_anchor."
+                    )
+                },
+                "sinceRequestId": {
+                    "type": "string",
+                    "description": "Request id to anchor on when since=request_id. Ignored for other anchors."
+                },
                 "timeoutMs": {"type": "integer", "default": 5000, "minimum": 1000}
             },
             "required": ["projectRoot"]
@@ -1397,6 +1413,22 @@ TOOLS: dict[str, dict[str, Any]] = {
                     "type": "array",
                     "items": {"type": "string"},
                     "description": "Subset of log, warning, error, exception."
+                },
+                "since": {
+                    "type": "string",
+                    "enum": ["playmode_start", "bridge_generation", "request_id"],
+                    "description": (
+                        "Bound an editor_log search to the current session. Editor.log accumulates across editor "
+                        "and play sessions, so an unanchored match can be a line from a previous run - the exact "
+                        "false positive a shell wait loop hits. playmode_start and bridge_generation resolve to "
+                        "byte offsets the editor package records in bridge_state.json; session_start uses the "
+                        "offset the host captured when it opened the editor; request_id uses the offset the editor recorded in that request's journal entry and also needs sinceRequestId. The resolved anchor and "
+                        "searched_from_line are echoed back in since_anchor."
+                    )
+                },
+                "sinceRequestId": {
+                    "type": "string",
+                    "description": "Request id to anchor on when since=request_id. Ignored for other anchors."
                 },
                 "timeoutMs": {"type": "integer", "default": 5000, "minimum": 1000}
             },

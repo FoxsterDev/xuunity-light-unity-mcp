@@ -32,6 +32,8 @@ from server_batch_orchestrator import (
     ensure_project_root,
     current_project_context_bridge_state,
     current_project_context_host_session_state,
+    editor_log_anchor_journal,
+    editor_log_anchor_state,
     current_project_context_discovery_details,
     build_project_discovery_report,
     build_status_summary_from_context,
