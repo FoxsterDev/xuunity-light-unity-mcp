@@ -195,7 +195,8 @@ namespace XUUnity.LightMcp.Editor.Helpers
             string requestId,
             string fileName,
             bool includeImage,
-            int maxResolution)
+            int maxResolution,
+            int imageBudgetBytes)
         {
             var gameView = EnsureGameView();
             var gameViewType = gameView.GetType();
@@ -229,11 +230,26 @@ namespace XUUnity.LightMcp.Editor.Helpers
                 captured.Apply();
                 File.WriteAllBytes(fullPath, captured.EncodeToPNG());
 
-                string imageBase64 = "";
+                var budget = imageBudgetBytes > 0
+                    ? imageBudgetBytes
+                    : XUUnityLightMcpGameView.DefaultImageBudgetBytes;
+                var imageBase64 = "";
+                var imageBytes = 0;
+                var omittedReason = XUUnityLightMcpGameView.ImageOmittedNotRequested;
                 if (includeImage)
                 {
                     inlineTexture = DownscaleIfNeeded(captured, maxResolution);
-                    imageBase64 = Convert.ToBase64String(inlineTexture.EncodeToPNG());
+                    var inlineBytes = inlineTexture.EncodeToPNG();
+                    imageBytes = inlineBytes?.Length ?? 0;
+                    if (imageBytes > 0 && imageBytes <= budget)
+                    {
+                        imageBase64 = Convert.ToBase64String(inlineBytes);
+                        omittedReason = "";
+                    }
+                    else
+                    {
+                        omittedReason = XUUnityLightMcpGameView.ImageOmittedPayloadBudget;
+                    }
                 }
 
                 return new XUUnityLightMcpGameViewScreenshotPayload
@@ -243,7 +259,12 @@ namespace XUUnity.LightMcp.Editor.Helpers
                     width = width,
                     height = height,
                     image_base64 = imageBase64,
-                    image_included = includeImage
+                    image_included = imageBase64.Length > 0,
+                    image_requested = includeImage,
+                    image_omitted_reason = omittedReason,
+                    image_bytes = imageBytes,
+                    image_budget_bytes = budget,
+                    recommended_next_action = XUUnityLightMcpGameView.ImageFilePathNextAction
                 };
             }
             finally

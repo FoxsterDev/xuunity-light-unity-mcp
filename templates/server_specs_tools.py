@@ -1588,6 +1588,11 @@ TOOLS: dict[str, dict[str, Any]] = {
             "type": "object",
             "properties": {
                 "projectRoot": {"type": "string"},
+                "includeFullPayload": {
+                    "type": "boolean",
+                    "default": False,
+                    "description": "When true, return the full bridge payload instead of the compact play-mode summary."
+                },
                 "timeoutMs": {"type": "integer", "default": 5000, "minimum": 1000}
             },
             "required": ["projectRoot"]
@@ -1603,6 +1608,11 @@ TOOLS: dict[str, dict[str, Any]] = {
                 "action": {
                     "type": "string",
                     "enum": ["enter", "exit", "pause", "resume"]
+                },
+                "includeFullPayload": {
+                    "type": "boolean",
+                    "default": False,
+                    "description": "When true, return the full bridge payload instead of the compact transition summary."
                 },
                 "timeoutMs": {"type": "integer", "default": 180000, "minimum": 1000}
             },
@@ -1632,7 +1642,12 @@ TOOLS: dict[str, dict[str, Any]] = {
     },
     "unity_game_view_screenshot": {
         "bridgeOperation": "unity.game_view.screenshot",
-        "description": "Capture a screenshot from the Unity Editor Game View.",
+        "description": (
+            "Capture a screenshot from the Unity Editor Game View. The intended operator path is to read the "
+            "returned file_path with an image reader; includeImage inlines base64 only while the encoded PNG "
+            "stays inside imageBudgetBytes, and otherwise reports image_omitted_reason=payload_budget rather "
+            "than overflowing the tool result."
+        ),
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -1640,6 +1655,20 @@ TOOLS: dict[str, dict[str, Any]] = {
                 "fileName": {"type": "string"},
                 "includeImage": {"type": "boolean", "default": False},
                 "maxResolution": {"type": "integer", "default": 640, "minimum": 1},
+                "imageBudgetBytes": {
+                    "type": "integer",
+                    "default": 48000,
+                    "minimum": 1024,
+                    "description": (
+                        "Maximum encoded PNG size that may be inlined as base64. Base64 costs about 1.37 bytes "
+                        "per byte, so the default caps the inline image near 66k characters."
+                    )
+                },
+                "includeFullPayload": {
+                    "type": "boolean",
+                    "default": False,
+                    "description": "When true, return the full bridge payload instead of the compact capture summary."
+                },
                 "timeoutMs": {"type": "integer", "default": 10000, "minimum": 1000}
             },
             "required": ["projectRoot"]

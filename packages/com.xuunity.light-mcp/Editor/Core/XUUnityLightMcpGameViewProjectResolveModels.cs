@@ -3,6 +3,15 @@ using System.Collections.Generic;
 
 namespace XUUnity.LightMcp.Editor.Core
 {
+        internal static class XUUnityLightMcpGameView
+        {
+            public const int DefaultImageBudgetBytes = 48000;
+
+            public const string ImageOmittedPayloadBudget = "payload_budget";
+            public const string ImageOmittedNotRequested = "not_requested";
+            public const string ImageFilePathNextAction = "read_file_path_with_an_image_reader";
+        }
+
         [Serializable]
         internal sealed class XUUnityLightMcpGameViewConfigureArgs
         {
@@ -47,6 +56,7 @@ namespace XUUnity.LightMcp.Editor.Core
             public string fileName = "";
             public bool includeImage;
             public int maxResolution = 640;
+            public int imageBudgetBytes = XUUnityLightMcpGameView.DefaultImageBudgetBytes;
         }
 
         [Serializable]
@@ -60,6 +70,11 @@ namespace XUUnity.LightMcp.Editor.Core
             public int height;
             public string image_base64 = "";
             public bool image_included;
+            public bool image_requested;
+            public string image_omitted_reason = "";
+            public int image_bytes;
+            public int image_budget_bytes;
+            public string recommended_next_action = "";
             public string validation_evidence = "unity_mcp";
         }
 

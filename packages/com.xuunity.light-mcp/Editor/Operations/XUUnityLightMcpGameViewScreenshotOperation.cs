@@ -21,7 +21,8 @@ namespace XUUnity.LightMcp.Editor.Operations
                     request.request_id,
                     args.fileName,
                     args.includeImage,
-                    args.maxResolution);
+                    args.maxResolution,
+                    args.imageBudgetBytes);
 
                 return XUUnityLightMcpResponseWriter.Success(
                     request.request_id,

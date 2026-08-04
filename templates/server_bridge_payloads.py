@@ -329,6 +329,9 @@ COMPACT_OPERATION_PAYLOADS = {
     "unity.compile.matrix",
     "unity.tests.run_editmode",
     "unity.tests.run_playmode",
+    "unity.playmode.state",
+    "unity.playmode.set",
+    "unity.game_view.screenshot",
 }
 
 
@@ -490,6 +493,63 @@ def _compact_tests_payload(payload: dict[str, Any], operation: str) -> dict[str,
     return compact
 
 
+def _compact_playmode_payload(payload: dict[str, Any], operation: str) -> dict[str, Any]:
+    compact = {
+        "payload_mode": "compact_operation",
+        "operation": operation,
+    }
+    _copy_if_present(
+        compact,
+        payload,
+        (
+            "status",
+            "outcome",
+            "playmode_state",
+            "is_playing",
+            "is_paused",
+            "is_playing_or_will_change_playmode",
+            "requested_action",
+            "settle_target_state",
+            "settle_phase",
+            "settle_request_id",
+            "completion_basis",
+            "settled_at_utc",
+            "refusal_code",
+            "recommended_next_action",
+        ),
+    )
+    compact.update(_artifact_ref(payload))
+    return compact
+
+
+def _compact_screenshot_payload(payload: dict[str, Any], operation: str) -> dict[str, Any]:
+    compact = {
+        "payload_mode": "compact_operation",
+        "operation": operation,
+    }
+    _copy_if_present(
+        compact,
+        payload,
+        (
+            "capture_source",
+            "file_path",
+            "width",
+            "height",
+            "image_included",
+            "image_requested",
+            "image_omitted_reason",
+            "image_bytes",
+            "image_budget_bytes",
+            "recommended_next_action",
+        ),
+    )
+    image_base64 = payload.get("image_base64")
+    if isinstance(image_base64, str) and image_base64:
+        compact["image_base64"] = image_base64
+    compact.update(_artifact_ref(payload))
+    return compact
+
+
 def compact_operation_payload(payload: dict[str, Any], operation: str) -> dict[str, Any]:
     if operation in {"unity.compile.player_scripts", "unity.compile.matrix"}:
         return _compact_compile_payload(payload, operation)
@@ -497,6 +557,10 @@ def compact_operation_payload(payload: dict[str, Any], operation: str) -> dict[s
         return _compact_refresh_payload(payload, operation)
     if operation in {"unity.tests.run_editmode", "unity.tests.run_playmode"}:
         return _compact_tests_payload(payload, operation)
+    if operation in {"unity.playmode.state", "unity.playmode.set"}:
+        return _compact_playmode_payload(payload, operation)
+    if operation == "unity.game_view.screenshot":
+        return _compact_screenshot_payload(payload, operation)
     return payload
 
 
