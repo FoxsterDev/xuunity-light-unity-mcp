@@ -57,6 +57,7 @@ namespace XUUnity.LightMcp.Editor.Operations
             payload.scanned_node_count = result.Nodes.Count;
             payload.warnings = result.Warnings;
             payload.errors.AddRange(result.Errors);
+            payload.out_of_scope = HasOutOfScopeDiagnostic(payload.errors) || HasOutOfScopeDiagnostic(payload.warnings);
 
             var matches = XUUnityLightMcpUiSelectorMatcher.Match(
                 result.Nodes,
@@ -95,15 +96,18 @@ namespace XUUnity.LightMcp.Editor.Operations
             if (payload.match_count == 0 && payload.success)
             {
                 var zeroMatch = BuildZeroMatchDiagnostic(args, payload);
-                payload.out_of_scope = zeroMatch.code == "ui_target_out_of_scope";
+                payload.out_of_scope = payload.out_of_scope || zeroMatch.code == "ui_target_out_of_scope";
                 if (RequiresSingleMatch)
                 {
                     payload.success = false;
                     payload.proof_class = XUUnityLightMcpUiRead.ProofError;
                     payload.errors.Add(zeroMatch);
                 }
-                else if (payload.out_of_scope)
+                else if (payload.out_of_scope || zeroMatch.code == "ui_scope_probe_incomplete")
                 {
+                    // Where zero matches are a legal answer, only a diagnostic that adds something beyond
+                    // "match_count is 0" is worth attaching: the target is reachable elsewhere, or absence could
+                    // not be established because the probe was cut short.
                     payload.warnings.Add(zeroMatch);
                 }
             }
@@ -125,13 +129,35 @@ namespace XUUnity.LightMcp.Editor.Operations
         {
         }
 
+        static bool HasOutOfScopeDiagnostic(List<XUUnityLightMcpUiDiagnostic> diagnostics)
+        {
+            foreach (var diagnostic in diagnostics)
+            {
+                if (string.Equals(diagnostic.code, "ui_target_out_of_scope", StringComparison.Ordinal))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
         static XUUnityLightMcpUiDiagnostic BuildZeroMatchDiagnostic(
             XUUnityLightMcpUiQueryArgs args,
             XUUnityLightMcpUiQueryPayload payload)
         {
-            var owners = FindOwningScenesOutsideScope(args, payload);
+            var owners = FindOwningScenesOutsideScope(args, payload, out var probeIncomplete);
             if (owners.Count == 0)
             {
+                if (probeIncomplete)
+                {
+                    return XUUnityLightMcpUiTreeBuilder.Diagnostic(
+                        "ui_scope_probe_incomplete",
+                        "The selector matched no node in the searched scope, and the wider-scope probe could not "
+                        + "finish, so whether the node exists elsewhere is unknown.",
+                        "Raise maxNodes and maxDepth, or narrow the scope with sceneName, then retry.");
+                }
+
                 return XUUnityLightMcpUiTreeBuilder.Diagnostic(
                     "ui_node_not_found",
                     "The selector matched no node in any loaded scene.");
@@ -142,19 +168,37 @@ namespace XUUnity.LightMcp.Editor.Operations
             return XUUnityLightMcpUiTreeBuilder.Diagnostic(
                 "ui_target_out_of_scope",
                 $"The selector matched no node in the searched scope [{searched}], but it does match in [{owning}].",
-                $"Retry with targetKind=all_loaded_scenes, or sceneName={owners[0]}.");
+                ResolveOutOfScopeRetry(args, owners[0]));
+        }
+
+        static string ResolveOutOfScopeRetry(XUUnityLightMcpUiQueryArgs args, string owningScene)
+        {
+            var kind = (args.targetKind ?? "").Trim();
+            var rootBoundKind = string.Equals(kind, XUUnityLightMcpUiRead.TargetGameObjectName, StringComparison.Ordinal)
+                || string.Equals(kind, XUUnityLightMcpUiRead.TargetGameObjectPath, StringComparison.Ordinal);
+
+            // targetKind doubles as the root selector for the name and path kinds, so advising
+            // targetKind=all_loaded_scenes there would discard targetValue and return an unrelated tree.
+            return rootBoundKind
+                ? $"Retry with sceneName={owningScene}, keeping targetKind={kind}."
+                : $"Retry with targetKind=all_loaded_scenes, or sceneName={owningScene}.";
         }
 
         static List<string> FindOwningScenesOutsideScope(
             XUUnityLightMcpUiQueryArgs args,
-            XUUnityLightMcpUiQueryPayload payload)
+            XUUnityLightMcpUiQueryPayload payload,
+            out bool probeIncomplete)
         {
             var owners = new List<string>();
+            probeIncomplete = false;
             if (payload.target == null || IsWidestScope(payload.target))
             {
                 return owners;
             }
 
+            // The probe must widen the scope, so it cannot carry targetKind: for the scope kinds that kind *is*
+            // the scope, and probing active_scene again would find nothing new. Root-bound kinds are handled by
+            // the advice instead, which never tells the operator to drop targetValue.
             var wide = XUUnityLightMcpUiTreeBuilder.Build(new XUUnityLightMcpUiTreeOptions
             {
                 TargetKind = XUUnityLightMcpUiRead.TargetAllLoadedScenes,
@@ -163,7 +207,7 @@ namespace XUUnity.LightMcp.Editor.Operations
                 MaxDepth = args.maxDepth,
                 MaxNodes = args.maxNodes,
                 IncludeInactive = args.includeInactive,
-                IncludeBounds = true,
+                IncludeBounds = false,
                 IncludeText = true
             });
 
@@ -182,13 +226,38 @@ namespace XUUnity.LightMcp.Editor.Operations
                 }
             }
 
+            // A truncated probe, or a scene selector that matched several same-named scenes, cannot support
+            // "no node in any loaded scene": the probe stopped early or the searched set is not identifiable.
+            probeIncomplete = owners.Count == 0
+                && (wide.Truncated || payload.target.scene_selector_ambiguous);
             return owners;
         }
 
         static bool IsWidestScope(XUUnityLightMcpUiTargetInfo target)
         {
-            return target.scene_scope == XUUnityLightMcpUiRead.TargetAllLoadedScenes
-                && target.dont_destroy_on_load_included;
+            if (!string.Equals(
+                    target.scene_scope,
+                    XUUnityLightMcpUiRead.SceneScopeAllLoadedScenes,
+                    StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            // DontDestroyOnLoad cannot be included in Edit Mode or when the probe failed, so requiring the flag
+            // made every zero-match Edit Mode query pay a second full tree walk that could not find anything new.
+            return target.dont_destroy_on_load_included
+                || string.Equals(
+                    target.dont_destroy_on_load_status,
+                    XUUnityLightMcpUiRead.DontDestroyOnLoadEditModeUnavailable,
+                    StringComparison.Ordinal)
+                || string.Equals(
+                    target.dont_destroy_on_load_status,
+                    XUUnityLightMcpUiRead.DontDestroyOnLoadProbeFailed,
+                    StringComparison.Ordinal)
+                || string.Equals(
+                    target.dont_destroy_on_load_status,
+                    XUUnityLightMcpUiRead.DontDestroyOnLoadNotRequested,
+                    StringComparison.Ordinal);
         }
 
         static void EnforceSingleMatch(XUUnityLightMcpUiQueryArgs args, XUUnityLightMcpUiQueryPayload payload)

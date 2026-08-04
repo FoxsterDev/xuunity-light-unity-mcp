@@ -56,6 +56,7 @@ namespace XUUnity.LightMcp.Editor.Helpers
         public bool DontDestroyOnLoadSearched;
         public string DontDestroyOnLoadStatus = XUUnityLightMcpUiRead.DontDestroyOnLoadNotRequested;
         public bool RequestedSceneMissing;
+        public bool RequestedSceneAmbiguous;
 
         public bool IsNarrowerThanAllLoaded => Searched.Count < AllLoaded.Count;
     }
@@ -170,6 +171,7 @@ namespace XUUnity.LightMcp.Editor.Helpers
                 }
 
                 scope.RequestedSceneMissing = scope.Searched.Count == 0;
+                scope.RequestedSceneAmbiguous = scope.Searched.Count > 1;
             }
             else if (wantsAllLoaded)
             {
@@ -216,6 +218,7 @@ namespace XUUnity.LightMcp.Editor.Helpers
             result.Target.scene_scope = scope.Kind;
             result.Target.dont_destroy_on_load_included = scope.DontDestroyOnLoadSearched;
             result.Target.dont_destroy_on_load_status = ResolveDontDestroyOnLoadStatus(scope);
+            result.Target.scene_selector_ambiguous = scope.RequestedSceneAmbiguous;
 
             foreach (var scene in scope.Searched)
             {
@@ -227,11 +230,27 @@ namespace XUUnity.LightMcp.Editor.Helpers
                 result.Target.loaded_scenes.Add(DescribeScene(scene));
             }
 
-            var primary = scope.Searched.Count > 0 ? scope.Searched[0] : SceneManager.GetActiveScene();
-            if (primary.IsValid())
+            if (scope.RequestedSceneAmbiguous)
             {
-                result.Target.scene_name = primary.name ?? "";
-                result.Target.scene_path = primary.path ?? "";
+                var paths = new List<string>();
+                foreach (var scene in scope.Searched)
+                {
+                    paths.Add(scene.path ?? "");
+                }
+
+                result.Warnings.Add(Diagnostic(
+                    "ui_scene_selector_ambiguous",
+                    $"sceneName '{result.Target.requested_scene_name}' matches {scope.Searched.Count} loaded "
+                    + $"scenes: {string.Join(", ", paths)}.",
+                    "Pass the scene path instead of the name so the scope names one scene."));
+            }
+
+            // Naming a scene that was never searched made a typo'd sceneName report the active scene as its
+            // target, so scene identity stays empty unless exactly one scene was searched.
+            if (scope.Searched.Count == 1 && scope.Searched[0].IsValid())
+            {
+                result.Target.scene_name = scope.Searched[0].name ?? "";
+                result.Target.scene_path = scope.Searched[0].path ?? "";
             }
         }
 
@@ -649,6 +668,21 @@ namespace XUUnity.LightMcp.Editor.Helpers
             }
 
             return $"Searched scenes: {string.Join(", ", names)}.";
+        }
+
+        public static string DescribeSearchedScope(XUUnityLightMcpUiTargetInfo target)
+        {
+            if (target == null)
+            {
+                return "";
+            }
+
+            var searched = string.Join(", ", target.searched_scenes);
+            var loaded = string.Join(", ", target.loaded_scenes);
+            var gap = target.loaded_scenes.Count > target.searched_scenes.Count
+                ? " Retry with targetKind=all_loaded_scenes, or set sceneName to the owning scene."
+                : "";
+            return $"Searched scenes: {searched}. Loaded scenes: {loaded}.{gap}";
         }
 
         static string DescribeScopeGap(XUUnityLightMcpUiSceneScope scope)

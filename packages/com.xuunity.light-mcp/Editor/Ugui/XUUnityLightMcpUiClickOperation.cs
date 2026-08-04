@@ -71,18 +71,33 @@ namespace XUUnity.LightMcp.Editor.Ugui
             });
             payload.before_snapshot = Summarize(before);
 
-            foreach (var error in before.Errors)
+            foreach (var diagnostic in before.Errors)
             {
-                if (string.Equals(error.code, "ui_target_out_of_scope", StringComparison.Ordinal))
+                if (string.Equals(diagnostic.code, "ui_target_out_of_scope", StringComparison.Ordinal))
                 {
-                    return Refuse(request, payload, error.code, $"{error.message} {error.detail}".Trim());
+                    return Refuse(request, payload, diagnostic.code, $"{diagnostic.message} {diagnostic.detail}".Trim());
+                }
+            }
+
+            // The root-canvas out-of-scope case arrives as a warning, not an error, so a click that dropped
+            // warnings refused with a bare "matched no node" and told the operator nothing about where it lives.
+            foreach (var diagnostic in before.Warnings)
+            {
+                if (string.Equals(diagnostic.code, "ui_target_out_of_scope", StringComparison.Ordinal))
+                {
+                    return Refuse(request, payload, diagnostic.code, $"{diagnostic.message} {diagnostic.detail}".Trim());
                 }
             }
 
             var matches = XUUnityLightMcpUiSelectorMatcher.Match(before.Nodes, args.selector, 8, out _);
             if (matches.Count == 0)
             {
-                return Refuse(request, payload, "ui_node_not_found", "The selector matched no node.");
+                var scopeGap = XUUnityLightMcpUiTreeBuilder.DescribeSearchedScope(before.Target);
+                return Refuse(
+                    request,
+                    payload,
+                    "ui_node_not_found",
+                    $"The selector matched no node. {scopeGap}".Trim());
             }
 
             if (matches.Count > 1)
