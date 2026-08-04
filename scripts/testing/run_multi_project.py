@@ -324,6 +324,45 @@ def compile_evidence_from_run(
     }
 
 
+LIVE_EDITOR_CONFLICT_CODE = "editor_running_batch_conflict"
+BLOCKED_BY_LIVE_EDITOR_VERDICT = "blocked_by_live_editor"
+
+
+def batch_error_code(payload) -> str:
+    """Error code of a batch run that never reached Unity, or '' when the run produced no error envelope."""
+
+    if not isinstance(payload, dict):
+        return ""
+    error = payload.get("error")
+    if not isinstance(error, dict):
+        return ""
+    return str(error.get("code") or "")
+
+
+def live_project_editor_pids_from_run(payload, result_summary) -> list:
+    """Live editor pids reported by any of the places a blocked batch run records them."""
+
+    candidates = []
+    if isinstance(result_summary, dict):
+        candidates.append(result_summary)
+    if isinstance(payload, dict):
+        candidates.append(payload)
+        error = payload.get("error")
+        if isinstance(error, dict):
+            details = error.get("details")
+            if isinstance(details, dict):
+                candidates.append(details)
+                summary = details.get("batch_failure_summary")
+                if isinstance(summary, dict):
+                    candidates.append(summary)
+
+    for candidate in candidates:
+        pids = candidate.get("live_project_editor_pids")
+        if isinstance(pids, list) and pids:
+            return [int(pid) for pid in pids if isinstance(pid, (int, float, str)) and str(pid).isdigit()]
+    return []
+
+
 def build_batch_status(
     project_name: str,
     project_root: str,
@@ -396,10 +435,22 @@ def build_batch_status(
     batch_matrix_pass = compile_evidence["outcome"] == "passed" and effective_execution_lane in {"", "batch"}
     gui_matrix_pass = compile_evidence["outcome"] == "passed" and effective_execution_lane == "gui"
 
+    live_editor_pids = live_project_editor_pids_from_run(payload, result_summary)
+    blocked_by_live_editor = (
+        unity_outcome in {"not_started", ""}
+        and (
+            lane_fallback_reason == LIVE_EDITOR_CONFLICT_CODE
+            or batch_error_code(payload) == LIVE_EDITOR_CONFLICT_CODE
+            or (bool(live_editor_pids) and transport_outcome == "batch_prepare_blocked")
+        )
+    )
+
     if recover_rc == 0 and batch_rc == 0 and bool(payload.get("succeeded")) and batch_matrix_pass and int(matrix.get("failed", 0)) == 0:
         operator_verdict = "passed_via_batch"
     elif recover_rc == 0 and batch_rc == 0 and gui_fallback_pass and gui_matrix_pass:
         operator_verdict = "passed_via_gui_fallback"
+    elif blocked_by_live_editor:
+        operator_verdict = BLOCKED_BY_LIVE_EDITOR_VERDICT
     elif unity_outcome in {"not_started", ""} and (
         batch_rc != 0 or transport_outcome.endswith("_blocked") or effective_execution_lane == "none"
     ):
@@ -428,6 +479,8 @@ def build_batch_status(
         "license_probed_at_utc": license_probed_at_utc,
         "license_probe_age_seconds": license_probe_age,
         "operator_verdict": operator_verdict,
+        "blocked_by_live_editor": blocked_by_live_editor,
+        "live_project_editor_pids": live_editor_pids,
         "compile_evidence": compile_evidence,
         "unity_outcome": unity_outcome,
         "transport_outcome": transport_outcome,
@@ -503,6 +556,8 @@ def emit_batch_final_summary(results_dir: str) -> int:
 
     print("MULTI_PROJECT_BATCH_COMPILE_MATRIX_SUMMARY_BEGIN")
     overall_failed = 0
+    overall_blocked = 0
+    blocked_projects = []
     verdict_counts = {}
     for item in statuses:
         compile_evidence = compile_evidence_from_status(item)
@@ -520,7 +575,17 @@ def emit_batch_final_summary(results_dir: str) -> int:
                 operator_verdict = "failed_wrapper_unity_unproven"
         verdict_counts[operator_verdict] = verdict_counts.get(operator_verdict, 0) + 1
         ok = compile_evidence["outcome"] == "passed"
-        if not ok:
+        blocked = operator_verdict == BLOCKED_BY_LIVE_EDITOR_VERDICT
+        if blocked:
+            overall_blocked += 1
+            blocked_projects.append(
+                {
+                    "project": item.get("project", ""),
+                    "project_root": item.get("project_root", ""),
+                    "live_project_editor_pids": item.get("live_project_editor_pids") or [],
+                }
+            )
+        elif not ok:
             overall_failed += 1
         fields = [
             item.get("project", ""),
@@ -550,11 +615,20 @@ def emit_batch_final_summary(results_dir: str) -> int:
     aggregate = {
         "projects_total": len(statuses),
         "projects_failed": overall_failed,
+        "projects_blocked": overall_blocked,
         "operator_verdict_counts": verdict_counts,
+        "blocked_projects": blocked_projects,
         "results_dir": str(results_path),
     }
+    if blocked_projects:
+        names = ", ".join(str(entry.get("project") or "") for entry in blocked_projects)
+        aggregate["aggregate_hint"] = (
+            f"{overall_blocked} project(s) were not compiled because an editor is open on them: {names}. "
+            "This is environmental, not a compile failure. Verify them through the interactive lane, or close "
+            "the editors with recover-editor-session and rerun the batch lane."
+        )
     print(json.dumps(aggregate, indent=2))
-    return 1 if overall_failed else 0
+    return 1 if (overall_failed or overall_blocked) else 0
 
 
 def main_batch(argv: list) -> int:
