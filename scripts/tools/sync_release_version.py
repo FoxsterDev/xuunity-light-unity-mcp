@@ -122,6 +122,60 @@ def update_server_info(source_root: Path, old_version: str, version: str) -> lis
     return changed
 
 
+RELEASE_DOC_VERSION_TOKEN = re.compile(
+    # Reject only a continuation of the number itself, not any word character. Unity's own `6000.0.58f2` contains
+    # `0.0.58` — blocked by the digit lookbehind and the trailing-letter lookahead — while a version that ends a
+    # sentence (`v0.3.45.`) or sits inside a placeholder (`APPROVED_V0.3.45_MCP_REPO_ROOT`) must still be swept.
+    r"(?<![\d.])(?P<prefix>[vV]?)(?P<version>0\.\d+\.\d+)(?P<plus>\+?)(?![\dA-Za-z])"
+)
+
+# Versions that are always about the past: the package-path migration and its pre-migration template pins.
+# Mirrors DOC_ALLOWLIST in scripts/testing/check_release_version_consistency.py.
+HISTORICAL_VERSION_TOKENS = ("0.3.11", "0.3.12", "0.3.14", "0.3.15")
+
+# A version reference that is deliberately about the past. Each entry is (release doc, substring identifying the
+# line). Adding a line here records a decision that it is history and must not follow the current release; the
+# release gate fails on anything stale that is not listed. A version paired with a measured result belongs here,
+# because bumping it without re-running the measurement replaces a stale truth with a fresh lie.
+HISTORICAL_VERSION_CLAIMS = (
+    (Path("docs") / "reference" / "STATUS.md", "SDK rollout safety ("),
+    (Path("docs") / "reference" / "STATUS.md", "Compact MCP envelopes"),
+    (Path("docs") / "reference" / "STATUS.md", "release package tests"),
+    (Path("docs") / "reference" / "STATUS.md", "guarded interaction proof"),
+    (Path("docs") / "reference" / "STATUS.md", "full package gate"),
+    (Path("docs") / "reference" / "COMPARISON.md", "superseding the"),
+    (Path("docs") / "operations" / "PACKAGE_PATH_MIGRATION.md", "moved the package"),
+)
+
+
+def line_records_history(relative_path: Path, line: str) -> bool:
+    if any(relative_path == doc and marker in line for doc, marker in HISTORICAL_VERSION_CLAIMS):
+        return True
+    return "templates/unity-package#" in line or "Historical migration" in line
+
+
+def sweep_release_doc_versions(relative_path: Path, text: str, version: str) -> str:
+    """Point every current-release version claim in a release doc at `version`.
+
+    The marker-driven rewriter below only matched a fixed list of phrasings, and only replaced the *immediately
+    previous* version. Any claim worded differently, or already more than one release behind, froze permanently:
+    the public site told visitors to set up `v0.3.45` for ten releases that way.
+
+    Two things are left alone on purpose: the `vX.Y.Z+` "since this version" convention, and the lines recorded
+    in HISTORICAL_VERSION_CLAIMS.
+    """
+
+    def replace(match: "re.Match[str]") -> str:
+        if match.group("plus") or match.group("version") in HISTORICAL_VERSION_TOKENS:
+            return match.group(0)
+        return f"{match.group('prefix')}{version}"
+
+    swept: list[str] = []
+    for line in text.splitlines(keepends=True):
+        swept.append(line if line_records_history(relative_path, line) else RELEASE_DOC_VERSION_TOKEN.sub(replace, line))
+    return "".join(swept)
+
+
 def update_release_doc_text(text: str, old_version: str, version: str) -> str:
     old_tag = f"v{old_version}"
     new_tag = f"v{version}"
@@ -164,7 +218,11 @@ def update_release_docs(source_root: Path, old_version: str, version: str) -> li
         if not path.is_file():
             continue
         text = path.read_text(encoding="utf-8")
-        updated = update_release_doc_text(text, old_version, version)
+        updated = sweep_release_doc_versions(
+            relative_path,
+            update_release_doc_text(text, old_version, version),
+            version,
+        )
         if updated != text:
             path.write_text(updated, encoding="utf-8")
             changed.append(relative_path)

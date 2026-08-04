@@ -13,9 +13,9 @@ Install both before expecting an AI client to control Unity.
 Canonical source for this guide:
 
 - repository: `https://github.com/FoxsterDev/xuunity-mcp`
-- release: `v0.3.45`
+- release: `v0.3.55`
 - release-pinned README:
-  `https://github.com/FoxsterDev/xuunity-mcp/blob/v0.3.45/README.md`
+  `https://github.com/FoxsterDev/xuunity-mcp/blob/v0.3.55/README.md`
 
 Important:
 
@@ -24,7 +24,7 @@ Important:
 - If a host helper directory already exists under `~/.codex-tools`,
   `~/.claude-tools`, or another explicit tools path, reuse only the directory.
   Do not execute its helper files until the installed version and `.source_root`
-  have been checked against v0.3.45 and stale files have been refreshed from the
+  have been checked against v0.3.55 and stale files have been refreshed from the
   approved release source.
 
 ## Agent Preflight Rules
@@ -38,10 +38,10 @@ For short agent requests, use a self-contained source reference such as:
 > path.
 
 ```text
-Set up XUUnity Light Unity MCP release v0.3.45 from
+Set up XUUnity Light Unity MCP release v0.3.55 from
 https://github.com/FoxsterDev/xuunity-mcp for /path/to/UnityProject. Follow
-https://github.com/FoxsterDev/xuunity-mcp/blob/v0.3.45/README.md. Before executing
-an existing helper, compare its version and .source_root with v0.3.45 and refresh
+https://github.com/FoxsterDev/xuunity-mcp/blob/v0.3.55/README.md. Before executing
+an existing helper, compare its version and .source_root with v0.3.55 and refresh
 stale files. On native Windows, migrate only the XUUnity client block to cmd.exe
 plus run_installed_or_refresh_xuunity_mcp.cmd. After any helper or client-config
 change, restart or refresh the client, list the live MCP tools, and run
@@ -53,10 +53,10 @@ Prefer this default behavior:
 
 1. treat the current host client that is executing the request as the default
    MCP wiring target unless the user explicitly names another client
-2. compare the requested v0.3.45 release with the manifest package pin, installed
+2. compare the requested v0.3.55 release with the manifest package pin, installed
    helper version/source, and current client launcher before executing an
    existing helper
-3. use `setup-plan` from the approved v0.3.45 source before any mutation
+3. use `setup-plan` from the approved v0.3.55 source before any mutation
 4. for one explicitly requested Unity project, prefer
    `setup-plan --project-root /path/to/UnityProject`
 5. for a multi-project workspace or nested repo, use
@@ -104,8 +104,8 @@ preflight review is approved.
 
 An installed refresh launcher is source-relative: it can keep an old helper
 current relative to an old `.source_root`. It is not proof that the helper is at
-the requested release. For an install or upgrade to v0.3.45, inspect before use
-and refresh from the approved v0.3.45 source after approval.
+the requested release. For an install or upgrade to v0.3.55, inspect before use
+and refresh from the approved v0.3.55 source after approval.
 
 For uninstall or cleanup requests, use `uninstall-plan` before any removal.
 Minimal clean mode keeps user-level client config and helper installs. Full
@@ -123,7 +123,7 @@ Preflight review
 - Wiring target: <target client>
 - Unity project root: <approved project root>
 - Additional discovered Unity projects: <none or list>
-- Requested package release: <v0.3.45>
+- Requested package release: <v0.3.55>
 - Current package pin: <missing | current | stale | custom>
 - Existing helper directory: <present | missing>
 - Helper state: <current | refresh required | missing> (<installed version and source root>)
@@ -282,8 +282,8 @@ not mutate them unless the user approves those exact roots.
 If the current host already has a helper directory, it may be reused as the
 installation target only after checking its installed version and `.source_root`
 against the requested release. Do not run an unverified installed helper to plan
-or perform a v0.3.45 upgrade: an old refresh launcher can remain pinned to its
-old source checkout. Run `setup-plan` from the approved v0.3.45 source checkout,
+or perform a v0.3.55 upgrade: an old refresh launcher can remain pinned to its
+old source checkout. Run `setup-plan` from the approved v0.3.55 source checkout,
 then refresh stale helper files from that same source after approval.
 
 If the helper is missing but the repo checkout is available, `setup-plan` can

@@ -1,8 +1,16 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page, type TestInfo } from "@playwright/test";
 
 const REPOSITORY_URL = "https://github.com/FoxsterDev/xuunity-mcp";
-const RELEASE = "v0.3.45";
+// Derived, never hardcoded: a literal here pinned the site's setup prompt to v0.3.45 and asserted it, so the
+// public page advertised a ten-release-old version and the suite reported that as correct.
+const PACKAGE_VERSION = JSON.parse(
+  readFileSync(join(__dirname, "..", "..", "package.json"), "utf8"),
+).version as string;
+const RELEASE = `v${PACKAGE_VERSION}`;
 const README_URL = `${REPOSITORY_URL}/blob/${RELEASE}/README.md`;
 const LINKEDIN_URL = "https://www.linkedin.com/in/khalandachou/";
 const POSIX_PROJECT_PATH = "/Users/developer/Projects/BallSort";
@@ -136,7 +144,7 @@ test.describe("public homepage", () => {
     expect(clipboardText).toContain("restart or refresh the client");
     expect(clipboardText).toContain("list the live MCP tools");
     expect(clipboardText).toContain("unity_status_summary");
-    expect(clipboardText).toContain("mcp_server_info.version=0.3.45");
+    expect(clipboardText).toContain(`mcp_server_info.version=${PACKAGE_VERSION}`);
     expect(clipboardText).toContain("Only then run EditMode tests");
   });
 

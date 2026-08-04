@@ -117,6 +117,7 @@ def check_changelog(source_root: Path, version: str) -> list[str]:
         errors.append(f"{CHANGELOG}: top release section is missing Release tag v{version}")
     if f"#v{version}" not in top:
         errors.append(f"{CHANGELOG}: top release section is missing Git UPM URL tag v{version}")
+    errors.extend(release_doc_version_sweep(source_root))
     return errors
 
 
@@ -135,12 +136,26 @@ def claimed_versions(line: str) -> list[str]:
     return values
 
 
+def is_generated_artifact(relative_path: Path) -> bool:
+    """Test output is not a release doc.
+
+    `playwright-report/` and `test-results/` are gitignored build products that quote the page under test, so a
+    stale version inside a failure snapshot was reported as a release-doc defect.
+    """
+
+    return bool(relative_path.parts) and relative_path.parts[0] in {
+        "playwright-report",
+        "test-results",
+        "node_modules",
+    }
+
+
 def check_release_docs(source_root: Path, version: str) -> list[str]:
     errors: list[str] = []
     release_docs = sorted(source_root.rglob("*.md")) + sorted(source_root.rglob("*.html"))
     for path in release_docs:
         relative_path = path.relative_to(source_root)
-        if line_is_allowlisted(relative_path, ""):
+        if is_generated_artifact(relative_path) or line_is_allowlisted(relative_path, ""):
             continue
         text = path.read_text(encoding="utf-8", errors="ignore")
         for line_number, line in enumerate(text.splitlines(), start=1):
@@ -160,6 +175,49 @@ def check_release_version_consistency(source_root: Path) -> list[str]:
     errors = check_metadata_versions(source_root, version)
     errors.extend(check_changelog(source_root, version))
     errors.extend(check_release_docs(source_root, version))
+    return errors
+
+
+def release_doc_version_sweep(source_root: Path) -> list[str]:
+    """Fail on any current-release version claim in a release doc that did not follow the release.
+
+    The pattern-whitelist above only recognises phrasings someone thought to list, and the sync tool only
+    rewrote the *immediately previous* version. Anything worded differently, or already more than one release
+    behind, was invisible to both: the public site told visitors to set up `v0.3.45` for ten releases.
+
+    This sweep inverts that. Every `0.x.y` token in a release-facing doc must equal the current version, unless
+    it uses the `vX.Y.Z+` "since this version" convention or its line is recorded in the sync tool's
+    HISTORICAL_VERSION_CLAIMS. A version paired with a measured result belongs in that list, because bumping it
+    without re-running the measurement replaces a stale truth with a fresh lie.
+    """
+
+    # Import the sweep's rules from this checkout, not from the tree under inspection: a minimal fixture tree
+    # has no scripts/tools, and the rules belong to the gate.
+    tools_dir = repo_root_from_script() / "scripts" / "tools"
+    if str(tools_dir) not in sys.path:
+        sys.path.insert(0, str(tools_dir))
+    import sync_release_version as sync
+
+    version = package_version(source_root)
+    errors: list[str] = []
+    for relative_path in sync.RELEASE_DOCS:
+        path = source_root / relative_path
+        if not path.is_file():
+            continue
+        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            if sync.line_records_history(relative_path, line) or line_is_allowlisted(relative_path, line):
+                continue
+            for match in sync.RELEASE_DOC_VERSION_TOKEN.finditer(line):
+                if (
+                    match.group("plus")
+                    or match.group("version") == version
+                    or match.group("version") in sync.HISTORICAL_VERSION_TOKENS
+                ):
+                    continue
+                errors.append(
+                    f"{relative_path.as_posix()}:{number}: stale release-facing version {match.group(0)!r} "
+                    f"does not match package version {version!r}: {line.strip()[:120]}"
+                )
     return errors
 
 

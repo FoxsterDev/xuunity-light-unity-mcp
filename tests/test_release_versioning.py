@@ -308,6 +308,64 @@ class ReleaseVersioningTests(unittest.TestCase):
 
             self.assertTrue(any("docs/index.html:1" in error.replace("\\", "/") for error in errors), errors)
 
+    def test_release_version_consistency_detects_a_stale_claim_no_pattern_covers(self) -> None:
+        """The public site said "set up release v0.3.45" for ten releases.
+
+        Neither tool saw it: the checker matched a whitelist of phrasings, and the sync tool only rewrote the
+        immediately previous version, so a claim worded differently — or already more than one release behind —
+        was permanently invisible. The sweep must fail on any release-facing version that is not the current one,
+        whatever the wording.
+        """
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self.create_minimal_release_tree(root)
+            index = root / "docs" / "index.html"
+            index.write_text(
+                "<p>Set up XUUnity Light Unity MCP release <code>v0.3.45</code> from the canonical repo.</p>\n",
+                encoding="utf-8",
+            )
+
+            errors = release_consistency.check_release_version_consistency(root)
+
+            self.assertTrue(
+                any("v0.3.45" in error and "docs/index.html" in error.replace("\\", "/") for error in errors),
+                errors,
+            )
+
+    def test_the_sweep_leaves_since_version_and_measured_claims_alone(self) -> None:
+        """`vX.Y.Z+` means "since this version", and a version paired with a measured result is evidence.
+
+        Bumping either would be wrong: the first is a lower bound, and the second would replace a stale truth with
+        a fresh lie about a measurement nobody re-ran.
+        """
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self.create_minimal_release_tree(root)
+            status = root / "docs" / "reference" / "STATUS.md"
+            status.parent.mkdir(parents=True, exist_ok=True)
+            status.write_text("- `v0.3.29+` adds hook scenarios\n", encoding="utf-8")
+
+            errors = release_consistency.check_release_version_consistency(root)
+
+            self.assertFalse([error for error in errors if "v0.3.29" in error], errors)
+
+    def test_the_sweep_never_rewrites_a_unity_editor_version(self) -> None:
+        """Unity's own `6000.0.58f2` contains `0.0.58`. An unanchored sweep rewrote it to `6000.3.55f2`."""
+
+        import sys as _sys
+
+        tools_dir = REPO_ROOT / "scripts" / "tools"
+        if str(tools_dir) not in _sys.path:
+            _sys.path.insert(0, str(tools_dir))
+        import sync_release_version as sync
+
+        line = "Unity `2022.3.62f3` and `6000.0.58f2` each pass EditMode `62/62`.\n"
+        swept = sync.sweep_release_doc_versions(Path("docs/reference/STATUS.md"), line, "0.3.55")
+
+        self.assertEqual(line, swept, "editor versions must survive the sweep untouched")
+
     def test_release_version_consistency_detects_stale_orchestrator_server_info(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
