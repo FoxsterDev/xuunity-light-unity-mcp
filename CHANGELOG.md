@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+### Added
+
+- Declared-required tool arguments are enforced by the server before a call reaches Unity. `inputSchema.required`
+  was advisory on both sides, so a client that ignored it could invoke a mutating operation with a missing
+  argument; the host opened a Unity editor, attached a bridge generation, delivered the request, and only then
+  did Unity reject it. The refusal now quotes the schema's own type, description, and enum values, and says
+  `Nothing was executed`. Supplied falsy values are not treated as missing, so `approve=false` still reaches the
+  operation that exists to refuse it, and `width=0` still reaches the game-view configure path.
+
+### Changed
+
+- Argument validation inside the editor reports `operation_arguments_invalid` instead of
+  `<operation>_failed`. The shared code carried by `XUUnityLightMcpEditorBusyException` is now an
+  `IXUUnityLightMcpCodedException` contract, so any typed refusal maps through one resolver. Reporting a bad
+  argument as `compile_player_scripts_failed` read as a compile verdict for a compile that never ran, and was
+  misread that way in practice. Compile argument errors now name the parameter, list valid `BuildTarget` values,
+  and state that nothing was compiled.
+
 ## 0.3.54
 
 Release tag: `v0.3.54`

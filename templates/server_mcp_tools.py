@@ -439,6 +439,40 @@ def call_unity_maintenance_prune_tool(
     }
 
 
+def missing_required_arguments(tool: dict[str, Any], args: dict[str, Any]) -> list[str]:
+    """Declared-required arguments the caller did not supply.
+
+    `inputSchema.required` was advisory: nothing enforced it on either side, so a client that ignores the schema
+    reached Unity with an invalid call. That is not free — a mutating operation opens an editor first, so a call
+    missing one string cost an editor launch and a domain reload before Unity rejected it.
+
+    Absent, null, and blank strings count as missing. `False` and `0` do not: `approve=false` and `width=0` are
+    supplied values, and treating them as missing would break the refusal paths that exist to answer them.
+    """
+
+    required = tool.get("inputSchema", {}).get("required") or []
+    missing: list[str] = []
+    for name in required:
+        if name not in args:
+            missing.append(name)
+            continue
+        value = args[name]
+        if value is None or (isinstance(value, str) and not value.strip()):
+            missing.append(name)
+    return missing
+
+
+def describe_required_argument(tool: dict[str, Any], name: str) -> str:
+    """The schema's own words for an argument, so a caller can fix the call from the error alone."""
+
+    spec = tool.get("inputSchema", {}).get("properties", {}).get(name, {})
+    parts = [part for part in (spec.get("type"), spec.get("description")) if part]
+    enum_values = spec.get("enum")
+    if enum_values:
+        parts.append("one of " + ", ".join(str(value) for value in enum_values))
+    return f"{name} ({'; '.join(str(part) for part in parts)})" if parts else name
+
+
 def call_tool(
     name: str,
     arguments: dict[str, Any] | None,
@@ -464,6 +498,16 @@ def call_tool(
     project_root = args.get("projectRoot")
     if not isinstance(project_root, str) or not project_root.strip():
         raise JsonRpcError(-32602, "projectRoot is required.")
+
+    # Refuse an invalid call here rather than letting it reach Unity, where a mutating operation would open an
+    # editor before rejecting it.
+    missing = [item for item in missing_required_arguments(tool, args) if item != "projectRoot"]
+    if missing:
+        described = "; ".join(describe_required_argument(tool, item) for item in missing)
+        raise JsonRpcError(
+            -32602,
+            f"{name} requires {', '.join(missing)}. Nothing was executed. Expected: {described}",
+        )
 
     resolved_project_root = ensure_project_root(project_root)
     timeout_ms = resolve_operation_timeout_ms(

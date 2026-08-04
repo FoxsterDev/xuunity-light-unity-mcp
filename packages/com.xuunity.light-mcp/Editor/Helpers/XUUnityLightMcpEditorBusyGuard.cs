@@ -3,7 +3,14 @@ using UnityEditor;
 
 namespace XUUnity.LightMcp.Editor.Helpers
 {
-    internal sealed class XUUnityLightMcpEditorBusyException : InvalidOperationException
+    internal interface IXUUnityLightMcpCodedException
+    {
+        string Code { get; }
+
+        string RecommendedNextAction { get; }
+    }
+
+    internal sealed class XUUnityLightMcpEditorBusyException : InvalidOperationException, IXUUnityLightMcpCodedException
     {
         public XUUnityLightMcpEditorBusyException(string code, string message, string recommendedNextAction)
             : base(message)
@@ -13,6 +20,28 @@ namespace XUUnity.LightMcp.Editor.Helpers
         }
 
         public string Code { get; }
+
+        public string RecommendedNextAction { get; }
+    }
+
+    /// <summary>
+    /// A caller supplied arguments the operation cannot run with. Distinct from an operation that ran and failed:
+    /// reporting both as `<operation>_failed` let a caller read "compile_player_scripts_failed" as a compile
+    /// verdict when nothing had been compiled.
+    /// </summary>
+    internal sealed class XUUnityLightMcpInvalidArgumentsException : ArgumentException, IXUUnityLightMcpCodedException
+    {
+        public const string InvalidArgumentsCode = "operation_arguments_invalid";
+
+        public XUUnityLightMcpInvalidArgumentsException(string message, string recommendedNextAction = "")
+            : base(message)
+        {
+            RecommendedNextAction = string.IsNullOrWhiteSpace(recommendedNextAction)
+                ? "fix_the_named_argument_then_retry"
+                : recommendedNextAction;
+        }
+
+        public string Code => InvalidArgumentsCode;
 
         public string RecommendedNextAction { get; }
     }
@@ -50,7 +79,12 @@ namespace XUUnity.LightMcp.Editor.Helpers
 
         public static string ResolveErrorCode(Exception exception, string fallbackCode)
         {
-            return exception is XUUnityLightMcpEditorBusyException busy ? busy.Code : fallbackCode;
+            if (exception is IXUUnityLightMcpCodedException coded && !string.IsNullOrWhiteSpace(coded.Code))
+            {
+                return coded.Code;
+            }
+
+            return fallbackCode;
         }
     }
 }

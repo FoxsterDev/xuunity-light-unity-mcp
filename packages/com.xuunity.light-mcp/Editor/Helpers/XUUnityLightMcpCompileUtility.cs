@@ -18,7 +18,9 @@ namespace XUUnity.LightMcp.Editor.Helpers
         {
             if (args == null)
             {
-                throw new InvalidOperationException("Compile arguments are required.");
+                throw new XUUnityLightMcpInvalidArgumentsException(
+                    "Compile arguments are required: pass at least target=<Unity BuildTarget enum name>, "
+                    + "for example StandaloneOSX, StandaloneWindows64, Android, or iOS.");
             }
 
             XUUnityLightMcpEditorBusyGuard.ThrowIfBusy("unity.compile.player_scripts");
@@ -30,12 +32,16 @@ namespace XUUnity.LightMcp.Editor.Helpers
 
             if (string.IsNullOrWhiteSpace(args.target))
             {
-                throw new InvalidOperationException("Compile target is required.");
+                throw new XUUnityLightMcpInvalidArgumentsException(
+                    "target is required: pass a Unity BuildTarget enum name, for example StandaloneOSX, "
+                    + "StandaloneWindows64, Android, or iOS. Nothing was compiled.");
             }
 
             if (!Enum.TryParse(args.target.Trim(), true, out BuildTarget target))
             {
-                throw new InvalidOperationException($"Unknown Unity BuildTarget '{args.target}'.");
+                throw new XUUnityLightMcpInvalidArgumentsException(
+                    $"target '{args.target}' is not a Unity BuildTarget enum name. Use one of StandaloneOSX, "
+                    + "StandaloneWindows64, StandaloneLinux64, Android, iOS, WebGL. Nothing was compiled.");
             }
 
             var payload = new XUUnityLightMcpCompileConfigPayload
