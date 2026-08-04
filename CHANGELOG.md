@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+## 0.3.55
+
+Release tag: `v0.3.55`
+
+Current Git UPM install URL:
+
+```text
+https://github.com/FoxsterDev/xuunity-mcp.git?path=/packages/com.xuunity.light-mcp#v0.3.55
+```
+
+### Changed
+
+- Released `v0.3.55` package metadata, server metadata, package manifests, and Git UPM examples.
+
 ### Added
 
 - Declared-required tool arguments are enforced by the server before a call reaches Unity. `inputSchema.required`
