@@ -11,6 +11,32 @@
   `Nothing was executed`. Supplied falsy values are not treated as missing, so `approve=false` still reaches the
   operation that exists to refuse it, and `width=0` still reaches the game-view configure path.
 
+### Fixed
+
+- A dead editor's state no longer reports itself as ready. `build_bridge_stabilization_summary` accepted an
+  `editor_running` argument but defaulted it to `True`, and four of its five callers relied on the default, so a
+  stale state file produced `stabilized: true` and `safe_to_retry: true` in the same payload whose
+  `host_health_classification` said `offline`. Liveness is now derived from the pid the state itself carries; only
+  a state with no pid keeps the old optimistic answer.
+- `transport_state.ready` and `transport_ready_for_requests` now mean "a request can be delivered", not "the
+  recorded transport config looks usable". A dead editor's file still says `listener_state: listening`, which read
+  as `ready: true`. The config-only verdict is preserved as `transport_config_usable`, with `bridge_state_live`,
+  `not_ready_reason`, and `listener_state_source` beside it.
+- `searched_scenes` no longer claims scenes the UI walk never opened. Roots share one node budget and are walked
+  in scope order, so truncation stops the walk wherever the budget runs out, and `DontDestroyOnLoad` is appended
+  last so it was the first scope to disappear. The budget semantics are unchanged; the new
+  `target.scenes_not_reached` and the `ui_scope_truncated_before_all_scenes` warning name what was skipped.
+- Compile argument validation now runs before the editor-busy guard. A caller in Play Mode with a bad argument was
+  told to exit Play Mode, and the argument was still wrong afterwards.
+
+### Added
+
+- Every `source=editor_log` operation that opens a Unity editor as a side effect now says so in the payload
+  itself: `editor_opened_by_this_call`, `editor_open_started_utc`, `editor_open_completed_utc`,
+  `editor_open_duration_seconds`, and a note. The fact previously lived only inside
+  `_xuunity_lifecycle.activation`, so a caller reading the payload — or a compact envelope, which whitelists
+  fields — went on reporting the editor as not running after a call had launched it.
+
 ### Changed
 
 - Argument validation inside the editor reports `operation_arguments_invalid` instead of

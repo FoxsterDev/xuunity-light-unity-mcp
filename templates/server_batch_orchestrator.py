@@ -936,11 +936,16 @@ def recover_project_bridge_for_reconciliation(
 
     detected_editor_count = int(discovery.get("detected_editor_count") or 0)
     log_path = default_editor_log_path(project_root)
+    open_started_monotonic = 0.0
     if detected_editor_count > 0:
         recovery["activation"] = activate_unity_editor(project_root)
         recovery["action"] = "activated_existing_editor"
     elif allow_open_editor:
         unity_app = detect_unity_app_path_for_project(project_root, None)
+        # A mutating operation can launch Unity as a side effect of the call. Time it, because the caller pays
+        # for it and previously had no way to tell it happened.
+        open_started_monotonic = time.monotonic()
+        recovery["editor_open_started_utc"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         launch = open_unity_editor(project_root, log_path, unity_app, background_open)
         recovery["launch"] = launch
         recovery["action"] = "opened_editor"
@@ -968,6 +973,14 @@ def recover_project_bridge_for_reconciliation(
             )
         )
         update_host_editor_session_pid(project_root, int(state.get("editor_pid") or 0))
+    if open_started_monotonic > 0.0:
+        recovery["editor_opened_by_this_call"] = True
+        recovery["editor_open_completed_utc"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        recovery["editor_open_duration_seconds"] = round(time.monotonic() - open_started_monotonic, 3)
+        recovery["editor_open_note"] = (
+            "This call opened a Unity editor for the project; the operation ran against a freshly attached "
+            "bridge generation, so an earlier editor_not_running reading is no longer current."
+        )
     refresh_project_context(project_root)
     return recovery
 

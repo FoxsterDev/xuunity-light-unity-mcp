@@ -60,6 +60,7 @@ def _transport_state(
     active_transport: str,
     transport_requested: str,
     transport_metadata: dict[str, Any],
+    bridge_state_live: bool = True,
 ) -> dict[str, Any]:
     listener_state = str(transport_metadata.get("transport_listener_state") or "")
     if active_transport == "file_ipc" and not listener_state:
@@ -72,17 +73,32 @@ def _transport_state(
         port = 0
     publish_error = str(transport_metadata.get("transport_publish_error") or "")
     listener_required = active_transport == "tcp_loopback"
-    request_flow_usable = bool(active_transport) and not publish_error and (
+    # Config-only verdict: does the recorded transport describe a usable lane. It says nothing about whether a
+    # process is on the other end, and every field here is read from a file that outlives its editor.
+    transport_config_usable = bool(active_transport) and not publish_error and (
         not listener_required or listener_state == "listening"
     )
+    # Readiness has to mean "a request can be delivered". A dead editor's state file still says
+    # `listener_state: listening`, so a config-only answer reported `ready: true` and `safe_to_retry: true`
+    # alongside `host_health_classification: offline` in the same payload.
+    request_flow_usable = transport_config_usable and bool(bridge_state_live)
+    not_ready_reason = ""
+    if not transport_config_usable:
+        not_ready_reason = "transport_config_not_usable"
+    elif not bridge_state_live:
+        not_ready_reason = "no_live_editor_behind_the_recorded_transport"
     return {
         "selection_scope": "per_project_context",
         "requested_transport": transport_requested,
         "active_transport": active_transport,
         "listener_state": listener_state,
+        "listener_state_source": "bridge_state_file",
         "listener_required": listener_required,
         "request_flow_state": "usable" if request_flow_usable else "not_ready",
         "transport_ready_for_requests": request_flow_usable,
+        "transport_config_usable": transport_config_usable,
+        "bridge_state_live": bool(bridge_state_live),
+        "not_ready_reason": not_ready_reason,
         "host": host,
         "port": port,
         "address": f"{host}:{port}" if host and port > 0 else "",
@@ -573,6 +589,7 @@ def discover_project_context_state(
         active_transport=active_transport,
         transport_requested=transport_requested,
         transport_metadata=transport_metadata,
+        bridge_state_live=bridge_state_live,
     )
     stale_request_artifacts = (
         inspect_stale_request_artifacts(project_root)

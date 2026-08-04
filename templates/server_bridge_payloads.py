@@ -323,6 +323,29 @@ def normalize_response_payload_from_lifecycle(
     return normalized
 
 
+EDITOR_OPEN_ATTRIBUTION_FIELDS = (
+    "editor_opened_by_this_call",
+    "editor_open_started_utc",
+    "editor_open_completed_utc",
+    "editor_open_duration_seconds",
+    "editor_open_note",
+)
+
+
+def hoist_editor_open_attribution(lifecycle: dict[str, Any]) -> dict[str, Any]:
+    """Lift "this call opened a Unity editor" out of the activation block into the payload.
+
+    A mutating operation may launch Unity as a side effect. That fact used to live only inside
+    `_xuunity_lifecycle.activation`, so a caller reading the payload -- or a compact envelope -- saw no sign of it
+    and went on reporting the editor as not running.
+    """
+
+    activation = lifecycle.get("activation")
+    if not isinstance(activation, dict) or not activation.get("editor_opened_by_this_call"):
+        return {}
+    return {field: activation[field] for field in EDITOR_OPEN_ATTRIBUTION_FIELDS if field in activation}
+
+
 COMPACT_OPERATION_PAYLOADS = {
     "unity.project.refresh",
     "unity.compile.player_scripts",
@@ -582,9 +605,13 @@ def bridge_response_to_tool_result(
 
         lifecycle = response.get("_xuunity_lifecycle")
         operation = ""
+        editor_open_attribution: dict[str, Any] = {}
         if isinstance(lifecycle, dict) and lifecycle:
             operation = str(lifecycle.get("operation") or "")
             payload["_xuunity_lifecycle"] = lifecycle
+            editor_open_attribution = hoist_editor_open_attribution(lifecycle)
+            if isinstance(payload, dict):
+                payload.update(editor_open_attribution)
         elif payload_type in {"unity.scenario.run", "unity.scenario.result"} and isinstance(payload, dict):
             payload = normalize_scenario_payload(payload, scenario_terminal_statuses)
 
@@ -596,6 +623,9 @@ def bridge_response_to_tool_result(
             payload = compact_operation_payload(payload, operation)
             payload["full_payload_available"] = True
             payload["full_payload_tool_arguments"] = {"includeFullPayload": True}
+            # Compaction whitelists fields, so re-apply: "this call opened Unity" is decision-shaped, and it is
+            # exactly the fact a caller missed while reporting the editor as not running.
+            payload.update(editor_open_attribution)
 
         return {
             "content": [

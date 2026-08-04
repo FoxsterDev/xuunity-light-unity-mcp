@@ -115,11 +115,67 @@ namespace XUUnity.LightMcp.Editor.Helpers
 
                 if (result.Truncated)
                 {
+                    RecordScenesNotReached(result, roots, i);
                     break;
                 }
             }
 
             return result;
+        }
+
+        /// <summary>
+        /// Name the scenes the walk never got to. Roots share one node budget and are walked in scope order, so
+        /// truncation stops the walk wherever the budget ran out — and `DontDestroyOnLoad` is appended last, so it
+        /// is the first scope to vanish on a real tree. `searched_scenes` still lists every scene in scope, which
+        /// read as "all of these were searched". The budget semantics stay as they are; the claim stops being
+        /// wrong.
+        /// </summary>
+        static void RecordScenesNotReached(
+            XUUnityLightMcpUiTreeResult result,
+            List<GameObject> roots,
+            int lastWalkedIndex)
+        {
+            var reached = new List<string>();
+            for (var i = 0; i <= lastWalkedIndex && i < roots.Count; i++)
+            {
+                if (roots[i] == null)
+                {
+                    continue;
+                }
+
+                var name = DescribeScene(roots[i].scene);
+                if (name.Length > 0 && !reached.Contains(name))
+                {
+                    reached.Add(name);
+                }
+            }
+
+            for (var i = lastWalkedIndex + 1; i < roots.Count; i++)
+            {
+                if (roots[i] == null)
+                {
+                    continue;
+                }
+
+                var name = DescribeScene(roots[i].scene);
+                if (name.Length > 0
+                    && !reached.Contains(name)
+                    && !result.Target.scenes_not_reached.Contains(name))
+                {
+                    result.Target.scenes_not_reached.Add(name);
+                }
+            }
+
+            if (result.Target.scenes_not_reached.Count == 0)
+            {
+                return;
+            }
+
+            result.Warnings.Add(Diagnostic(
+                "ui_scope_truncated_before_all_scenes",
+                $"The node budget was spent before reaching {string.Join(", ", result.Target.scenes_not_reached)}, "
+                + "so those scenes were listed in searched_scenes but never walked.",
+                "Raise maxNodes, or set sceneName to the scene you need so the budget is spent there."));
         }
 
         static XUUnityLightMcpUiSceneScope ResolveSceneScope(

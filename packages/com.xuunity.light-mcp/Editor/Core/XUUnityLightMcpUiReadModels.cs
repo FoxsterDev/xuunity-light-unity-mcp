@@ -73,6 +73,7 @@ namespace XUUnity.LightMcp.Editor.Core
         public string requested_scene_name = "";
         public bool scene_selector_ambiguous;
         public List<string> searched_scenes = new();
+        public List<string> scenes_not_reached = new();
         public List<string> loaded_scenes = new();
         public bool dont_destroy_on_load_included;
         public string dont_destroy_on_load_status = XUUnityLightMcpUiRead.DontDestroyOnLoadNotRequested;

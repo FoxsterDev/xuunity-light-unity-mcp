@@ -98,7 +98,7 @@ namespace XUUnity.LightMcp.Tests.PlayModeUgui
             BuildCanvasInAdditiveScene("Card");
 
             var payload = RunQuery(
-                "{\"targetKind\":\"game_object_name\",\"targetValue\":\"XUUnityMcp_ScopeCanvas\","
+                "{\"targetKind\":\"game_object_name\",\"targetValue\":\"XUUnityMcp_ScopeCanvas_Card\","
                 + "\"includeDontDestroyOnLoad\":false,\"includeInactive\":true,\"selector\":{\"name\":\"Card\"}}");
 
             Assert.That(payload.success, Is.False);
@@ -182,19 +182,24 @@ namespace XUUnity.LightMcp.Tests.PlayModeUgui
         }
 
         [Test]
-        [Category("XUUnity.MCP.KnownGap")]
-        public void ANodeBudgetSpentOnAnEarlierSceneSilentlySkipsLaterScenes()
+        public void ANodeBudgetSpentOnAnEarlierSceneNamesTheScenesItNeverReached()
         {
+            // Two canvases in two scenes, so root count and scope order are controlled here rather than inherited
+            // from whatever the consumer project happens to have loaded. A scene holding no canvas contributes no
+            // root, and "searched, found nothing" is a true statement about it -- the defect is only about roots
+            // the shared node budget never let the walk open.
             BuildCanvasInAdditiveScene("Card");
+            var second = NewAdditiveScene(ADDITIVE_SCENE_NAME + "_Second");
+            BuildCanvasInScene(second, "SecondCard");
 
             var payload = RunTree(
                 "{\"targetKind\":\"all_loaded_scenes\",\"includeInactive\":true,\"maxNodes\":1}");
 
-            Assert.That(payload.truncated, Is.True, "the budget is exhausted before the last scene is reached");
+            Assert.That(payload.truncated, Is.True, "one node of budget must truncate the very first root");
             Assert.That(
-                payload.target.searched_scenes.Count,
+                payload.target.resolved_root_count,
                 Is.GreaterThan(1),
-                "searched_scenes still lists every scene in scope");
+                "this case needs at least two roots for a later one to be skipped");
 
             var reachedScenes = new List<string>();
             foreach (var node in payload.nodes)
@@ -206,19 +211,55 @@ namespace XUUnity.LightMcp.Tests.PlayModeUgui
             }
 
             Assert.That(
-                reachedScenes.Count,
-                Is.EqualTo(payload.target.searched_scenes.Count),
-                "KNOWN GAP: roots are walked under one shared node budget in scope order and the walk breaks on "
-                + "the first truncation, so later scenes are never reached while searched_scenes claims they "
-                + "were. DontDestroyOnLoad is appended last, so it is the first scope to disappear on a real "
-                + "tree. Fixing it needs a contract decision: per-scene budgets, or a scenes_not_reached field.");
+                payload.target.scenes_not_reached,
+                Is.Not.Empty,
+                "a scene whose root the walk never opened must be named, not silently left in searched_scenes");
+            Assert.That(
+                payload.warnings.Exists(item => item.code == "ui_scope_truncated_before_all_scenes"),
+                Is.True,
+                "the silent partial walk is what made searched_scenes misleading");
+
+            foreach (var scene in payload.target.scenes_not_reached)
+            {
+                Assert.That(
+                    reachedScenes,
+                    Does.Not.Contain(scene),
+                    "a scene reported as not reached must not have contributed nodes");
+                Assert.That(
+                    payload.target.searched_scenes,
+                    Contains.Item(scene),
+                    "scenes_not_reached corrects searched_scenes, so it must be a subset of it");
+            }
+        }
+
+        [Test]
+        public void AWalkThatCoversEveryRootReportsNoSkippedScenes()
+        {
+            BuildCanvasInAdditiveScene("Card");
+            var second = NewAdditiveScene(ADDITIVE_SCENE_NAME + "_Second");
+            BuildCanvasInScene(second, "SecondCard");
+
+            var payload = RunTree(
+                "{\"targetKind\":\"all_loaded_scenes\",\"includeInactive\":true,\"maxNodes\":4000}");
+
+            Assert.That(payload.truncated, Is.False, "a generous budget must cover every root");
+            Assert.That(
+                payload.target.scenes_not_reached,
+                Is.Empty,
+                "nothing was skipped, so the correction field must stay empty");
+            Assert.That(
+                payload.warnings.Exists(item => item.code == "ui_scope_truncated_before_all_scenes"),
+                Is.False);
         }
 
         void BuildCanvasInAdditiveScene(string childName)
         {
-            var scene = NewAdditiveScene(ADDITIVE_SCENE_NAME);
+            BuildCanvasInScene(NewAdditiveScene(ADDITIVE_SCENE_NAME), childName);
+        }
 
-            var canvasRoot = new GameObject("XUUnityMcp_ScopeCanvas", typeof(RectTransform), typeof(Canvas));
+        void BuildCanvasInScene(Scene scene, string childName)
+        {
+            var canvasRoot = new GameObject("XUUnityMcp_ScopeCanvas_" + childName, typeof(RectTransform), typeof(Canvas));
             SceneManager.MoveGameObjectToScene(canvasRoot, scene);
             _spawned.Add(canvasRoot);
 

@@ -198,3 +198,121 @@ class SchemaRequiredListsAreHonestTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class StaleStateIsNotReportedAsReadyTests(unittest.TestCase):
+    """A dead editor's state file still says `listener_state: listening`. `build_bridge_stabilization_summary`
+    accepted an `editor_running` argument but defaulted it to `True`, and four of its five callers rely on the
+    default, so a stale file produced `stabilized: true` / `safe_to_retry: true` in the same payload whose
+    `host_health_classification` said `offline`."""
+
+    def test_a_dead_pid_in_the_state_blocks_stabilization(self) -> None:
+        import server_bridge_final_status as final_status
+
+        summary = final_status.build_bridge_stabilization_summary(
+            {
+                "health_status": "healthy",
+                "transport": "tcp_loopback",
+                "transport_listener_state": "listening",
+                "editor_pid": 999_999,
+            }
+        )
+
+        self.assertFalse(summary["stabilized"])
+        self.assertFalse(summary["safe_to_retry"])
+        self.assertIn("editor_not_running", summary["blocking_reasons"])
+
+    def test_a_live_pid_still_stabilizes(self) -> None:
+        import os
+
+        import server_bridge_final_status as final_status
+
+        summary = final_status.build_bridge_stabilization_summary(
+            {
+                "health_status": "healthy",
+                "transport": "tcp_loopback",
+                "transport_listener_state": "listening",
+                "editor_pid": os.getpid(),
+            }
+        )
+
+        self.assertTrue(summary["stabilized"], "the guard must not refuse a live editor")
+        self.assertEqual([], summary["blocking_reasons"])
+
+    def test_a_state_with_no_pid_stays_unknowable(self) -> None:
+        import server_bridge_final_status as final_status
+
+        summary = final_status.build_bridge_stabilization_summary(
+            {"health_status": "healthy", "transport": "tcp_loopback", "transport_listener_state": "listening"}
+        )
+
+        self.assertTrue(summary["stabilized"], "with nothing to check, the previous optimistic answer stands")
+
+    def test_an_explicit_argument_still_wins(self) -> None:
+        import os
+
+        import server_bridge_final_status as final_status
+
+        summary = final_status.build_bridge_stabilization_summary(
+            {"health_status": "healthy", "transport": "file_ipc", "editor_pid": os.getpid()},
+            editor_running=False,
+        )
+
+        self.assertIn("editor_not_running", summary["blocking_reasons"])
+
+
+class EditorOpenedByThisCallIsVisibleTests(unittest.TestCase):
+    """A mutating operation can launch Unity as a side effect. That fact lived only inside
+    `_xuunity_lifecycle.activation`, so a caller reading the payload kept reporting the editor as not running."""
+
+    def lifecycle(self) -> dict[str, object]:
+        return {
+            "operation": "unity.compile.player_scripts",
+            "activation": {
+                "action": "opened_editor",
+                "editor_opened_by_this_call": True,
+                "editor_open_started_utc": "2026-08-04T21:23:58Z",
+                "editor_open_completed_utc": "2026-08-04T21:24:14Z",
+                "editor_open_duration_seconds": 16.4,
+                "editor_open_note": "This call opened a Unity editor for the project.",
+            },
+        }
+
+    def result(self, *, include_full_payload: bool) -> dict[str, object]:
+        import server_bridge_payloads as payloads
+
+        response = {
+            "status": "ok",
+            "payload_type": "unity.compile.player_scripts",
+            "payload_json": json.dumps({"result": {"status": "ok"}}),
+            "_xuunity_lifecycle": self.lifecycle(),
+        }
+        out = payloads.bridge_response_to_tool_result(
+            response,
+            normalize_scenario_payload=lambda payload, statuses: payload,
+            scenario_terminal_statuses=set(),
+            include_full_payload=include_full_payload,
+        )
+        return out["structuredContent"]
+
+    def test_the_compact_envelope_keeps_the_attribution(self) -> None:
+        payload = self.result(include_full_payload=False)
+
+        self.assertTrue(payload["editor_opened_by_this_call"])
+        self.assertEqual(16.4, payload["editor_open_duration_seconds"])
+        self.assertIn("opened a Unity editor", str(payload["editor_open_note"]))
+
+    def test_the_full_payload_keeps_the_attribution(self) -> None:
+        payload = self.result(include_full_payload=True)
+
+        self.assertTrue(payload["editor_opened_by_this_call"])
+
+    def test_an_already_ready_editor_adds_nothing(self) -> None:
+        import server_bridge_payloads as payloads
+
+        self.assertEqual(
+            {},
+            payloads.hoist_editor_open_attribution(
+                {"operation": "unity.status", "activation": {"action": "already_ready"}}
+            ),
+        )

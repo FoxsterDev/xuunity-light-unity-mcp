@@ -23,13 +23,9 @@ namespace XUUnity.LightMcp.Editor.Helpers
                     + "for example StandaloneOSX, StandaloneWindows64, Android, or iOS.");
             }
 
-            XUUnityLightMcpEditorBusyGuard.ThrowIfBusy("unity.compile.player_scripts");
-
-            if (EditorUtility.scriptCompilationFailed)
-            {
-                throw new InvalidOperationException("Unity has compilation errors. Resolve them before running compile validation.");
-            }
-
+            // Argument validation is pure and cheap, so it runs before any environment check. Ordering it after
+            // the busy guard meant a caller in Play Mode with a bad argument was told to exit Play Mode, and the
+            // argument stayed wrong either way.
             if (string.IsNullOrWhiteSpace(args.target))
             {
                 throw new XUUnityLightMcpInvalidArgumentsException(
@@ -42,6 +38,13 @@ namespace XUUnity.LightMcp.Editor.Helpers
                 throw new XUUnityLightMcpInvalidArgumentsException(
                     $"target '{args.target}' is not a Unity BuildTarget enum name. Use one of StandaloneOSX, "
                     + "StandaloneWindows64, StandaloneLinux64, Android, iOS, WebGL. Nothing was compiled.");
+            }
+
+            XUUnityLightMcpEditorBusyGuard.ThrowIfBusy("unity.compile.player_scripts");
+
+            if (EditorUtility.scriptCompilationFailed)
+            {
+                throw new InvalidOperationException("Unity has compilation errors. Resolve them before running compile validation.");
             }
 
             var payload = new XUUnityLightMcpCompileConfigPayload

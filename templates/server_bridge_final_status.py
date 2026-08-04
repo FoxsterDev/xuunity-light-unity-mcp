@@ -19,11 +19,40 @@ from server_bridge_paths import default_editor_log_path, response_path, test_res
 from server_bridge_state import (
     derive_busy_reason,
     heartbeat_age_seconds,
+    pid_is_alive,
     read_best_effort_bridge_state,
     try_read_bridge_state,
 )
 from server_core import ToolInvocationError, read_json, render_launcher_cli
 from server_operation_evidence import attach_operation_evidence_to_final_status
+
+def derive_editor_running_from_state(state: dict[str, Any] | None) -> bool:
+    """Whether the state's own editor is alive, when the caller did not say.
+
+    `editor_running` used to default to `True` for a state file that never carries that key, and four of the five
+    callers rely on the default. A stale file for a dead editor therefore reported `stabilized: true` and
+    `safe_to_retry: true` beside a `host_health_classification: offline` in the same payload. The state does carry
+    the pid, so liveness is derivable rather than assumable; only a state with no pid at all is unknowable, and
+    that keeps the old optimistic answer.
+    """
+
+    effective = state or {}
+    if "editor_running" in effective:
+        return bool(effective.get("editor_running"))
+
+    pid = 0
+    for key in ("editor_pid", "bridge_pid"):
+        try:
+            pid = int(effective.get(key) or 0)
+        except (TypeError, ValueError):
+            pid = 0
+        if pid > 0:
+            break
+
+    if pid <= 0:
+        return True
+    return pid_is_alive(pid)
+
 
 def build_bridge_stabilization_summary(
     state: dict[str, Any] | None,
@@ -43,7 +72,9 @@ def build_bridge_stabilization_summary(
     )
     request_flow_state = "usable" if transport_ready_for_requests else "not_ready"
     pending_request_count = int(effective.get("pending_request_count") or 0)
-    editor_running_effective = bool(editor_running if editor_running is not None else effective.get("editor_running", True))
+    editor_running_effective = bool(
+        editor_running if editor_running is not None else derive_editor_running_from_state(effective)
+    )
     mcp_reachable_effective = bool(mcp_reachable if mcp_reachable is not None else effective.get("mcp_reachable", True))
 
     blocking_reasons: list[str] = []
