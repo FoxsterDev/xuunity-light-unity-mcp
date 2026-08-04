@@ -351,6 +351,14 @@ Current progress:
 - compact-by-default scenario, refresh, compile, build-config compile, direct
   test, and MCP status-summary envelopes are now shipped with full-payload
   recovery paths
+- unreleased source closes the 2026-08-03 interactive-lane evidence gaps:
+  session-anchored Editor.log queries (`since=playmode_start |
+  bridge_generation | request_id`, echoing `since_anchor` and
+  `searched_from_line`), `all_loaded_scenes` / `sceneName` UI targeting with the
+  `ui_target_out_of_scope` contract, `editor_in_play_mode` refusals,
+  `post_settle_compile_trust_class`, a screenshot byte budget, compact
+  playmode/screenshot envelopes, and `projects_blocked` split out of
+  `projects_failed`
 - remaining value in this phase is broader multi-project compact ceilings,
   broader proof, and surfacing evidence consistently across more operator flows
 
@@ -445,6 +453,17 @@ Deliverables:
 - selected object/component snapshot
 - package and define read operations
 - scene list and open-scene snapshot
+
+Current state:
+- unreleased source lifts UI target resolution out of the active scene:
+  `targetKind=all_loaded_scenes` walks every loaded scene plus
+  `DontDestroyOnLoad`, `sceneName` selects one, and a target that exists outside
+  the searched scope fails as `ui_target_out_of_scope` with the searched and
+  loaded scene sets instead of a bare `ui_target_not_found`. This gated
+  interactive verification in every additive multi-scene consumer, which is the
+  shape most shipping projects have.
+- the remaining scope gap is non-uGUI backends: UI Toolkit panels are still
+  outside the read surface regardless of scene scope
 
 Done when:
 - an agent can connect a runtime symptom back to concrete assets, packages, and scene objects without shell scraping

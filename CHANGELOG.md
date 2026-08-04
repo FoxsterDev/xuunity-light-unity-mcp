@@ -2,6 +2,65 @@
 
 ## Unreleased
 
+### Added
+
+- `unity_ui_query`, `unity_ui_exists`, `unity_ui_get_text`, `unity_ui_get_bounds`, `unity_ui_tree_snapshot`, and
+  `unity_ui_click` accept `targetKind=all_loaded_scenes`, plus `sceneName` and `includeDontDestroyOnLoad`, so an
+  additive multi-scene project whose active scene is a bootstrap scene can be read and clicked. Every UI read now
+  reports `scene_scope`, `searched_scenes`, `loaded_scenes`, and `dont_destroy_on_load_included`, and each node
+  carries `scene_name`.
+- `ui_target_out_of_scope`: a distinct diagnostic for a target that exists in a loaded scene outside the searched
+  scope. `ui_target_not_found` now means only "no such object anywhere".
+- `unity_console_grep` and `unity_console_tail` accept
+  `since=playmode_start|bridge_generation|request_id` for `source=editor_log`, and echo
+  `since_anchor`, `searched_from_line`, and `line_numbering_basis`. The editor package records the Editor.log byte
+  offset at Play Mode entry and at bridge-generation start into `bridge_state.json`, and per request into the
+  request journal — one stat per operator-issued request, never one inside the 0.5 s request pump. `since=request_id`
+  also needs `sinceRequestId`, and answers "did *this* call log it", which a play-session anchor cannot. The same
+  anchors are available on the CLI as `--since` / `--since-request-id`.
+  A `session_start` anchor was implemented and then dropped: the host stamps the log size *before* launching
+  Unity, but Unity truncates the log on start, so the recorded offset belongs to the previous log. It is either
+  caught as `anchor_stale` or — once the new log grows past it — silently points at an arbitrary byte.
+- `editor_in_play_mode`: a distinct refusal code for `unity.compile.player_scripts`, `unity.compile.matrix`, and
+  `unity.build_player`, carrying both valid next actions instead of a generic "editor is busy".
+- `post_settle_compile_trust_class` (`confirmed` / `editor_still_busy` / `deferred_during_playmode`) on refresh,
+  compile, and test payloads, so a refresh that settles while the editor is playing no longer looks like a
+  trustworthy green.
+- `imageBudgetBytes` on `unity_game_view_screenshot` (default 48000). Above the budget the base64 is dropped and
+  the payload reports `image_omitted_reason=payload_budget` with `file_path` intact.
+- `payload_mode: compact_operation` now covers `unity.playmode.state`, `unity.playmode.set`, and
+  `unity.game_view.screenshot`, each with an `includeFullPayload` opt-out.
+- `projects_blocked`, `blocked_projects`, and an `aggregate_hint` in the multi-project batch compile rollup, plus a
+  `blocked_by_live_editor` operator verdict, so a live-editor refusal no longer reads as a compile failure.
+
+- `out_of_scope` on `unity.ui.query` / `exists` / `get_text` / `get_bounds`: a zero-match selector re-probes the
+  widest scope before answering, so "no match here" and "no match anywhere" are distinguishable. Reported as a
+  warning where zero matches are legal, and as the `ui_target_out_of_scope` error where a single match is required.
+
+### Fixed
+
+- A `since` anchor is refused as `anchor_log_mismatch` when the editor measured its offset against a different
+  Editor.log than the one being searched. The editor stamps offsets against `Application.consoleLogPath`, while
+  the host defaults to the project-local log — the same file only when the host launched the editor with
+  `-logFile`. An editor opened from the Hub writes to the platform Editor.log, and applying its offset to the
+  project-local one would have scoped the search to an arbitrary byte while still reporting
+  `session_scoped_editor_log`.
+- A `since` offset that lands mid-line no longer keeps the partial leading line. The editor records
+  `FileInfo.Length` at a moment in time, so it can split a line being written: an offset splitting
+  `xxNOMARKER here` left `MARKER here`, which a grep for `MARKER` reported as a hit on a line that literally
+  says `NOMARKER` — a false positive carrying `result_trust_class: session_scoped_editor_log` and no caveat.
+  The anchor now reports `starts_mid_line` and `partial_leading_line_dropped`.
+- A truncated anchored scope no longer mixes numbering bases. `read_editor_log_scope` keeps the tail of the
+  scope, so the window does not start at the anchor; `searched_from_line` now starts the window's own numbering
+  at 1 alongside `line_numbering_basis: anchored_scope_relative`, and the anchor's absolute line moves to
+  `since_anchor.anchor_line`.
+- `unity.ui.click` re-resolved its target with `GameObject.Find(node.path)`, which cannot address every object the
+  widened scope can now reach and silently picks the first same-named object across scenes. The click target is now
+  the exact `Transform` the tree walk matched.
+- `dont_destroy_on_load_status` reported `included` while `dont_destroy_on_load_included` was `false` under a
+  narrower scope: the `DontDestroyOnLoad` scene is discovered for `loaded_scenes` under every scope but only
+  *searched* under some. It now reports `out_of_scope_for_target_kind` in that case.
+
 ## 0.3.53
 
 Release tag: `v0.3.53`

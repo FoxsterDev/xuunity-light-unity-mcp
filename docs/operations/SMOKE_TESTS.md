@@ -712,6 +712,90 @@ Pass criteria:
   `reference_acceptance` is `failed` or `pending_lanes`; only a comparison that
   could not compute a visual verdict belongs on the error channel
 
+### 21. Play-Mode-Blocked Compile Smoke
+
+A compile refused during Play Mode used to report a generic
+`Unity editor is busy. isCompiling=False, isPlayingOrWillChangePlaymode=True,
+isUpdating=False`. Three flags is not guidance, and the operator had to know
+that the second one is the only actionable bit.
+
+Enter Play Mode with `unity_playmode_set action=enter`, then call
+`unity_compile_player_scripts`.
+
+Pass criteria:
+
+- the refusal carries `error.code = editor_in_play_mode`, not
+  `compile_player_scripts_failed` and not a bare busy string
+- the message names both valid next actions: exit Play Mode, or run the
+  closed-project batch lane
+- `unity_build_player` refuses the same way and reports
+  `outcome = gui_build_refused_editor_in_play_mode` with a `refusal_code`
+- after `unity_playmode_set action=exit`, the same compile call succeeds
+
+### 22. Stale-Marker Log Smoke
+
+`source=editor_log` searches a fixed tail of a file that accumulates across
+editor sessions and play sessions. A shell `until grep -q "<marker>"` wait loop
+matched a line written by a *previous* play session and returned immediately —
+a false positive that reads exactly like success.
+
+Run a play session that logs a marker, stop, then start a second play session
+that does not log it.
+
+Pass criteria:
+
+- an unanchored `unity_console_grep source=editor_log` still matches the stale
+  line, and says so: `result_trust_class =
+  editor_log_spans_multiple_sessions` with a non-empty `stale_match_caveat`
+- the same grep with `since=playmode_start` returns zero matches,
+  `result_trust_class = session_scoped_editor_log`, and an empty
+  `stale_match_caveat`
+- `since_anchor.resolved` is `playmode_start`, `since_anchor.start_offset_bytes`
+  is non-zero, and `searched_from_line` points at the first line of the current
+  play session
+- reported `line` values stay absolute in the Editor.log while
+  `line_numbering_basis` is `editor_log_absolute`
+- against an editor that never recorded the anchor, the call still answers but
+  reports `since_anchor.resolved = anchor_unavailable` and
+  `since_anchor_degraded = true` rather than silently widening to the full tail
+
+Shell wait loops must use the same discipline. Capture the line count first, then
+poll only the tail beyond it:
+
+```bash
+BASE=$(wc -l < "$EDITOR_LOG")
+until tail -n +$((BASE + 1)) "$EDITOR_LOG" | grep -q "MY_MARKER"; do sleep 1; done
+```
+
+An unanchored `until grep -q "MY_MARKER" "$EDITOR_LOG"` is never a valid wait.
+
+### 23. Out-Of-Scope UI Target Smoke
+
+`unity_ui_*` resolved targets in the active scene only. In a project that keeps a
+bootstrap scene active and loads screens additively, the operator could not reach
+the UI in front of them, and `ui_target_not_found: No GameObject named 'X'` was
+indistinguishable from "that object does not exist".
+
+Enter Play Mode in a project with a bootstrap active scene, an additively loaded
+screen, and a `DontDestroyOnLoad` overlay.
+
+Pass criteria:
+
+- `unity_ui_query targetKind=active_scene` with a selector matching the additive
+  screen fails as `ui_target_out_of_scope`, and the detail names the owning
+  scene, the searched scenes, and the loaded scenes
+- a genuinely absent object still fails as `ui_target_not_found`
+- `targetKind=all_loaded_scenes` finds the same node, and `target.searched_scenes`
+  lists every loaded scene
+- `target.dont_destroy_on_load_included` is `true` in Play Mode and the overlay's
+  nodes are reachable; in Edit Mode the same call reports
+  `dont_destroy_on_load_status = edit_mode_no_dont_destroy_on_load_scene`
+- `sceneName=<additive scene>` narrows `target.searched_scenes` to that one scene
+- `unity_ui_click` delivers to a node in the additive scene and to a node in
+  `DontDestroyOnLoad`, and its `delivered_to_path` resolves in the owning scene
+- with two same-named objects in different loaded scenes, the click refuses as
+  `selector_ambiguous` rather than clicking whichever one a name lookup found first
+
 ## Public Template Assets
 
 Generic example scenario JSON templates live under:

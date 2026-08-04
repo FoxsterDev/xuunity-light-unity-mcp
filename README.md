@@ -855,6 +855,42 @@ those lines match whatever feature name the compile job carries and bury the
 answer the grep was asked for; `build_pipeline_suppressed_count` always reports
 how many were hidden, and `includeBuildPipelineNoise=true` keeps them.
 
+Editor.log survives clear-on-play, but it also accumulates across editor sessions
+and play sessions, so an unanchored match may be a line from a *previous* run.
+Anchor anything you are waiting for: `since=playmode_start` (or
+`bridge_generation`) bounds the search to the current
+session, and the response echoes `since_anchor`, `searched_from_line`, and a
+`result_trust_class` of `session_scoped_editor_log`. For "did *this* call log
+it" — one play session holds many operations — use `since=request_id` with
+`sinceRequestId`, which resolves to the offset the editor stamped into that
+request's journal entry. Without an anchor the
+response says so with `editor_log_spans_multiple_sessions` and a
+`stale_match_caveat`. If the editor never recorded the anchor, the call still
+answers but reports `since_anchor_degraded=true` instead of silently widening.
+
+Shell wait loops need the same discipline — an unanchored
+`until grep -q "<marker>" Editor.log` matches a stale line and returns
+immediately. Capture the line count first and poll only the tail beyond it:
+
+```bash
+BASE=$(wc -l < "$EDITOR_LOG")
+until tail -n +$((BASE + 1)) "$EDITOR_LOG" | grep -q "MY_MARKER"; do sleep 1; done
+```
+
+Absence of a marker line is not evidence either. Plain `UnityEngine.Debug.Log`
+from project code can be filtered out entirely by a consumer's log-target
+configuration, so a hook can fire without ever reaching the captured log. Prove
+"did this fire" from state, not from log absence: assert scene or UI state with
+`unity_scene_assert` / `unity_ui_query`, or have the project hook return a
+receipt through the request journal.
+
+`unity_game_view_screenshot` is `file_path`-first: read the returned path with
+your image reader. `includeImage=true` inlines base64 only while the encoded PNG
+fits `imageBudgetBytes` (default 48000, roughly 66k base64 characters); above
+that the image is dropped and the payload reports
+`image_omitted_reason=payload_budget` with `file_path` intact, rather than
+overflowing the result budget on a call whose useful part was one field.
+
 UI prefab authoring is one lane, not two. `unity_prefab_mutate` covers typed
 fields, RectTransform geometry, CanvasGroup state, child structure, allow-listed
 components, and asset-typed object references (`Sprite`, `Material`,

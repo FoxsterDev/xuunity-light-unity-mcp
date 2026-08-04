@@ -198,6 +198,53 @@ Meaning:
   `batch_compile` lane, but Play Mode and scene-observation work still require
   `interactive_mcp`
 
+### Batch-Versus-Interactive Routing When An Editor Is Open
+
+The closed-project batch lane refuses any project that has a live editor, with
+`editor_running_batch_conflict`. That refusal is protection, not a failure — it
+prevents Library corruption — and the rollup now says so:
+
+- the per-project verdict is `blocked_by_live_editor`, not `failed_before_unity`
+- the aggregate reports `projects_blocked` separately from `projects_failed`,
+  lists `blocked_projects` with their live editor pids, and emits one
+  `aggregate_hint` naming the projects to re-run
+- the process exit code still reflects "not everything was proven": a run with
+  blocked projects exits non-zero, exactly as before
+
+Route a blocked project one of two ways: verify it through `interactive_mcp`
+against the editor that is already open, or close that editor with
+`recover-editor-session` and rerun the batch lane. Never read `projects_failed`
+alone as a portfolio compile verdict.
+
+### Two-Step Editor Recovery
+
+`recover-editor-session` clears stale bridge state; it does **not** open an
+editor. Its response says so (`recommended_next_action:
+open_editor_or_ensure_ready`), but the two steps are easy to conflate:
+
+1. `recover-editor-session --project-root <path>` — clears a stale
+   `bridge_state.json` whose `editor_pid` is dead
+2. `ensure-ready --project-root <path> --open-editor` — brings the lane up
+
+Both are needed after a stale-bridge classification. Only the second one gives
+you a working interactive lane.
+
+### Lanes That Refuse During Play Mode
+
+These refuse with `editor_in_play_mode` and name both valid next actions (exit
+Play Mode, or use the closed-project batch lane):
+
+- `unity.compile.player_scripts`
+- `unity.compile.matrix`
+- `unity.build_player`
+- the closed-project `batch_compile` lane, which additionally requires no live
+  editor at all
+
+A `unity.project.refresh` issued during Play Mode is not refused, but its compile
+verdict is not authoritative: asset import is deferred, so the payload carries
+`post_settle_compile_trust_class: deferred_during_playmode`. Do not read that
+green as proof.
+
 ## What A New Chat Should Check First
 
 1. Unity version for the consumer project

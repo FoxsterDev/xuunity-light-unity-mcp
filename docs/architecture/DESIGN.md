@@ -407,6 +407,48 @@ Future path:
 - add Unity-version-specific adapters only where probe evidence shows real divergence
 - prefer public Unity APIs when Unity exposes them
 
+## UI Target Resolution Scope
+
+`unity.ui.*` resolves a set of *roots* from a scene scope, then applies the selector inside those roots. The scope
+is derived, never implicit:
+
+| `targetKind` | `sceneName` | Searched scope |
+| --- | --- | --- |
+| `active_scene` (default) | empty | the active scene only |
+| `all_loaded_scenes` | empty | every loaded scene, plus the `DontDestroyOnLoad` scene |
+| any | set | the one loaded scene matching that name or path |
+
+`active_scene` is the wrong scope in the common shipping shape: a bootstrap scene stays active, screens load
+additively, and shared overlays live under `DontDestroyOnLoad`. Use `all_loaded_scenes` with a selector to reach
+them — `targetKind` chooses the roots, the selector does the matching.
+
+The `DontDestroyOnLoad` scene has no enumeration API. It is resolved by creating one hidden GameObject, calling
+`Object.DontDestroyOnLoad` on it, reading `probe.scene`, and destroying it immediately. That only works in Play
+Mode, so a UI read is never strictly side-effect-free once `includeDontDestroyOnLoad` is on (default `true`). Every
+read reports which way it went:
+
+- `target.scene_scope` — `active_scene` | `all_loaded_scenes` | `named_scene`
+- `target.searched_scenes` / `target.loaded_scenes`
+- `target.dont_destroy_on_load_included` and `target.dont_destroy_on_load_status`
+  (`included` | `not_requested` | `out_of_scope_for_target_kind` |
+  `edit_mode_no_dont_destroy_on_load_scene` | `probe_failed`).
+  `out_of_scope_for_target_kind` is the case that reads oddly at first: the scene was discovered and appears in
+  `loaded_scenes`, but the chosen `targetKind` did not search it, so `dont_destroy_on_load_included` is false
+- per node, `scene_name`
+
+### The `ui_target_out_of_scope` contract
+
+"Not found" and "not reachable" are different answers and must never share a code:
+
+- `ui_target_not_found` — the object exists in no loaded scene.
+- `ui_target_out_of_scope` — the object exists, in a loaded scene the current scope did not search. The detail
+  names the owning scene, the searched scenes, the loaded scenes, and the exact retry
+  (`targetKind=all_loaded_scenes`, or `sceneName=<owner>`).
+
+`unity.ui.click` refuses on `ui_target_out_of_scope` rather than reporting a missing node, and re-resolves its
+target from the `Transform` the tree walk matched. It must not re-resolve by path: `GameObject.Find` cannot address
+every object the widened scope reaches, and it silently picks the first same-named object across scenes.
+
 ## Game View Policy
 
 `unity.game_view.configure` is intentionally conservative:
