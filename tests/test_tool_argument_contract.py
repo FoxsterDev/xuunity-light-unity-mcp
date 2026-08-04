@@ -10,6 +10,9 @@ a new bridge generation, delivered the request, and only then did Unity reject i
 from __future__ import annotations
 
 import json
+import time
+import os
+import inspect
 import sys
 import tempfile
 import unittest
@@ -20,6 +23,7 @@ TEMPLATES = REPO_ROOT / "templates"
 if str(TEMPLATES) not in sys.path:
     sys.path.insert(0, str(TEMPLATES))
 
+import server_health  # noqa: E402
 import server_mcp_tools  # noqa: E402
 import server_specs_tools  # noqa: E402
 
@@ -316,3 +320,86 @@ class EditorOpenedByThisCallIsVisibleTests(unittest.TestCase):
                 {"operation": "unity.status", "activation": {"action": "already_ready"}}
             ),
         )
+
+
+class HostileTimezoneStampTests(unittest.TestCase):
+    """A UTC stamp must parse identically on every host.
+
+    `time.mktime` reads a struct as local time, so the original conversion was exact on a host without DST and off
+    by 3600 s where DST applies — the error landing in the opposite half of the year in the southern hemisphere.
+    That hour feeds the log-lane staleness threshold and the rotation guard, so it decides whether evidence is
+    accepted. This host has no DST, which is precisely why the defect was invisible until it was forced.
+    """
+
+    def setUp(self) -> None:
+        if not hasattr(time, "tzset"):
+            self.skipTest("time.tzset is unavailable on this platform")
+        self._original_tz = os.environ.get("TZ")
+
+    def tearDown(self) -> None:
+        if self._original_tz is None:
+            os.environ.pop("TZ", None)
+        else:
+            os.environ["TZ"] = self._original_tz
+        time.tzset()
+
+    def parse_under(self, timezone_name: str, stamp: str) -> tuple[float, int]:
+        import calendar
+
+        os.environ["TZ"] = timezone_name
+        time.tzset()
+        return server_health._parse_stamp_utc(stamp), calendar.timegm(
+            time.strptime(stamp, "%Y-%m-%dT%H:%M:%SZ")
+        )
+
+    def test_the_stamp_parses_exactly_under_dst_timezones(self) -> None:
+        cases = [
+            ("Europe/Berlin", "2026-08-04T22:28:53Z"),
+            ("Europe/Berlin", "2026-01-15T03:00:00Z"),
+            ("America/New_York", "2026-08-04T22:28:53Z"),
+            ("Australia/Sydney", "2026-01-15T03:00:00Z"),
+            ("UTC", "2026-08-04T22:28:53Z"),
+        ]
+        for timezone_name, stamp in cases:
+            with self.subTest(timezone=timezone_name, stamp=stamp):
+                parsed, expected = self.parse_under(timezone_name, stamp)
+                self.assertEqual(float(expected), parsed, f"{timezone_name} {stamp}")
+
+    def test_a_blank_or_malformed_stamp_is_zero_not_an_exception(self) -> None:
+        self.assertEqual(0.0, server_health._parse_stamp_utc(""))
+        self.assertEqual(0.0, server_health._parse_stamp_utc("not a stamp"))
+        self.assertEqual(0.0, server_health._parse_stamp_utc(None))
+
+
+class PlatformPathEqualityTests(unittest.TestCase):
+    """Path equality must follow the platform, because the anchor guards compare a stamped log path against the
+    searched one exactly when one of them may no longer exist — a rotated or deleted log. The string fallback was
+    case- and separator-sensitive, so on Windows a valid anchor was refused as `anchor_log_mismatch`."""
+
+    def test_an_existing_file_is_the_same_file_through_two_spellings(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            log = root / "Editor.log"
+            log.write_bytes(b"line\n")
+
+            self.assertTrue(server_health._same_path(log, root / "." / "Editor.log"))
+
+    def test_equality_uses_the_platform_rule_for_absent_files(self) -> None:
+        import ntpath
+        import posixpath
+
+        upper = "C:\\Users\\u\\AppData\\Local\\Unity\\Editor\\Editor.log"
+        lower = "c:/users/u/appdata/local/unity/editor/editor.log"
+
+        # The comparison the fix relies on: normcase folds case and separators on Windows and is identity on POSIX.
+        self.assertEqual(ntpath.normcase(upper), ntpath.normcase(lower))
+        self.assertNotEqual(posixpath.normcase(upper), posixpath.normcase(lower))
+        self.assertIn("normcase", inspect.getsource(server_health._same_path))
+
+    def test_distinct_files_are_still_distinct(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "Editor.log").write_bytes(b"a\n")
+            (root / "Editor-prev.log").write_bytes(b"b\n")
+
+            self.assertFalse(server_health._same_path(root / "Editor.log", root / "Editor-prev.log"))

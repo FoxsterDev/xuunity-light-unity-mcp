@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import calendar
 import os
 import re
 import sys
@@ -107,10 +108,26 @@ def _file_info(path: Path) -> dict[str, Any]:
 
 
 def _same_path(left: Path, right: Path) -> bool:
+    """Whether two paths name the same file, using the platform's own equality rules.
+
+    `samefile` settles it when both exist. When one does not — a rotated or deleted log, which is exactly when the
+    anchor guards compare paths — the fallback string comparison was case- and separator-sensitive, so on Windows
+    `C:\\Users\\u\\Editor.log` and `c:/users/u/editor.log` read as different files and a valid anchor was refused as
+    `anchor_log_mismatch`. `os.path.normcase` applies the platform rule: lowercase plus separator folding on
+    Windows, identity on POSIX, so macOS and Linux behaviour is unchanged.
+    """
+
     try:
-        return left.resolve() == right.resolve() or left.samefile(right)
+        if left.samefile(right):
+            return True
     except OSError:
-        return left.expanduser().resolve() == right.expanduser().resolve()
+        pass
+    try:
+        left_resolved = left.expanduser().resolve()
+        right_resolved = right.expanduser().resolve()
+    except OSError:
+        left_resolved, right_resolved = left.expanduser(), right.expanduser()
+    return os.path.normcase(str(left_resolved)) == os.path.normcase(str(right_resolved))
 
 
 def rotated_editor_log_sibling(log_path: Path) -> Path:
@@ -299,12 +316,21 @@ def _offset_is_line_boundary(log_path: Path, offset: int) -> bool:
 
 
 def _parse_stamp_utc(value: Any) -> float:
+    """Epoch seconds for a `...Z` stamp, independent of the host's timezone and DST rules.
+
+    `time.mktime` reads a struct as *local* time, so converting a UTC stamp with it and subtracting
+    `time.timezone` is only correct where standard time is in force year-round. Measured on the same stamp: exact
+    on a no-DST host, and off by 3600 s on Europe/Berlin, America/New_York, and Australia/Sydney — where the error
+    lands in the opposite half of the year. That hour propagates into the log-lane staleness threshold and the
+    rotation guard, so `calendar.timegm` is the only correct conversion here.
+    """
+
     text = str(value or "").strip()
     if not text:
         return 0.0
     try:
-        return time.mktime(time.strptime(text, "%Y-%m-%dT%H:%M:%SZ")) - time.timezone
-    except (TypeError, ValueError):
+        return float(calendar.timegm(time.strptime(text, "%Y-%m-%dT%H:%M:%SZ")))
+    except (TypeError, ValueError, OverflowError):
         return 0.0
 
 
