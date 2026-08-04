@@ -4,11 +4,23 @@ import json
 from typing import Any, Callable
 
 
+POST_SETTLE_COMPILE_TRUST_CONFIRMED = "confirmed"
+POST_SETTLE_COMPILE_TRUST_EDITOR_STILL_BUSY = "editor_still_busy"
+POST_SETTLE_COMPILE_TRUST_DEFERRED_DURING_PLAYMODE = "deferred_during_playmode"
+PLAYING_PLAYMODE_STATES = {"playing", "paused", "transitioning"}
+
+
 def _int_or_zero(value: Any) -> int:
     try:
         return max(0, int(value or 0))
     except (TypeError, ValueError):
         return 0
+
+
+def _editor_was_playing(idle_wait_after: dict[str, Any]) -> bool:
+    if bool(idle_wait_after.get("is_playing")) or bool(idle_wait_after.get("is_playing_or_will_change_playmode")):
+        return True
+    return str(idle_wait_after.get("playmode_state") or "") in PLAYING_PLAYMODE_STATES
 
 
 def _attach_post_settle_compile_truth(
@@ -17,6 +29,7 @@ def _attach_post_settle_compile_truth(
     *,
     settle_phase: str,
     completion_basis: str,
+    playmode_defers_asset_import: bool = False,
 ) -> None:
     diagnostics = idle_wait_after.get("recent_compiler_diagnostics")
     if not isinstance(diagnostics, list):
@@ -31,6 +44,26 @@ def _attach_post_settle_compile_truth(
         post_settle_compile = "failed"
     else:
         post_settle_compile = "passed"
+
+    if compiling_or_updating:
+        trust_class = POST_SETTLE_COMPILE_TRUST_EDITOR_STILL_BUSY
+    elif playmode_defers_asset_import and _editor_was_playing(idle_wait_after):
+        trust_class = POST_SETTLE_COMPILE_TRUST_DEFERRED_DURING_PLAYMODE
+    else:
+        trust_class = POST_SETTLE_COMPILE_TRUST_CONFIRMED
+
+    normalized["post_settle_compile_trust_class"] = trust_class
+    if trust_class == POST_SETTLE_COMPILE_TRUST_DEFERRED_DURING_PLAYMODE:
+        normalized["post_settle_compile_note"] = (
+            "the editor was in Play Mode at settle, so asset import and script compilation are deferred; "
+            "this compile verdict is not authoritative"
+        )
+        normalized["post_settle_compile_recommended_next_action"] = "exit_play_mode_then_rerun_refresh"
+    elif trust_class == POST_SETTLE_COMPILE_TRUST_EDITOR_STILL_BUSY:
+        normalized["post_settle_compile_note"] = (
+            "the editor was still compiling or importing at settle, so this compile verdict is not final"
+        )
+        normalized["post_settle_compile_recommended_next_action"] = "wait_for_editor_idle_then_recheck"
 
     normalized["authoritative_state_source"] = "idle_wait_after"
     normalized["post_settle_compile"] = post_settle_compile
@@ -138,6 +171,7 @@ def normalize_refresh_payload_from_lifecycle(payload: dict[str, Any], lifecycle:
         idle_wait_after,
         settle_phase=str(normalized.get("settle_phase") or ""),
         completion_basis=str(normalized.get("completion_basis") or ""),
+        playmode_defers_asset_import=True,
     )
     return normalized
 
@@ -332,6 +366,9 @@ def _compact_post_settle_fields(payload: dict[str, Any]) -> dict[str, Any]:
         (
             "authoritative_state_source",
             "post_settle_compile",
+            "post_settle_compile_trust_class",
+            "post_settle_compile_note",
+            "post_settle_compile_recommended_next_action",
             "post_settle_error_count",
             "post_settle_script_compilation_failed",
             "post_settle_compiler_diagnostics_source",

@@ -21,13 +21,7 @@ namespace XUUnity.LightMcp.Editor.Helpers
                 throw new InvalidOperationException("Compile arguments are required.");
             }
 
-            if (EditorApplication.isCompiling || EditorApplication.isPlayingOrWillChangePlaymode || EditorApplication.isUpdating)
-            {
-                throw new InvalidOperationException(
-                    $"Unity editor is busy. isCompiling={EditorApplication.isCompiling}, " +
-                    $"isPlayingOrWillChangePlaymode={EditorApplication.isPlayingOrWillChangePlaymode}, " +
-                    $"isUpdating={EditorApplication.isUpdating}");
-            }
+            XUUnityLightMcpEditorBusyGuard.ThrowIfBusy("unity.compile.player_scripts");
 
             if (EditorUtility.scriptCompilationFailed)
             {

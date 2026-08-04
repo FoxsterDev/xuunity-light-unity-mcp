@@ -41,7 +41,10 @@ namespace XUUnity.LightMcp.Editor.Operations
             }
             catch (Exception ex)
             {
-                return XUUnityLightMcpResponseWriter.Error(request.request_id, "compile_player_scripts_failed", ex.Message);
+                return XUUnityLightMcpResponseWriter.Error(
+                    request.request_id,
+                    XUUnityLightMcpEditorBusyGuard.ResolveErrorCode(ex, "compile_player_scripts_failed"),
+                    ex.Message);
             }
         }
     }

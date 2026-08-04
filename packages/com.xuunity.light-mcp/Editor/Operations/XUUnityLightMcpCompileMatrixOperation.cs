@@ -89,7 +89,10 @@ namespace XUUnity.LightMcp.Editor.Operations
             }
             catch (Exception ex)
             {
-                return XUUnityLightMcpResponseWriter.Error(request.request_id, "compile_matrix_failed", ex.Message);
+                return XUUnityLightMcpResponseWriter.Error(
+                    request.request_id,
+                    XUUnityLightMcpEditorBusyGuard.ResolveErrorCode(ex, "compile_matrix_failed"),
+                    ex.Message);
             }
         }
     }

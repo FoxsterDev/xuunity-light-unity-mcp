@@ -6,6 +6,7 @@ using UnityEditor;
 using UnityEditor.Build.Reporting;
 using UnityEngine;
 using XUUnity.LightMcp.Editor.Core;
+using XUUnity.LightMcp.Editor.Helpers;
 
 namespace XUUnity.LightMcp.Editor.Operations
 {
@@ -44,6 +45,8 @@ namespace XUUnity.LightMcp.Editor.Operations
             public string[] build_options = Array.Empty<string>();
             public string outcome = "";
             public string build_result = "";
+            public string refusal_code = "";
+            public string recommended_next_action = "";
             public string top_actionable_error = "";
             public string exception_message = "";
             public string started_at_utc = "";
@@ -81,7 +84,19 @@ namespace XUUnity.LightMcp.Editor.Operations
                 result.exception_message = string.IsNullOrWhiteSpace(ex.Message) ? "GUI build failed." : ex.Message;
                 result.succeeded = false;
                 result.outcome = "gui_build_failed";
-                Debug.LogException(ex);
+                if (ex is XUUnityLightMcpEditorBusyException busy)
+                {
+                    result.build_result = "Refused";
+                    result.refusal_code = busy.Code;
+                    result.recommended_next_action = busy.RecommendedNextAction;
+                    result.outcome = busy.Code == XUUnityLightMcpEditorBusyGuard.EditorInPlayModeCode
+                        ? "gui_build_refused_editor_in_play_mode"
+                        : "gui_build_refused_editor_busy";
+                }
+                else
+                {
+                    Debug.LogException(ex);
+                }
             }
             finally
             {
@@ -99,13 +114,7 @@ namespace XUUnity.LightMcp.Editor.Operations
 
         static void ExecuteBuild(BuildPlayerArgs args, BuildPlayerResult result)
         {
-            if (EditorApplication.isCompiling || EditorApplication.isPlayingOrWillChangePlaymode || EditorApplication.isUpdating)
-            {
-                throw new InvalidOperationException(
-                    $"Unity editor is busy. isCompiling={EditorApplication.isCompiling}, " +
-                    $"isPlayingOrWillChangePlaymode={EditorApplication.isPlayingOrWillChangePlaymode}, " +
-                    $"isUpdating={EditorApplication.isUpdating}");
-            }
+            XUUnityLightMcpEditorBusyGuard.ThrowIfBusy("unity.build.player");
 
             var targetText = (args.buildTarget ?? "").Trim();
             if (string.IsNullOrWhiteSpace(targetText))
