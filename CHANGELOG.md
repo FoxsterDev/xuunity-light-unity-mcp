@@ -36,8 +36,60 @@
 - `out_of_scope` on `unity.ui.query` / `exists` / `get_text` / `get_bounds`: a zero-match selector re-probes the
   widest scope before answering, so "no match here" and "no match anywhere" are distinguishable. Reported as a
   warning where zero matches are legal, and as the `ui_target_out_of_scope` error where a single match is required.
+- `log_lane` on every `source=editor_log` payload, naming which log the read actually used and whether the editor
+  writes it: `host_owned_logfile`, `editor_reported_platform_log`, `rotated_sibling`,
+  `host_default_not_editor_reported`, `stale_not_written_by_live_editor`, or `unverified_editor_log`. Carries
+  `editor_log_mtime_utc`, `editor_log_age_seconds`, and `heartbeat_age_seconds` so a stale log next to a live
+  heartbeat is visible in one call, plus `log_lane_caveat` on the stale lane.
+- `ui_scope_probe_incomplete`: a zero-match answer whose wider-scope probe was itself cut short by `maxNodes` or
+  `maxDepth` no longer claims "no node in any loaded scene".
+- `ui_scene_selector_ambiguous` and `target.scene_selector_ambiguous` when `sceneName` matches several loaded
+  scenes, which previously widened the scope silently.
 
 ### Fixed
+
+- `unity_console_grep` / `unity_console_tail` no longer default to a log the editor is not writing.
+  `resolve_editor_log_path()` now prefers `bridge_state.editor_log_path` when a live bridge reports one; an
+  explicit `editorLogPath` still wins. The host default is only correct for editors the host launched with
+  `-logFile`, so for a Hub-opened editor the default could search a file untouched for hours while a healthy
+  editor logged elsewhere — measured on a live project as a 12-hour-stale log returning a match with no
+  staleness signal. The backing state is now read for every `source=editor_log` call, not only anchored ones.
+- A `since` anchor is refused as `anchor_stale_dead_session` when `bridge_state.json` belongs to an editor that is
+  no longer running. The liveness verdict existed one call away but an `or` fallback re-admitted the stale state,
+  so a dead session's offsets were applied to the next session's log once it grew past them — the failure mode
+  that got the `session_start` anchor removed.
+- A `since` anchor no longer trusts a rotated log path. Unity renames `Editor.log` to `Editor-prev.log` when a
+  second editor starts, and the first editor keeps writing the renamed file while `Application.consoleLogPath`
+  still returns the static path; path equality, file size, and editor liveness all pass while the offset points
+  into another editor's log. A log older than the stamp that describes it now forward-resolves onto its
+  `-prev` sibling (`forward_resolved_editor_log_path`) or is refused as `anchor_log_rotated`. Searching the
+  sibling directly is no longer reported as `anchor_log_mismatch`, and the sibling is a discovery candidate for
+  `build_editor_log_identity`.
+- The mid-line fabricated-match defect was also reachable at the `max_chars` truncation boundary, not only at the
+  anchor: a truncated window began mid-line, so a grep for `MARKER` could match the tail of `xxNOMARKER` while
+  the payload claimed `session_scoped_editor_log`. Reproduced on a real 1,187,704-byte scope and fixed.
+- `unity_console_tail` reported line numbers several lines early: blank lines were filtered before numbering
+  while the payload claimed `editor_log_absolute`. Numbering now happens before filtering.
+- `since=request_id` verified nothing about log identity, because the offset comes from the request journal while
+  the path check reads `bridge_state`, which `recover-editor-session` deletes. The editor now stamps
+  `editor_log_path` beside `editor_log_offset_bytes` in the `request_started` event, and an offset with no
+  identity is refused as `anchor_identity_unverified`.
+- `request-console-tail` never ran: it was registered in the parser but `cmd_request_console_tail` was missing
+  from the `server_cli_commands` re-export, so `build_parser()` bound no callable and the command printed help and
+  exited 1 — including its documented `--since` anchors. `ui-vision-packet`, `ui-vision-submit`, and
+  `ui-interaction-validate` were dead the same way. A sweep test now fails if any subcommand loses its callable.
+- `unity.ui.click` reported a bare "matched no node" when the target lived in an unsearched scene, because the
+  root-canvas out-of-scope case arrives as a warning and only errors were inspected. It now surfaces the scope
+  diagnostic and names the scenes it searched.
+- `out_of_scope` was only set on the zero-match path, so a target whose *root* was out of scope returned the
+  `ui_target_out_of_scope` error with `out_of_scope: false`.
+- Out-of-scope remediation no longer tells a `game_object_name` / `game_object_path` caller to retry with
+  `targetKind=all_loaded_scenes`, which would discard `targetValue` and return an unrelated tree; it advises
+  `sceneName` and keeps the kind.
+- An Edit Mode zero-match at `all_loaded_scenes` no longer pays a second full tree walk that cannot find
+  anything: `DontDestroyOnLoad` is unreachable in Edit Mode, and the widest-scope test required its flag.
+- `target.scene_name` / `scene_path` no longer name a scene the call never searched, so a mistyped `sceneName`
+  stops reporting the active scene as its target.
 
 - A `since` anchor is refused as `anchor_log_mismatch` when the editor measured its offset against a different
   Editor.log than the one being searched. The editor stamps offsets against `Application.consoleLogPath`, while
