@@ -27,6 +27,7 @@ namespace XUUnity.LightMcp.Editor.Bridge
                 pending_request_count = Math.Max(0, pendingRequestCount),
                 started_at_utc = startedAtUtc ?? "",
                 editor_log_offset_bytes = XUUnityLightMcpEditorLogAnchors.CurrentEditorLogLengthBytes(),
+                editor_log_path = XUUnityLightMcpEditorLogAnchors.CurrentEditorLogPath(),
             });
         }
 

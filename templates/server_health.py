@@ -7,10 +7,14 @@ import time
 from pathlib import Path
 from typing import Any, Callable
 
+from server_bridge_paths import default_editor_log_path
+
 FRESH_HEARTBEAT_MAX_AGE_SECONDS = 5.0
 STALE_HEARTBEAT_MAX_AGE_SECONDS = 15.0
 ANR_SUSPECTED_HEARTBEAT_MAX_AGE_SECONDS = 30.0
 STARTUP_MODAL_QUIESCENCE_SECONDS = 20.0
+# Below this a quiet log is just an idle editor, not the wrong file.
+STALE_LOG_LANE_MIN_AGE_SECONDS = 600.0
 DEFAULT_LOG_TAIL_MAX_CHARS = 40000
 EDITOR_LOG_GREP_MAX_CHARS = 500000
 EDITOR_LOG_CONSOLE_CAVEAT = (
@@ -109,6 +113,17 @@ def _same_path(left: Path, right: Path) -> bool:
         return left.expanduser().resolve() == right.expanduser().resolve()
 
 
+def rotated_editor_log_sibling(log_path: Path) -> Path:
+    """The name Unity rotates a platform Editor.log to when another editor starts.
+
+    The editor that owned the log keeps writing the renamed file through its open handle, while
+    `Application.consoleLogPath` still returns the static path, so the sibling is where a first-started editor's
+    output actually lands.
+    """
+
+    return log_path.with_name(f"{log_path.stem}-prev{log_path.suffix}")
+
+
 def platform_editor_log_candidates() -> list[Path]:
     candidates: list[Path] = []
     home = Path.home()
@@ -120,7 +135,8 @@ def platform_editor_log_candidates() -> list[Path]:
             candidates.append(Path(local_app_data) / "Unity" / "Editor" / "Editor.log")
     else:
         candidates.append(home / ".config" / "unity3d" / "Editor.log")
-    return candidates
+    # A rotated sibling is a real candidate: on a multi-editor host it is the log the first editor writes.
+    return candidates + [rotated_editor_log_sibling(candidate) for candidate in candidates]
 
 
 def _project_path_markers(project_root: Path) -> list[str]:
@@ -239,11 +255,13 @@ def _count_lines_before_offset(log_path: Path, offset: int) -> int:
     return newlines + 1
 
 
-def _request_started_log_offset(journal_events: list[dict[str, Any]] | None) -> int:
-    """The Editor.log length the editor recorded when it began handling the request.
+def _request_started_log_anchor(journal_events: list[dict[str, Any]] | None) -> tuple[int, str]:
+    """The Editor.log length and path the editor recorded when it began handling the request.
 
-    The editor writes this into the `request_started` journal event, so the anchor costs one stat per request
-    the operator actually issued — never a stat inside the 0.5 s request pump.
+    The editor writes both into the `request_started` journal event, so the anchor costs one stat per request
+    the operator actually issued — never a stat inside the 0.5 s request pump. The path travels with the offset
+    because the journal outlives bridge_state.json: `recover-editor-session` unlinks the state file and leaves
+    the journal, so an offset that carried no identity of its own could be applied to a different log.
     """
 
     for event in journal_events or []:
@@ -251,8 +269,17 @@ def _request_started_log_offset(journal_events: list[dict[str, Any]] | None) -> 
             continue
         offset = _int_or_zero(event.get("editor_log_offset_bytes"))
         if offset > 0:
-            return offset
-    return 0
+            return offset, str(event.get("editor_log_path") or "")
+    return 0, ""
+
+
+def _request_started_stamp_utc(journal_events: list[dict[str, Any]] | None) -> str:
+    for event in journal_events or []:
+        if str(event.get("event_type") or "") != "request_started":
+            continue
+        if _int_or_zero(event.get("editor_log_offset_bytes")) > 0:
+            return str(event.get("event_at_utc") or "")
+    return ""
 
 
 def _offset_is_line_boundary(log_path: Path, offset: int) -> bool:
@@ -271,6 +298,38 @@ def _offset_is_line_boundary(log_path: Path, offset: int) -> bool:
         return True
 
 
+def _parse_stamp_utc(value: Any) -> float:
+    text = str(value or "").strip()
+    if not text:
+        return 0.0
+    try:
+        return time.mktime(time.strptime(text, "%Y-%m-%dT%H:%M:%SZ")) - time.timezone
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _log_predates_its_own_stamp(log_path: Path, stamped_utc: Any) -> tuple[bool, str, str]:
+    """True when the searched log was last written before the editor stamped an offset into it.
+
+    An editor cannot stamp an offset against a log it is writing and leave that log older than the stamp. When it
+    looks that way the path has been reused by a different file: Unity rotates `Editor.log` to `Editor-prev.log`
+    when a second editor starts, and the first editor keeps writing the renamed file while
+    `Application.consoleLogPath` still returns the static path. Verified on a two-editor host where the stamping
+    editor held `Editor-prev.log` and the path named another editor's log.
+    """
+
+    stamp_epoch = _parse_stamp_utc(stamped_utc)
+    if stamp_epoch <= 0.0:
+        return False, "", ""
+    try:
+        mtime = float(log_path.stat().st_mtime or 0.0)
+    except OSError:
+        return False, "", ""
+    if mtime <= 0.0 or mtime >= stamp_epoch - 2.0:
+        return False, "", ""
+    return True, _mtime_utc(mtime), str(stamped_utc or "")
+
+
 def resolve_editor_log_since_anchor(
     log_path: Path,
     *,
@@ -279,12 +338,18 @@ def resolve_editor_log_since_anchor(
     host_session_state: dict[str, Any] | None = None,
     journal_events: list[dict[str, Any]] | None = None,
     since_request_id: str = "",
+    bridge_state_is_live: bool = True,
+    explicit_path_requested: bool = False,
 ) -> dict[str, Any]:
     """Resolve a `since` anchor to a byte offset in the Editor.log.
 
     Editor.log accumulates across editor sessions and play sessions, so an unanchored grep can match a line
     written by a previous run. The offsets come from the editor package: it records the log length at play-mode
     entry and at bridge-generation start into bridge_state.json.
+
+    `bridge_state_is_live` must be false when the state file exists but its editor is gone. Those offsets were
+    measured against a log Unity has since truncated, which is the failure that removed the `session_start`
+    anchor: stale at first, then silently wrong once the new log grows past the recorded byte.
     """
 
     requested = str(since or "").strip().lower()
@@ -302,21 +367,54 @@ def resolve_editor_log_since_anchor(
         anchor["supported_anchors"] = list(SINCE_ANCHORS)
         return anchor
 
+    if not bridge_state_is_live:
+        anchor["resolved"] = "anchor_stale_dead_session"
+        anchor["anchor_stale_reason"] = (
+            "bridge_state.json belongs to an editor that is no longer running, so every offset in it was "
+            "measured against that session's Editor.log; Unity truncates the log on start, so applying one to "
+            "the current log would scope the search to an arbitrary byte while still reporting a session anchor"
+        )
+        anchor["recommended_next_action"] = (
+            "treat this result as spanning previous sessions; clear the stale state with recover-editor-session "
+            "and bring the lane up with ensure-ready --open-editor, then re-anchor against the live editor"
+        )
+        return anchor
+
+    journal_log_path = ""
     if requested == "request_id":
         if not str(since_request_id or "").strip():
             anchor["resolved"] = "anchor_argument_missing"
             anchor["anchor_argument_missing_reason"] = "since=request_id also needs sinceRequestId"
             return anchor
         anchor["since_request_id"] = str(since_request_id).strip()
-        offset = _request_started_log_offset(journal_events)
+        offset, journal_log_path = _request_started_log_anchor(journal_events)
         source = "request_journal.request_started.editor_log_offset_bytes"
     else:
         state_key = SINCE_ANCHOR_STATE_KEYS[requested]
         offset = _int_or_zero((bridge_state or {}).get(state_key))
         source = f"bridge_state.{state_key}"
 
-    stamped_log = str((bridge_state or {}).get("editor_log_path") or "")
-    if stamped_log and not _same_path(Path(stamped_log).expanduser(), log_path.expanduser()):
+    stamped_log = journal_log_path or str((bridge_state or {}).get("editor_log_path") or "")
+    if requested == "request_id" and offset > 0 and not stamped_log:
+        anchor["resolved"] = "anchor_identity_unverified"
+        anchor["anchor_source"] = source
+        anchor["anchor_identity_unverified_reason"] = (
+            "the journal entry carries an offset but no editor_log_path, and no live bridge_state names the log "
+            "either, so there is nothing to prove the offset was measured against the log being searched"
+        )
+        anchor["recommended_next_action"] = (
+            "use since=playmode_start or since=bridge_generation against the live editor, or rerun the operation "
+            "so its journal entry is written by a package version that stamps the log path"
+        )
+        return anchor
+
+    stamped_matches = bool(stamped_log) and (
+        _same_path(Path(stamped_log).expanduser(), log_path.expanduser())
+        # An operator following the rotation remediation searches the sibling of the stamped path. That is the
+        # same editor's log, so calling it a mismatch would deadlock the two guards against each other.
+        or _same_path(rotated_editor_log_sibling(Path(stamped_log).expanduser()), log_path.expanduser())
+    )
+    if stamped_log and not stamped_matches:
         anchor["resolved"] = "anchor_log_mismatch"
         anchor["anchor_source"] = source
         anchor["stamped_editor_log_path"] = stamped_log
@@ -329,6 +427,46 @@ def resolve_editor_log_since_anchor(
         anchor["recommended_next_action"] = (
             "pass editorLogPath=<the path in bridge_state.editor_log_path>, or reopen the editor through "
             "ensure-ready --open-editor so both sides agree on one log"
+        )
+        return anchor
+
+    stamped_utc = ""
+    if requested == "playmode_start":
+        stamped_utc = str((bridge_state or {}).get("editor_log_playmode_started_utc") or "")
+    elif requested == "request_id":
+        stamped_utc = _request_started_stamp_utc(journal_events)
+
+    rotated, log_mtime_utc, stamp_utc = _log_predates_its_own_stamp(log_path, stamped_utc)
+    if rotated:
+        # Refusing here is correct but unactionable on its own: the log the editor really writes is the rotated
+        # sibling, and searching it would then fail the path check above. Resolve the stamp forward onto the
+        # sibling when the sibling is the file that postdates the stamp, so the anchor stays usable.
+        sibling = rotated_editor_log_sibling(log_path)
+        sibling_rotated, _, _ = _log_predates_its_own_stamp(sibling, stamped_utc)
+        if sibling.is_file() and not sibling_rotated:
+            anchor["forward_resolved_from_editor_log_path"] = str(log_path)
+            anchor["forward_resolved_editor_log_path"] = str(sibling)
+            anchor["forward_resolved_reason"] = (
+                "the stamped path holds a file older than the stamp, and its rotated sibling holds one newer, so "
+                "the stamping editor is writing the sibling; Unity rotates Editor.log when a second editor starts"
+            )
+            log_path = sibling
+            rotated = False
+
+    if rotated:
+        anchor["resolved"] = "anchor_log_rotated"
+        anchor["anchor_source"] = source
+        anchor["stamped_at_utc"] = stamp_utc
+        anchor["searched_editor_log_mtime_utc"] = log_mtime_utc
+        anchor["anchor_log_rotated_reason"] = (
+            "the log at this path was last written before the editor stamped an offset into it, so the path now "
+            "holds a different file; Unity rotates Editor.log to Editor-prev.log when a second editor starts, and "
+            "the first editor keeps writing the renamed file while Application.consoleLogPath still returns the "
+            "static path, so the offset would be applied to another editor's log"
+        )
+        anchor["recommended_next_action"] = (
+            "pass editorLogPath=<the log this editor actually writes, often Editor-prev.log on a multi-editor "
+            "host>, or reopen the project through ensure-ready --open-editor so it gets its own -logFile"
         )
         return anchor
 
@@ -383,6 +521,13 @@ def resolve_editor_log_since_anchor(
     return anchor
 
 
+def effective_editor_log_path(log_path: Path, anchor: dict[str, Any]) -> Path:
+    """The log actually read, which is the rotated sibling when the anchor forward-resolved onto it."""
+
+    forwarded = str(anchor.get("forward_resolved_editor_log_path") or "")
+    return Path(forwarded) if forwarded else log_path
+
+
 def _read_editor_log_since_anchor(
     log_path: Path,
     anchor: dict[str, Any],
@@ -390,6 +535,7 @@ def _read_editor_log_since_anchor(
 ) -> tuple[str, int]:
     """Return (text, first_line_number) for the anchored scope, falling back to the plain tail."""
 
+    log_path = effective_editor_log_path(log_path, anchor)
     if not anchor.get("anchored"):
         return read_editor_log_tail(log_path, max_chars=max_chars), 1
 
@@ -403,28 +549,151 @@ def _read_editor_log_since_anchor(
         anchor["anchored"] = False
         return text, 1
 
+    truncated = bool(scope.get("truncated_to_max_chars"))
+    anchor["scope_truncated"] = truncated
     first_line = max(1, int(anchor.get("searched_from_line") or 1))
-    if anchor.get("starts_mid_line"):
-        # The offset is a byte length captured while Unity was writing, so it can land inside a line. Keeping the
-        # fragment lets a pattern match text that the real line does not contain: an offset splitting "xxNOMARKER"
-        # leaves "MARKER", which a grep for MARKER reports as a hit on a line that literally says NOMARKER.
+
+    # A window that does not begin at a line start lets a pattern match text the real line does not contain:
+    # a boundary splitting "xxNOMARKER" leaves "MARKER", which a grep for MARKER reports as a hit on a line that
+    # literally says NOMARKER. Two boundaries can split a line — the recorded offset, which is a byte length
+    # captured while Unity was writing, and the max_chars cut that keeps only the tail of the scope.
+    starts_mid_line = bool(anchor.get("starts_mid_line")) if not truncated else bool(
+        scope.get("truncated_window_starts_mid_line")
+    )
+    if starts_mid_line:
         newline_at = text.find("\n")
         text = "" if newline_at < 0 else text[newline_at + 1 :]
-        first_line += 1
         anchor["partial_leading_line_dropped"] = True
+        if not truncated:
+            first_line += 1
 
-    truncated = _int_or_zero(anchor.get("scoped_bytes_available")) > max_chars
-    anchor["scope_truncated"] = truncated
     if truncated:
-        # read_editor_log_scope keeps the tail of the scope, so the returned window no longer starts at the
-        # anchor and absolute numbering is unrecoverable without a second full read. Numbering goes relative to
-        # the window; keep the anchor's own line under a separate key so the two are not confused.
+        # The window no longer starts at the anchor, so absolute numbering is unrecoverable without a second
+        # full read. Numbering goes relative to the window; keep the anchor's own line under a separate key so
+        # the two are not confused.
         anchor["anchor_line"] = first_line
         anchor["searched_from_line"] = 1
         return text, 1
 
     anchor["searched_from_line"] = first_line
     return text, first_line
+
+
+STALE_LOG_LANE_CAVEAT = (
+    "This Editor.log has not been written since well before the live editor's last heartbeat, so it is not the "
+    "log this editor is writing; matches describe an earlier session and absence proves nothing."
+)
+
+
+def build_editor_log_lane(
+    project_root: Path,
+    log_path: Path,
+    *,
+    bridge_state: dict[str, Any] | None = None,
+    anchor: dict[str, Any] | None = None,
+    explicit_path_requested: bool = False,
+    editor_is_live: bool | None = None,
+) -> dict[str, Any]:
+    """Classify *which log lane* a `source=editor_log` read is on, not just which path it opened.
+
+    The host default (`Library/XUUnityLightMcp/logs/unity_editor.log`) is correct only for editors the host
+    launched with `-logFile`. An editor opened from the Hub writes the platform log instead, so the default can
+    point at a file that has not been touched for hours while a healthy editor logs elsewhere. Reporting a path
+    without saying whether the editor writes it is what let that read look authoritative.
+    """
+
+    state = bridge_state or {}
+    searched = effective_editor_log_path(log_path, anchor or {})
+    reported = str(state.get("editor_log_path") or "")
+    host_default = default_editor_log_path(project_root)
+
+    lane: dict[str, Any] = {
+        "searched_editor_log_path": str(searched),
+        "editor_reported_editor_log_path": reported,
+        "host_default_editor_log_path": str(host_default),
+        "explicit_path_requested": bool(explicit_path_requested),
+        "editor_pid": _int_or_zero(state.get("editor_pid")),
+    }
+
+    log_age = _file_age_seconds(searched)
+    lane["editor_log_mtime_utc"] = _file_mtime_utc(searched)
+    lane["editor_log_age_seconds"] = log_age
+    heartbeat_age = _heartbeat_age_seconds(state.get("heartbeat_utc"))
+    lane["heartbeat_age_seconds"] = heartbeat_age
+    if editor_is_live is None:
+        # Fall back to heartbeat freshness so the lane still classifies when the caller has no liveness verdict.
+        editor_is_live = heartbeat_age is not None and heartbeat_age <= ANR_SUSPECTED_HEARTBEAT_MAX_AGE_SECONDS
+    lane["editor_is_live"] = bool(editor_is_live)
+
+    if anchor and anchor.get("forward_resolved_editor_log_path"):
+        lane["lane"] = "rotated_sibling"
+        lane["lane_reason"] = str(anchor.get("forward_resolved_reason") or "")
+        return lane
+
+    # A live editor whose log has been idle for far longer than its own heartbeat is not writing this file.
+    if (
+        lane["editor_is_live"]
+        and log_age is not None
+        and heartbeat_age is not None
+        and log_age > max(STALE_LOG_LANE_MIN_AGE_SECONDS, heartbeat_age * 4 + 60)
+    ):
+        lane["lane"] = "stale_not_written_by_live_editor"
+        lane["lane_reason"] = (
+            f"the editor heartbeat is {heartbeat_age:.0f}s old but this log has not been written for "
+            f"{log_age:.0f}s, so a different file is receiving this editor's output"
+        )
+        lane["recommended_next_action"] = (
+            "pass editorLogPath=<the path in bridge_state.editor_log_path>, or reopen the project through "
+            "ensure-ready --open-editor so the host owns the log with -logFile"
+        )
+        return lane
+
+    if reported and _same_path(Path(reported).expanduser(), searched.expanduser()):
+        lane["lane"] = (
+            "host_owned_logfile"
+            if _same_path(host_default, searched)
+            else "editor_reported_platform_log"
+        )
+        return lane
+
+    if _same_path(host_default, searched):
+        lane["lane"] = "host_owned_logfile" if not reported else "host_default_not_editor_reported"
+        if reported:
+            lane["lane_reason"] = (
+                "the editor reports a different log than the host default this read opened"
+            )
+            lane["recommended_next_action"] = (
+                "pass editorLogPath=<the path in bridge_state.editor_log_path>"
+            )
+        return lane
+
+    lane["lane"] = "unverified_editor_log"
+    lane["lane_reason"] = "no live bridge names a log, so nothing confirms this file receives editor output"
+    return lane
+
+
+def _file_mtime_utc(path: Path) -> str:
+    try:
+        return _mtime_utc(float(path.stat().st_mtime or 0.0))
+    except OSError:
+        return ""
+
+
+def _file_age_seconds(path: Path) -> float | None:
+    try:
+        mtime = float(path.stat().st_mtime or 0.0)
+    except OSError:
+        return None
+    if mtime <= 0.0:
+        return None
+    return max(0.0, time.time() - mtime)
+
+
+def _heartbeat_age_seconds(heartbeat_utc: Any) -> float | None:
+    stamp = _parse_stamp_utc(heartbeat_utc)
+    if stamp <= 0.0:
+        return None
+    return max(0.0, time.time() - stamp)
 
 
 def grep_editor_log_payload(
@@ -444,6 +713,8 @@ def grep_editor_log_payload(
     host_session_state: dict[str, Any] | None = None,
     journal_events: list[dict[str, Any]] | None = None,
     since_request_id: str = "",
+    bridge_state_is_live: bool = True,
+    explicit_path_requested: bool = False,
 ) -> dict[str, Any]:
     pattern = str(pattern or "").strip()
     if not pattern:
@@ -479,6 +750,15 @@ def grep_editor_log_payload(
         host_session_state=host_session_state,
         journal_events=journal_events,
         since_request_id=since_request_id,
+        bridge_state_is_live=bridge_state_is_live,
+    )
+    lane = build_editor_log_lane(
+        project_root,
+        log_path,
+        bridge_state=bridge_state,
+        anchor=anchor,
+        explicit_path_requested=explicit_path_requested,
+        editor_is_live=bridge_state_is_live,
     )
     text, first_line_number = _read_editor_log_since_anchor(log_path, anchor, max_chars)
     matches: list[dict[str, Any]] = []
@@ -511,7 +791,7 @@ def grep_editor_log_payload(
         "backend_id": "xuunity.light_unity_mcp",
         "project_root": str(project_root),
         "source": "editor_log",
-        "editor_log_path": str(log_path),
+        "editor_log_path": str(effective_editor_log_path(log_path, anchor)),
         "pattern": pattern,
         "exclude_pattern": exclude_pattern,
         "regex": bool(regex),
@@ -531,6 +811,8 @@ def grep_editor_log_payload(
         "result_trust_class": (
             "session_scoped_editor_log" if anchor.get("anchored") else "editor_log_spans_multiple_sessions"
         ),
+        "log_lane": lane,
+        "log_lane_caveat": ("" if lane.get("lane") != "stale_not_written_by_live_editor" else STALE_LOG_LANE_CAVEAT),
         "console_grep_caveat": EDITOR_LOG_CONSOLE_CAVEAT,
         "stale_match_caveat": "" if anchor.get("anchored") else EDITOR_LOG_STALE_MATCH_CAVEAT,
         "since_anchor_degraded": bool(since) and not anchor.get("anchored"),
@@ -549,6 +831,8 @@ def tail_editor_log_payload(
     host_session_state: dict[str, Any] | None = None,
     journal_events: list[dict[str, Any]] | None = None,
     since_request_id: str = "",
+    bridge_state_is_live: bool = True,
+    explicit_path_requested: bool = False,
 ) -> dict[str, Any]:
     limit = max(1, int(limit or 50))
     anchor = resolve_editor_log_since_anchor(
@@ -558,27 +842,41 @@ def tail_editor_log_payload(
         host_session_state=host_session_state,
         journal_events=journal_events,
         since_request_id=since_request_id,
+        bridge_state_is_live=bridge_state_is_live,
+    )
+    lane = build_editor_log_lane(
+        project_root,
+        log_path,
+        bridge_state=bridge_state,
+        anchor=anchor,
+        explicit_path_requested=explicit_path_requested,
+        editor_is_live=bridge_state_is_live,
     )
     text, first_line_number = _read_editor_log_since_anchor(log_path, anchor, max_chars)
-    lines = [line.rstrip("\n") for line in text.splitlines() if line.strip()]
+    # Number before filtering: blank lines occupy real line numbers in the log, so counting only the kept lines
+    # would report every item several lines early while line_numbering_basis claims editor_log_absolute.
+    lines = [
+        (first_line_number + index, raw_line.rstrip("\n"))
+        for index, raw_line in enumerate(text.splitlines())
+        if raw_line.strip()
+    ]
     truncated = len(lines) > limit
     visible_lines = lines[-limit:] if truncated else lines
-    start_line = max(1, first_line_number + len(lines) - len(visible_lines))
     items = [
         {
             "type": "editor_log",
             "message": line,
             "timestamp": "",
             "stack_trace": "",
-            "line": start_line + index,
+            "line": line_number,
         }
-        for index, line in enumerate(visible_lines)
+        for line_number, line in visible_lines
     ]
     return {
         "backend_id": "xuunity.light_unity_mcp",
         "project_root": str(project_root),
         "source": "editor_log",
-        "editor_log_path": str(log_path),
+        "editor_log_path": str(effective_editor_log_path(log_path, anchor)),
         "items": items,
         "truncated": truncated,
         "tail_count": len(items),
@@ -591,6 +889,8 @@ def tail_editor_log_payload(
         "result_trust_class": (
             "session_scoped_editor_log" if anchor.get("anchored") else "editor_log_path_backed_untyped"
         ),
+        "log_lane": lane,
+        "log_lane_caveat": ("" if lane.get("lane") != "stale_not_written_by_live_editor" else STALE_LOG_LANE_CAVEAT),
         "stale_match_caveat": "" if anchor.get("anchored") else EDITOR_LOG_STALE_MATCH_CAVEAT,
         "since_anchor_degraded": bool(since) and not anchor.get("anchored"),
         "console_tail_caveat": EDITOR_LOG_TAIL_CAVEAT,
@@ -693,10 +993,15 @@ def read_editor_log_scope(
                     "start_offset_bytes": start_offset,
                     "fallback_used": False,
                     "scoped_bytes_available": max(0, file_size - start_offset),
+                    "truncated_to_max_chars": False,
+                    "truncated_window_starts_mid_line": False,
                 }
             )
             if len(scoped_text) > max_chars:
-                scoped_text = scoped_text[-max_chars:]
+                cut = len(scoped_text) - max_chars
+                scope["truncated_to_max_chars"] = True
+                scope["truncated_window_starts_mid_line"] = scoped_text[cut - 1] != "\n"
+                scoped_text = scoped_text[cut:]
             return scoped_text, scope
         scope["scoped_bytes_available"] = max(0, file_size - start_offset)
         scope["scoped_text_empty"] = True

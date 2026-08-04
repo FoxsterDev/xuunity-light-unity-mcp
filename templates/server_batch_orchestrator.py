@@ -1501,23 +1501,37 @@ def editor_log_anchor_journal(project_root: Path, since: str, since_request_id: 
         return []
 
 
-def editor_log_anchor_state(project_root: Path, since: str) -> tuple[dict[str, Any], dict[str, Any]]:
-    """State the `since` anchors resolve against, or empty dicts.
+def editor_log_anchor_state(project_root: Path, since: str = "") -> tuple[dict[str, Any], dict[str, Any], bool]:
+    """State an Editor.log read resolves against, plus whether that state belongs to a live editor.
+
+    Read unconditionally, not only for `since`: the same state names the log the editor is actually writing, and
+    without it an unanchored read falls back to the host default and can search a file no live editor touches.
 
     Reading an Editor.log must not require a resolvable Unity project context: the log is path-backed and the
     tool is often the thing an operator reaches for when the project itself is in a bad state. An unresolvable
     context degrades to an unanchored search, which the payload reports as `since_anchor_degraded`.
+
+    Liveness is part of the contract, not a detail. `read_best_effort_bridge_state` already refuses a state whose
+    editor pid is dead; the project-context fallback deliberately keeps serving that stale state for discovery
+    and diagnosis, so the anchor path has to carry the distinction itself rather than inherit it.
     """
 
-    if not since:
-        return {}, {}
+    root = project_root if isinstance(project_root, Path) else Path(project_root)
     try:
-        return (
-            current_project_context_bridge_state(project_root),
-            current_project_context_host_session_state(project_root),
-        )
+        raw_state = try_read_bridge_state(root) or {}
+        live_state = read_best_effort_bridge_state(root)
     except (ToolInvocationError, RuntimeError, OSError):
-        return {}, {}
+        raw_state, live_state = {}, None
+    try:
+        host_session_state = current_project_context_host_session_state(root)
+    except (ToolInvocationError, RuntimeError, OSError):
+        host_session_state = {}
+
+    return (
+        live_state if live_state is not None else raw_state,
+        host_session_state,
+        live_state is not None or not raw_state,
+    )
 
 
 def _editor_log_since_argument(arguments: dict[str, Any]) -> str:
@@ -1580,7 +1594,9 @@ def call_unity_console_grep_tool(arguments: dict[str, Any]) -> dict[str, Any]:
         if editor_log_path is not None and not isinstance(editor_log_path, str):
             raise JsonRpcError(-32602, "editorLogPath must be a string when provided.")
         log_path = resolve_editor_log_path(project_root, editor_log_path)
-        anchor_bridge_state, anchor_host_session_state = editor_log_anchor_state(project_root, since)
+        anchor_bridge_state, anchor_host_session_state, anchor_state_is_live = editor_log_anchor_state(
+            project_root, since
+        )
         anchor_journal_events = editor_log_anchor_journal(project_root, since, since_request_id)
         try:
             payload = grep_editor_log_payload(
@@ -1598,6 +1614,7 @@ def call_unity_console_grep_tool(arguments: dict[str, Any]) -> dict[str, Any]:
                 host_session_state=anchor_host_session_state,
                 journal_events=anchor_journal_events,
                 since_request_id=since_request_id,
+                bridge_state_is_live=anchor_state_is_live,
             )
         except ValueError as exc:
             raise JsonRpcError(-32602, str(exc)) from exc
@@ -1660,7 +1677,9 @@ def call_unity_console_tail_tool(arguments: dict[str, Any]) -> dict[str, Any]:
         if editor_log_path is not None and not isinstance(editor_log_path, str):
             raise JsonRpcError(-32602, "editorLogPath must be a string when provided.")
         log_path = resolve_editor_log_path(project_root, editor_log_path)
-        anchor_bridge_state, anchor_host_session_state = editor_log_anchor_state(project_root, since)
+        anchor_bridge_state, anchor_host_session_state, anchor_state_is_live = editor_log_anchor_state(
+            project_root, since
+        )
         anchor_journal_events = editor_log_anchor_journal(project_root, since, since_request_id)
         return mcp_json_result(
             tail_editor_log_payload(
@@ -1672,6 +1691,7 @@ def call_unity_console_tail_tool(arguments: dict[str, Any]) -> dict[str, Any]:
                 host_session_state=anchor_host_session_state,
                 journal_events=anchor_journal_events,
                 since_request_id=since_request_id,
+                bridge_state_is_live=anchor_state_is_live,
             )
         )
 

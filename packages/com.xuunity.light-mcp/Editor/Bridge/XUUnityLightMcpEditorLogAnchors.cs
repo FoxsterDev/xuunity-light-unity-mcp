@@ -52,6 +52,18 @@ namespace XUUnity.LightMcp.Editor.Bridge
             }
         }
 
+        public static string CurrentEditorLogPath()
+        {
+            try
+            {
+                return Application.consoleLogPath ?? "";
+            }
+            catch
+            {
+                return "";
+            }
+        }
+
         static long ReadLong(string key)
         {
             var raw = SessionState.GetString(key, "");

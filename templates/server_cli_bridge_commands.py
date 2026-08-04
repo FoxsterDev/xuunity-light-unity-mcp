@@ -385,10 +385,17 @@ def cmd_request_console_grep(args):
     project_root = ensure_project_root(args.project_root)
     source = str(getattr(args, "source", "editor_log") or "editor_log")
     if source == "editor_log":
-        log_path = resolve_editor_log_path(project_root, getattr(args, "editor_log_path", None))
         since = str(getattr(args, "since", "") or "")
         since_request_id = str(getattr(args, "since_request_id", "") or "").strip()
-        anchor_bridge_state, anchor_host_session_state = editor_log_anchor_state(project_root, since)
+        anchor_bridge_state, anchor_host_session_state, anchor_state_is_live = editor_log_anchor_state(
+            project_root, since
+        )
+        explicit_log_path = getattr(args, "editor_log_path", None)
+        log_path = resolve_editor_log_path(
+            project_root,
+            explicit_log_path,
+            bridge_state=anchor_bridge_state,
+        )
         anchor_journal_events = editor_log_anchor_journal(project_root, since, since_request_id)
         try:
             payload = grep_editor_log_payload(
@@ -404,6 +411,8 @@ def cmd_request_console_grep(args):
                 host_session_state=anchor_host_session_state,
                 journal_events=anchor_journal_events,
                 since_request_id=since_request_id,
+                bridge_state_is_live=anchor_state_is_live,
+                explicit_path_requested=bool(explicit_log_path),
             )
         except ValueError as exc:
             raise ToolInvocationError("invalid_editor_log_grep", str(exc)) from exc
@@ -446,10 +455,17 @@ def cmd_request_console_tail(args):
     source = str(getattr(args, "source", "editor_log") or "editor_log")
     limit = max(1, int(args.limit or 50))
     if source == "editor_log":
-        log_path = resolve_editor_log_path(project_root, getattr(args, "editor_log_path", None))
         since = str(getattr(args, "since", "") or "")
         since_request_id = str(getattr(args, "since_request_id", "") or "").strip()
-        anchor_bridge_state, anchor_host_session_state = editor_log_anchor_state(project_root, since)
+        anchor_bridge_state, anchor_host_session_state, anchor_state_is_live = editor_log_anchor_state(
+            project_root, since
+        )
+        explicit_log_path = getattr(args, "editor_log_path", None)
+        log_path = resolve_editor_log_path(
+            project_root,
+            explicit_log_path,
+            bridge_state=anchor_bridge_state,
+        )
         anchor_journal_events = editor_log_anchor_journal(project_root, since, since_request_id)
         payload = tail_editor_log_payload(
             project_root,
@@ -460,6 +476,8 @@ def cmd_request_console_tail(args):
             host_session_state=anchor_host_session_state,
             journal_events=anchor_journal_events,
             since_request_id=since_request_id,
+            bridge_state_is_live=anchor_state_is_live,
+            explicit_path_requested=bool(explicit_log_path),
         )
         print_json(
             {

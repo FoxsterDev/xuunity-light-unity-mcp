@@ -301,9 +301,31 @@ def classify_editor_log(log_text: str, startup_policy: str) -> tuple[str, str] |
     return None
 
 
-def resolve_editor_log_path(project_root: Path, explicit_path: str | None) -> Path:
+def resolve_editor_log_path(
+    project_root: Path,
+    explicit_path: str | None,
+    *,
+    bridge_state: dict | None = None,
+) -> Path:
+    """Pick the Editor.log to read, preferring the log a live editor says it is writing.
+
+    The host default only holds for editors the host launched with `-logFile`. An editor opened from the Hub
+    writes the platform log instead, so defaulting to the project-local path silently searched a file that had
+    not been touched for hours while a healthy editor logged elsewhere.
+    """
+
     if explicit_path:
         return Path(explicit_path).expanduser().resolve()
+
+    reported = str((bridge_state or {}).get("editor_log_path") or "").strip()
+    if reported:
+        try:
+            candidate = Path(reported).expanduser().resolve()
+        except OSError:
+            candidate = Path(reported).expanduser()
+        if candidate.is_file():
+            return candidate
+
     return default_editor_log_path(project_root)
 
 

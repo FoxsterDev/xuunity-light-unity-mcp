@@ -1359,9 +1359,11 @@ TOOLS: dict[str, dict[str, Any]] = {
                         "Bound an editor_log search to the current session. Editor.log accumulates across editor "
                         "and play sessions, so an unanchored match can be a line from a previous run - the exact "
                         "false positive a shell wait loop hits. playmode_start and bridge_generation resolve to "
-                        "byte offsets the editor package records in bridge_state.json; session_start uses the "
-                        "offset the host captured when it opened the editor; request_id uses the offset the editor recorded in that request's journal entry and also needs sinceRequestId. The resolved anchor and "
-                        "searched_from_line are echoed back in since_anchor."
+                        "byte offsets the editor package records in bridge_state.json; request_id uses the "
+                        "offset the editor recorded in that request's journal entry and also needs "
+                        "sinceRequestId. The resolved anchor and searched_from_line are echoed back in "
+                        "since_anchor, and an anchor that cannot be trusted is refused by name rather than "
+                        "silently widened."
                     )
                 },
                 "sinceRequestId": {
@@ -1421,9 +1423,11 @@ TOOLS: dict[str, dict[str, Any]] = {
                         "Bound an editor_log search to the current session. Editor.log accumulates across editor "
                         "and play sessions, so an unanchored match can be a line from a previous run - the exact "
                         "false positive a shell wait loop hits. playmode_start and bridge_generation resolve to "
-                        "byte offsets the editor package records in bridge_state.json; session_start uses the "
-                        "offset the host captured when it opened the editor; request_id uses the offset the editor recorded in that request's journal entry and also needs sinceRequestId. The resolved anchor and "
-                        "searched_from_line are echoed back in since_anchor."
+                        "byte offsets the editor package records in bridge_state.json; request_id uses the "
+                        "offset the editor recorded in that request's journal entry and also needs "
+                        "sinceRequestId. The resolved anchor and searched_from_line are echoed back in "
+                        "since_anchor, and an anchor that cannot be trusted is refused by name rather than "
+                        "silently widened."
                     )
                 },
                 "sinceRequestId": {

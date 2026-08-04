@@ -15,6 +15,9 @@ The C# half of the UI-scope contract is asserted from source here because it nee
 """
 
 import json
+import os
+import tempfile
+import time
 import re
 import sys
 import unittest
@@ -30,6 +33,7 @@ for candidate in (TEMPLATES_DIR, RUNNER_DIR):
 
 import run_multi_project
 import server_bridge_payloads
+import server_editor_host_paths  # noqa: E402
 import server_health
 import server_specs
 
@@ -168,7 +172,12 @@ class EditorLogSinceAnchorTests(unittest.TestCase):
             since_request_id="req-42",
             journal_events=[
                 {"event_type": "request_submitted", "request_id": "req-42"},
-                {"event_type": "request_started", "request_id": "req-42", "editor_log_offset_bytes": self.offset},
+                {
+                    "event_type": "request_started",
+                    "request_id": "req-42",
+                    "editor_log_offset_bytes": self.offset,
+                    "editor_log_path": str(self.log),
+                },
                 {"event_type": "request_completed", "request_id": "req-42"},
             ],
         )
@@ -433,13 +442,15 @@ class AnchorStateResolutionIsBestEffortTests(unittest.TestCase):
     def test_no_anchor_requested_never_touches_the_project_context(self) -> None:
         for name, module in self._modules():
             with self.subTest(module=name):
-                self.assertEqual(({}, {}), module.editor_log_anchor_state("/definitely/not/a/unity/project", ""))
+                self.assertEqual(
+                    ({}, {}, True), module.editor_log_anchor_state("/definitely/not/a/unity/project", "")
+                )
 
     def test_an_unresolvable_project_context_degrades_instead_of_raising(self) -> None:
         for name, module in self._modules():
             with self.subTest(module=name):
                 self.assertEqual(
-                    ({}, {}),
+                    ({}, {}, True),
                     module.editor_log_anchor_state("/definitely/not/a/unity/project", "playmode_start"),
                 )
 
@@ -466,6 +477,57 @@ class AnchorStateResolutionIsBestEffortTests(unittest.TestCase):
                 with self.subTest(module=name, since=since):
                     self.assertEqual([], module.editor_log_anchor_journal(Path("/nope"), since, "req-1"))
 
+    def test_the_anchor_state_reports_whether_its_editor_is_still_alive(self) -> None:
+        """Executes the real read, not a stub: read_best_effort_bridge_state already refuses a dead pid, and the
+        project-context fallback deliberately keeps serving that stale state for diagnosis, so the anchor path
+        has to carry liveness itself. A dead session's offsets were measured against a log Unity has truncated.
+        """
+
+        import os
+
+        import server_bridge_paths
+
+        for name, module in self._modules():
+            with TemporaryDirectory() as tmp:
+                root = Path(tmp) / "Proj"
+                (root / "Assets").mkdir(parents=True)
+                (root / "ProjectSettings").mkdir()
+                (root / "ProjectSettings" / "ProjectVersion.txt").write_text("m_EditorVersion: 6000.0.58f2\n")
+                state_path = server_bridge_paths.bridge_state_path(root)
+                state_path.parent.mkdir(parents=True, exist_ok=True)
+
+                for label, pid, expected_live in (("dead", 999999, False), ("live", os.getpid(), True)):
+                    with self.subTest(module=name, editor=label):
+                        state_path.write_text(
+                            json.dumps(
+                                {
+                                    "editor_pid": pid,
+                                    "editor_log_offset_at_playmode_start": 250_000,
+                                    "editor_log_path": str(root / "Logs" / "Editor.log"),
+                                }
+                            )
+                        )
+                        _, _, is_live = module.editor_log_anchor_state(root, "playmode_start")
+                        self.assertEqual(expected_live, is_live)
+
+    def test_an_absent_bridge_state_is_not_reported_as_a_dead_session(self) -> None:
+        """Absence must keep degrading to anchor_unavailable; only a state file whose editor is gone is stale."""
+
+        import server_bridge_paths
+
+        for name, module in self._modules():
+            with TemporaryDirectory() as tmp:
+                root = Path(tmp) / "Proj"
+                (root / "Assets").mkdir(parents=True)
+                (root / "ProjectSettings").mkdir()
+                (root / "ProjectSettings" / "ProjectVersion.txt").write_text("m_EditorVersion: 6000.0.58f2\n")
+                self.assertFalse(server_bridge_paths.bridge_state_path(root).exists())
+
+                with self.subTest(module=name):
+                    bridge_state, _, is_live = module.editor_log_anchor_state(root, "playmode_start")
+                    self.assertEqual({}, bridge_state)
+                    self.assertTrue(is_live)
+
     def test_both_entrypoints_share_one_helper_rather_than_duplicating_it(self) -> None:
         import server_batch_orchestrator
         import server_cli_bridge_commands
@@ -476,6 +538,494 @@ class AnchorStateResolutionIsBestEffortTests(unittest.TestCase):
                     getattr(server_batch_orchestrator, helper),
                     getattr(server_cli_bridge_commands, helper),
                 )
+
+
+class EditorLogLaneTests(unittest.TestCase):
+    """Which file the host opens is the oldest unfixed root cause on this surface.
+
+    The host default only holds for editors it launched with `-logFile`. Measured on a live consumer project: a
+    `healthy` heartbeat, a default log untouched for 12 hours, and the editor writing a different file — and grep
+    happily returned a match from the stale one with no staleness signal at all.
+    """
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+        (self.root / "Library" / "XUUnityLightMcp" / "logs").mkdir(parents=True, exist_ok=True)
+        self.addCleanup(self._tmp.cleanup)
+
+    def host_default(self) -> Path:
+        return self.root / "Library" / "XUUnityLightMcp" / "logs" / "unity_editor.log"
+
+    def test_a_live_editor_writing_elsewhere_makes_the_default_lane_stale(self) -> None:
+        default_log = self.host_default()
+        write_log(default_log, "a line from a previous session\n")
+        os.utime(default_log, (time.time() - 43_200, time.time() - 43_200))
+        real_log = self.root / "Editor.log"
+        write_log(real_log, "the line the editor is writing now\n")
+
+        lane = server_health.build_editor_log_lane(
+            self.root,
+            default_log,
+            bridge_state={
+                "editor_log_path": str(real_log),
+                "heartbeat_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                "editor_pid": 4242,
+            },
+            editor_is_live=True,
+        )
+
+        self.assertEqual("stale_not_written_by_live_editor", lane["lane"])
+        self.assertGreater(lane["editor_log_age_seconds"], 3600)
+        self.assertIn("editorLogPath", lane["recommended_next_action"])
+
+    def test_an_idle_editor_on_its_own_log_is_not_called_stale(self) -> None:
+        default_log = self.host_default()
+        write_log(default_log, "quiet but correct\n")
+
+        lane = server_health.build_editor_log_lane(
+            self.root,
+            default_log,
+            bridge_state={
+                "editor_log_path": str(default_log),
+                "heartbeat_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            },
+            editor_is_live=True,
+        )
+
+        self.assertEqual("host_owned_logfile", lane["lane"])
+
+    def test_the_host_prefers_the_log_a_live_editor_reports(self) -> None:
+        real_log = self.root / "Editor.log"
+        write_log(real_log, "editor output\n")
+
+        resolved = server_editor_host_paths.resolve_editor_log_path(
+            self.root,
+            None,
+            bridge_state={"editor_log_path": str(real_log)},
+        )
+
+        self.assertEqual(real_log.resolve(), resolved)
+
+    def test_an_explicit_path_still_wins_over_the_reported_one(self) -> None:
+        real_log = self.root / "Editor.log"
+        write_log(real_log, "editor output\n")
+        chosen = self.root / "chosen.log"
+        write_log(chosen, "operator's choice\n")
+
+        resolved = server_editor_host_paths.resolve_editor_log_path(
+            self.root,
+            str(chosen),
+            bridge_state={"editor_log_path": str(real_log)},
+        )
+
+        self.assertEqual(chosen.resolve(), resolved)
+
+    def test_a_reported_log_that_does_not_exist_falls_back_to_the_default(self) -> None:
+        resolved = server_editor_host_paths.resolve_editor_log_path(
+            self.root,
+            None,
+            bridge_state={"editor_log_path": str(self.root / "gone.log")},
+        )
+
+        self.assertEqual(self.host_default().resolve(), resolved.resolve())
+
+
+class RotatedLogForwardResolutionTests(unittest.TestCase):
+    """`anchor_log_rotated` fails closed, which was right but unactionable: its own advice (search the sibling)
+    then tripped `anchor_log_mismatch`, so on a two-editor host neither path anchored. Forward-resolve instead."""
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+        self.addCleanup(self._tmp.cleanup)
+
+    def test_a_rotated_stamp_resolves_forward_onto_the_sibling(self) -> None:
+        # The stamped path holds the other editor's log, untouched since before the stamp; the sibling is the
+        # file this editor kept writing through its open handle after Unity renamed it.
+        stamp_epoch = time.time() - 600
+        stamped = self.root / "Editor.log"
+        write_log(stamped, "the other editor's output\n")
+        os.utime(stamped, (stamp_epoch - 43_200, stamp_epoch - 43_200))
+        sibling = self.root / "Editor-prev.log"
+        prefix = "before the stamp\n"
+        write_log(sibling, prefix + "after the stamp\n")
+
+        anchor = server_health.resolve_editor_log_since_anchor(
+            stamped,
+            since="playmode_start",
+            bridge_state={
+                "editor_log_offset_at_playmode_start": len(prefix.encode("utf-8")),
+                "editor_log_playmode_started_utc": time.strftime(
+                    "%Y-%m-%dT%H:%M:%SZ", time.gmtime(stamp_epoch)
+                ),
+                "editor_log_path": str(stamped),
+            },
+        )
+
+        self.assertTrue(anchor["anchored"])
+        self.assertEqual(str(sibling), anchor["forward_resolved_editor_log_path"])
+        self.assertEqual(sibling, server_health.effective_editor_log_path(stamped, anchor))
+
+    def test_searching_the_sibling_directly_is_not_a_mismatch(self) -> None:
+        stamped = self.root / "Editor.log"
+        write_log(stamped, "other editor\n")
+        sibling = self.root / "Editor-prev.log"
+        prefix = "before\n"
+        write_log(sibling, prefix + "after\n")
+
+        anchor = server_health.resolve_editor_log_since_anchor(
+            sibling,
+            since="playmode_start",
+            bridge_state={
+                "editor_log_offset_at_playmode_start": len(prefix.encode("utf-8")),
+                "editor_log_playmode_started_utc": "2020-01-01T00:00:00Z",
+                "editor_log_path": str(stamped),
+            },
+        )
+
+        self.assertNotEqual("anchor_log_mismatch", anchor["resolved"])
+        self.assertTrue(anchor["anchored"])
+
+    def test_the_rotated_sibling_is_a_discovery_candidate(self) -> None:
+        names = [path.name for path in server_health.platform_editor_log_candidates()]
+
+        self.assertTrue(any(name.endswith("-prev.log") for name in names), names)
+
+
+class CliCommandBindingTests(unittest.TestCase):
+    """Every registered subcommand must resolve to a callable.
+
+    `request-console-tail` was registered in the parser and documented on the CLI, including its new `--since`
+    anchors, but `cmd_request_console_tail` was never re-exported by `server_cli_commands`. build_parser() binds
+    `func` only when getattr finds the name, so the command silently fell through to `parser.print_help()` and
+    exited 1 -- a documented lane that had never run. A name-by-name export list cannot be trusted by review; it
+    has to be swept.
+    """
+
+    def test_every_subcommand_resolves_to_a_callable(self) -> None:
+        import argparse
+
+        import server_cli_commands
+        import server_cli_parser
+
+        parser = server_cli_parser.build_parser()
+        unbound = []
+        for action in parser._actions:
+            if not isinstance(action, argparse._SubParsersAction):
+                continue
+            for name, command_parser in action.choices.items():
+                func_name = command_parser.get_default("func_name")
+                if not func_name:
+                    continue
+                if getattr(server_cli_commands, func_name, None) is None:
+                    unbound.append(f"{name} -> {func_name}")
+
+        self.assertEqual([], unbound, "these subcommands print help and exit 1 instead of running")
+
+
+class AnchorTrustBoundaryTests(unittest.TestCase):
+    """The three ways an anchored result could still lie, each found by review after the feature shipped."""
+
+    def setUp(self) -> None:
+        self._temp = TemporaryDirectory()
+        self.root = Path(self._temp.name)
+
+    def tearDown(self) -> None:
+        self._temp.cleanup()
+
+    def _truncating_log(self, max_chars: int, *, cut_inside_the_word: bool) -> tuple[Path, int]:
+        """A log whose anchored scope exceeds max_chars, with the truncation cut placed deliberately.
+
+        read_editor_log_scope keeps the *tail* of the scope, so the returned window starts at
+        len(scope) - max_chars. Landing that cut four characters into "xxNOMARKER" leaves "MARKER" as the
+        window's first line -- a fragment a grep for MARKER reports as a hit on a line that says NOMARKER.
+        """
+
+        log = self.root / "Editor.log"
+        prefix = "previous session\n"
+        trap = "xxNOMARKER\n"
+        filler = "".join(f"noise {index:04d}\n" for index in range(30))
+        offset_into_trap = 4 if cut_inside_the_word else 0
+        tail_length = max_chars + offset_into_trap - len(trap)
+        tail = "x" * (tail_length - 1) + "\n"
+        scope = filler + trap + tail
+        cut = len(scope) - max_chars
+        expected = "MARKER" if cut_inside_the_word else "xxNOMARKER"
+        self.assertEqual(
+            expected,
+            scope[cut : cut + len(expected)],
+            "fixture no longer places the truncation cut where the case needs it",
+        )
+        write_log(log, prefix + scope)
+        return log, len(prefix.encode("utf-8"))
+
+    def test_a_truncated_window_cannot_fabricate_a_match(self) -> None:
+        """The partial-line drop was gated on the *anchor* landing mid-line, so the max_chars cut -- the other
+        boundary that can split a line -- reopened the fabricated match through a second entrypoint."""
+
+        max_chars = 500
+        log, offset = self._truncating_log(max_chars, cut_inside_the_word=True)
+
+        payload = server_health.grep_editor_log_payload(
+            self.root,
+            log,
+            pattern="MARKER",
+            since="playmode_start",
+            max_chars=max_chars,
+            bridge_state={"editor_log_offset_at_playmode_start": offset, "editor_log_path": str(log)},
+        )
+
+        self.assertTrue(payload["since_anchor"]["scope_truncated"])
+        self.assertFalse(payload["since_anchor"]["starts_mid_line"], "the anchor itself is on a line boundary")
+        self.assertTrue(payload["since_anchor"]["partial_leading_line_dropped"])
+        self.assertEqual(0, payload["match_count"])
+        self.assertEqual([], [item["message"] for item in payload["items"]])
+
+    def test_a_truncated_window_on_a_line_boundary_keeps_its_first_line(self) -> None:
+        """Dropping unconditionally would silently lose a legitimate line, so the drop must be evidence-based."""
+
+        max_chars = 500
+        log, offset = self._truncating_log(max_chars, cut_inside_the_word=False)
+
+        payload = server_health.grep_editor_log_payload(
+            self.root,
+            log,
+            pattern="NOMARKER",
+            since="playmode_start",
+            max_chars=max_chars,
+            bridge_state={"editor_log_offset_at_playmode_start": offset, "editor_log_path": str(log)},
+        )
+
+        self.assertTrue(payload["since_anchor"]["scope_truncated"])
+        self.assertNotIn("partial_leading_line_dropped", payload["since_anchor"])
+        self.assertEqual(["xxNOMARKER"], [item["message"] for item in payload["items"]])
+
+    def test_the_truncation_flag_is_the_readers_own_verdict_not_a_byte_estimate(self) -> None:
+        """`scoped_bytes_available > max_chars` compared bytes against a char budget, so a multi-byte scope
+        flipped the flag while the reader had not truncated, discarding recoverable absolute line numbers."""
+
+        log = self.root / "Editor.log"
+        prefix = "previous session\n"
+        body = "".join("МАРКЕР строка\n" for _ in range(20))
+        write_log(log, prefix + body)
+        self.assertGreater(len(body.encode("utf-8")), 400, "fixture must exceed the budget in bytes")
+        self.assertLess(len(body), 400, "fixture must stay inside the budget in characters")
+
+        payload = server_health.grep_editor_log_payload(
+            self.root,
+            log,
+            pattern="МАРКЕР",
+            since="playmode_start",
+            max_chars=400,
+            limit=50,
+            bridge_state={"editor_log_offset_at_playmode_start": len(prefix.encode("utf-8"))},
+        )
+
+        self.assertFalse(payload["since_anchor"]["scope_truncated"])
+        self.assertEqual("editor_log_absolute", payload["line_numbering_basis"])
+        self.assertEqual(2, payload["items"][0]["line"])
+
+    def test_tail_line_numbers_survive_blank_lines(self) -> None:
+        """Filtering blank lines before numbering reported every item several lines early, under a payload that
+        newly claims `editor_log_absolute`."""
+
+        log = self.root / "Editor.log"
+        prefix = "previous session\n"
+        write_log(log, prefix + "alpha\n\n\n\nbravo MARKER\n")
+
+        payload = server_health.tail_editor_log_payload(
+            self.root,
+            log,
+            since="playmode_start",
+            bridge_state={"editor_log_offset_at_playmode_start": len(prefix.encode("utf-8"))},
+        )
+
+        self.assertEqual("editor_log_absolute", payload["line_numbering_basis"])
+        self.assertEqual(
+            [(2, "alpha"), (6, "bravo MARKER")],
+            [(item["line"], item["message"]) for item in payload["items"]],
+        )
+
+    def test_a_rotated_log_path_is_refused_even_though_the_editor_is_alive(self) -> None:
+        """Found on a real two-editor host: Unity rotates Editor.log to Editor-prev.log when a second editor
+        starts. The first editor keeps writing the renamed file while Application.consoleLogPath still returns the
+        static path, so its offsets point into the *other* editor's log. Every existing guard passes -- the paths
+        are equal, the file is big enough, and the editor is alive -- so the only usable signal is that the log
+        was last written before the stamp that claims to describe it."""
+
+        log = self.root / "Editor.log"
+        write_log(log, "".join(f"the other editor's line {index:05d}\n" for index in range(200)))
+        os.utime(log, (1_700_000_000, 1_700_000_000))
+
+        anchor = server_health.resolve_editor_log_since_anchor(
+            log,
+            since="playmode_start",
+            bridge_state={
+                "editor_log_offset_at_playmode_start": 1000,
+                "editor_log_playmode_started_utc": "2026-08-04T12:30:00Z",
+                "editor_log_path": str(log),
+            },
+        )
+
+        self.assertFalse(anchor["anchored"])
+        self.assertEqual("anchor_log_rotated", anchor["resolved"])
+        self.assertIn("Editor-prev.log", anchor["recommended_next_action"])
+
+    def test_a_log_written_after_its_stamp_still_anchors(self) -> None:
+        log = self.root / "Editor.log"
+        prefix = "before the stamp\n"
+        write_log(log, prefix + "after the stamp\n")
+
+        anchor = server_health.resolve_editor_log_since_anchor(
+            log,
+            since="playmode_start",
+            bridge_state={
+                "editor_log_offset_at_playmode_start": len(prefix.encode("utf-8")),
+                "editor_log_playmode_started_utc": "2020-01-01T00:00:00Z",
+                "editor_log_path": str(log),
+            },
+        )
+
+        self.assertTrue(anchor["anchored"], "a live log newer than its stamp must not be refused")
+
+    def test_a_dead_editor_session_never_anchors(self) -> None:
+        """bridge_state.json outlives its editor. Unity truncates Editor.log on start, so a dead session's
+        offset points at an arbitrary byte of the new log once that log grows past it -- the failure that
+        removed the session_start anchor, reachable again through the state-sourced anchors."""
+
+        log = self.root / "Editor.log"
+        size = len(write_log(log, "".join(f"new session line {index:06d}\n" for index in range(14000))))
+        stale_offset = 250_000
+        self.assertGreater(size, stale_offset, "the guard on file_size < offset must not be what refuses this")
+
+        for since in ("playmode_start", "bridge_generation", "request_id"):
+            with self.subTest(since=since):
+                anchor = server_health.resolve_editor_log_since_anchor(
+                    log,
+                    since=since,
+                    since_request_id="req-1",
+                    journal_events=[
+                        {
+                            "event_type": "request_started",
+                            "editor_log_offset_bytes": stale_offset,
+                            "editor_log_path": str(log),
+                        }
+                    ],
+                    bridge_state={
+                        "editor_log_offset_at_playmode_start": stale_offset,
+                        "editor_log_offset_at_bridge_generation_start": stale_offset,
+                        "editor_log_path": str(log),
+                        "editor_pid": 999999,
+                    },
+                    bridge_state_is_live=False,
+                )
+
+                self.assertFalse(anchor["anchored"])
+                self.assertEqual("anchor_stale_dead_session", anchor["resolved"])
+                self.assertIn("recover-editor-session", anchor["recommended_next_action"])
+
+    def test_a_live_editor_session_still_anchors(self) -> None:
+        log = self.root / "Editor.log"
+        prefix = "previous session\n"
+        write_log(log, prefix + "fresh MARKER\n")
+
+        anchor = server_health.resolve_editor_log_since_anchor(
+            log,
+            since="playmode_start",
+            bridge_state={
+                "editor_log_offset_at_playmode_start": len(prefix.encode("utf-8")),
+                "editor_log_path": str(log),
+            },
+            bridge_state_is_live=True,
+        )
+
+        self.assertTrue(anchor["anchored"])
+        self.assertEqual("playmode_start", anchor["resolved"])
+
+    def test_a_request_id_offset_carries_its_own_log_identity(self) -> None:
+        """`recover-editor-session` unlinks bridge_state.json and leaves the journal, so an offset that had no
+        identity of its own anchored against whatever log the host happened to resolve."""
+
+        log = self.root / "Editor.log"
+        prefix = "previous session\n"
+        write_log(log, prefix + "fresh MARKER\n")
+
+        anchor = server_health.resolve_editor_log_since_anchor(
+            log,
+            since="request_id",
+            since_request_id="req-1",
+            bridge_state={},
+            journal_events=[
+                {
+                    "event_type": "request_started",
+                    "editor_log_offset_bytes": len(prefix.encode("utf-8")),
+                    "editor_log_path": str(log),
+                }
+            ],
+        )
+
+        self.assertTrue(anchor["anchored"])
+        self.assertEqual(str(log), anchor.get("journal_editor_log_path", str(log)))
+
+    def test_a_request_id_offset_without_any_log_identity_is_refused(self) -> None:
+        log = self.root / "Editor.log"
+        write_log(log, "".join(f"line {index:05d}\n" for index in range(1000)))
+
+        anchor = server_health.resolve_editor_log_since_anchor(
+            log,
+            since="request_id",
+            since_request_id="req-1",
+            bridge_state={},
+            journal_events=[{"event_type": "request_started", "editor_log_offset_bytes": 4000}],
+        )
+
+        self.assertFalse(anchor["anchored"])
+        self.assertEqual("anchor_identity_unverified", anchor["resolved"])
+
+    def test_a_request_id_offset_stamped_against_another_log_is_refused(self) -> None:
+        """Same refusal as the bridge_state path, now reachable without a bridge_state at all."""
+
+        log = self.root / "Editor.log"
+        write_log(log, "".join(f"line {index:05d}\n" for index in range(1000)))
+
+        anchor = server_health.resolve_editor_log_since_anchor(
+            log,
+            since="request_id",
+            since_request_id="req-1",
+            bridge_state={},
+            journal_events=[
+                {
+                    "event_type": "request_started",
+                    "editor_log_offset_bytes": 4000,
+                    "editor_log_path": str(self.root / "Some-Other-Editor.log"),
+                }
+            ],
+        )
+
+        self.assertFalse(anchor["anchored"])
+        self.assertEqual("anchor_log_mismatch", anchor["resolved"])
+
+    def test_the_editor_stamps_the_log_path_beside_the_offset(self) -> None:
+        journal = read_source("Bridge/XUUnityLightMcpRequestJournal.cs")
+        anchors = read_source("Bridge/XUUnityLightMcpEditorLogAnchors.cs")
+        models = read_source("Core/XUUnityLightMcpBridgeModels.cs")
+
+        self.assertIn("editor_log_path = XUUnityLightMcpEditorLogAnchors.CurrentEditorLogPath()", journal)
+        self.assertIn("public static string CurrentEditorLogPath()", anchors)
+        self.assertIn("public string editor_log_path = \"\";", models)
+
+    def test_the_since_description_never_advertises_an_anchor_the_enum_rejects(self) -> None:
+        """A `session_start` anchor was implemented and then removed, but both tool descriptions kept promising
+        it -- a contradiction inside one schema, and a guaranteed wasted call for an operator who believes it."""
+
+        for tool_name in ("unity_console_grep", "unity_console_tail"):
+            with self.subTest(tool=tool_name):
+                since = server_specs.TOOLS[tool_name]["inputSchema"]["properties"]["since"]
+                self.assertEqual(list(server_health.SINCE_ANCHORS), since["enum"])
+                self.assertNotIn("session_start", since["description"])
+                for anchor_name in server_health.SINCE_ANCHORS:
+                    self.assertIn(anchor_name, since["description"])
 
 
 class PostSettleCompileTrustTests(unittest.TestCase):
@@ -715,6 +1265,78 @@ class UiTargetScopeSourceContractTests(unittest.TestCase):
 
         self.assertIn("if (payload.match_count == 0 && payload.success)", query)
         self.assertIn("if (payload.target == null || IsWidestScope(payload.target))", query)
+
+    def test_the_probe_is_skipped_when_the_scope_cannot_get_wider(self) -> None:
+        """IsWidestScope required dont_destroy_on_load_included, which is unreachable in Edit Mode and after a
+        failed probe, so every zero-match Edit Mode query paid a second full tree walk that could not find
+        anything the first walk had not already seen."""
+
+        query = read_source("Operations/XUUnityLightMcpUiQueryOperations.cs")
+
+        self.assertIn("XUUnityLightMcpUiRead.SceneScopeAllLoadedScenes", query)
+        for status in (
+            "DontDestroyOnLoadEditModeUnavailable",
+            "DontDestroyOnLoadProbeFailed",
+            "DontDestroyOnLoadNotRequested",
+        ):
+            with self.subTest(status=status):
+                self.assertIn(status, query)
+
+    def test_out_of_scope_is_set_from_the_root_resolution_error_too(self) -> None:
+        """payload.out_of_scope was assigned only inside the zero-match block, which builder errors skip by
+        clearing payload.success first: the advertised boolean stayed false on the headline case."""
+
+        query = read_source("Operations/XUUnityLightMcpUiQueryOperations.cs")
+
+        self.assertIn(
+            "payload.out_of_scope = HasOutOfScopeDiagnostic(payload.errors) "
+            "|| HasOutOfScopeDiagnostic(payload.warnings)",
+            query,
+        )
+        self.assertIn("payload.out_of_scope = payload.out_of_scope || zeroMatch.code", query)
+
+    def test_a_zero_match_click_reports_the_scope_it_searched(self) -> None:
+        """Click inspected builder errors only, and the root-canvas out-of-scope case is a warning, so the
+        refusal was a bare "matched no node" with no scene sets - the retro's blocking symptom."""
+
+        click = read_source("Ugui/XUUnityLightMcpUiClickOperation.cs")
+
+        self.assertIn("foreach (var diagnostic in before.Warnings)", click)
+        self.assertIn("XUUnityLightMcpUiTreeBuilder.DescribeSearchedScope(before.Target)", click)
+
+    def test_a_zero_match_never_claims_more_than_the_probe_proved(self) -> None:
+        """"no node in any loaded scene" is unfounded when the probe truncated or the scene selector matched
+        several same-named scenes."""
+
+        query = read_source("Operations/XUUnityLightMcpUiQueryOperations.cs")
+
+        self.assertIn("ui_scope_probe_incomplete", query)
+        self.assertIn("wide.Truncated || payload.target.scene_selector_ambiguous", query)
+
+    def test_the_out_of_scope_advice_never_tells_a_root_bound_kind_to_drop_its_target(self) -> None:
+        """For game_object_name/game_object_path, targetKind IS the root selector, so advising
+        targetKind=all_loaded_scenes discards targetValue and returns an unrelated all-canvases tree. The probe
+        itself must still widen, which is why the fix is in the advice rather than in the probe's options."""
+
+        query = read_source("Operations/XUUnityLightMcpUiQueryOperations.cs")
+
+        self.assertIn("static string ResolveOutOfScopeRetry", query)
+        self.assertIn("keeping targetKind=", query)
+        self.assertIn("TargetKind = XUUnityLightMcpUiRead.TargetAllLoadedScenes,", query)
+
+    def test_a_duplicate_scene_name_is_named_rather_than_silently_widening(self) -> None:
+        builder = read_source("Helpers/XUUnityLightMcpUiTreeBuilder.cs")
+        models = read_source("Core/XUUnityLightMcpUiReadModels.cs")
+
+        self.assertIn("ui_scene_selector_ambiguous", builder)
+        self.assertIn("RequestedSceneAmbiguous = scope.Searched.Count > 1", builder)
+        self.assertIn("public bool scene_selector_ambiguous;", models)
+
+    def test_the_target_never_names_a_scene_it_did_not_search(self) -> None:
+        builder = read_source("Helpers/XUUnityLightMcpUiTreeBuilder.cs")
+
+        self.assertNotIn("scope.Searched.Count > 0 ? scope.Searched[0] : SceneManager.GetActiveScene()", builder)
+        self.assertIn("if (scope.Searched.Count == 1 && scope.Searched[0].IsValid())", builder)
 
     def test_out_of_scope_is_a_first_class_payload_field(self) -> None:
         models = read_source("Core/XUUnityLightMcpUiReadModels.cs")

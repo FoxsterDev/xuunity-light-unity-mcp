@@ -241,6 +241,7 @@ namespace XUUnity.LightMcp.Editor.Core
             public string started_at_utc = "";
             public string completed_at_utc = "";
             public long editor_log_offset_bytes;
+            public string editor_log_path = "";
             public string reason = "";
             public bool retryable;
             public string reclassified_status = "";
