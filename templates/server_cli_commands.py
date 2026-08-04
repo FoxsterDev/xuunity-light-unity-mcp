@@ -282,6 +282,7 @@ from server_cli_bridge_commands import (
     cmd_request_compile,
     cmd_request_compile_matrix,
     cmd_request_console_grep,
+    cmd_request_console_tail,
     cmd_request_edm4u_resolve,
     cmd_request_editmode_tests,
     cmd_request_editor_quit,
@@ -320,9 +321,12 @@ from server_cli_project_commands import (
     cmd_request_scenario_run_and_wait,
     cmd_request_scenario_validate,
     cmd_ui_fixture_validate,
+    cmd_ui_interaction_validate,
     cmd_ui_reference_compare,
     cmd_ui_reference_register,
     cmd_ui_reference_validate,
+    cmd_ui_vision_packet,
+    cmd_ui_vision_submit,
 )
 from server_cli_sdk_commands import (
     cmd_request_sdk_package_restore,
