@@ -36,6 +36,20 @@ import server_specs
 PACKAGE_EDITOR_ROOT = REPO_ROOT / "packages" / "com.xuunity.light-mcp" / "Editor"
 
 
+def write_log(path: Path, text: str, newline: str = "\n") -> bytes:
+    """Write a log byte-exactly and return the bytes written.
+
+    Path.write_text() applies platform newline translation, so on Windows every "\n" becomes "\r\n" and the
+    file stops matching a byte offset the test computed from the source string. Anchors are byte offsets, so
+    these tests must own the exact bytes. `newline` also lets a case assert the CRLF layout Unity writes on
+    Windows rather than merely neutralising it.
+    """
+
+    data = text.replace("\n", newline).encode("utf-8")
+    path.write_bytes(data)
+    return data
+
+
 def read_source(relative: str) -> str:
     return (PACKAGE_EDITOR_ROOT / relative).read_text(encoding="utf-8")
 
@@ -49,8 +63,8 @@ class EditorLogSinceAnchorTests(unittest.TestCase):
         self.log = self.root / "Editor.log"
         self.stale = "hook fired MARKER\n" * 3
         self.fresh = "hook fired MARKER\n" * 2
-        self.log.write_text(self.stale + self.fresh, encoding="utf-8")
-        self.offset = len(self.stale.encode("utf-8"))
+        self.offset = len(write_log(self.log, self.stale))
+        write_log(self.log, self.stale + self.fresh)
         self.bridge_state = {
             "editor_log_offset_at_playmode_start": self.offset,
             "editor_log_playmode_started_utc": "2026-08-03T10:00:00Z",
@@ -124,7 +138,7 @@ class EditorLogSinceAnchorTests(unittest.TestCase):
         self.assertTrue(payload["since_anchor"]["recommended_next_action"])
 
     def test_a_rotated_log_smaller_than_the_offset_is_reported_as_stale(self) -> None:
-        self.log.write_text("short\n", encoding="utf-8")
+        write_log(self.log, "short\n")
 
         anchor = server_health.resolve_editor_log_since_anchor(
             self.log,
@@ -270,7 +284,7 @@ class EditorLogSinceAnchorTests(unittest.TestCase):
         A false positive wearing a trust label is exactly what this retro exists to remove."""
 
         log = self.root / "midline.log"
-        log.write_text("L1aaaaaa\nxxNOMARKER here\nL3cccccc\n", encoding="utf-8")
+        write_log(log, "L1aaaaaa\nxxNOMARKER here\nL3cccccc\n")
 
         payload = server_health.grep_editor_log_payload(
             self.root,
@@ -286,7 +300,7 @@ class EditorLogSinceAnchorTests(unittest.TestCase):
 
     def test_dropping_the_partial_line_advances_the_reported_start_line(self) -> None:
         log = self.root / "midline2.log"
-        log.write_text("L1aaaaaaa\nL2bbbbbbb\nL3MARKERc\nL4ddddddd\nL5MARKERe\n", encoding="utf-8")
+        write_log(log, "L1aaaaaaa\nL2bbbbbbb\nL3MARKERc\nL4ddddddd\nL5MARKERe\n")
 
         payload = server_health.grep_editor_log_payload(
             self.root,
@@ -299,9 +313,48 @@ class EditorLogSinceAnchorTests(unittest.TestCase):
         self.assertEqual(4, payload["searched_from_line"], "line 3 was partial and dropped")
         self.assertEqual([5], [item["line"] for item in payload["items"]])
 
+    def test_a_crlf_log_anchors_on_real_byte_offsets(self) -> None:
+        """Unity writes CRLF on Windows. Both sides of the anchor deal in real bytes - the editor stamps
+        FileInfo.Length, the host seeks to that byte - and a CRLF line still carries exactly one b"\n", so the
+        line counter stays right. This case exists because the LF-only fixtures passed on macOS while the
+        Windows CI leg failed: the tests, not the product, were assuming LF."""
+
+        log = self.root / "crlf.log"
+        stale = write_log(log, "hook fired MARKER\n" * 3, newline="\r\n")
+        write_log(log, "hook fired MARKER\n" * 5, newline="\r\n")
+
+        payload = server_health.grep_editor_log_payload(
+            self.root,
+            log,
+            pattern="MARKER",
+            since="playmode_start",
+            bridge_state={"editor_log_offset_at_playmode_start": len(stale), "editor_log_path": str(log)},
+        )
+
+        self.assertEqual(57, len(stale), "three CRLF lines are 19 bytes each, not 18")
+        self.assertEqual(2, payload["match_count"])
+        self.assertFalse(payload["since_anchor"]["starts_mid_line"])
+        self.assertEqual(4, payload["searched_from_line"])
+        self.assertEqual([4, 5], [item["line"] for item in payload["items"]])
+
+    def test_a_crlf_offset_landing_mid_line_still_drops_the_fragment(self) -> None:
+        log = self.root / "crlf_mid.log"
+        write_log(log, "L1aaaaaa\nxxNOMARKER here\nL3cccccc\n", newline="\r\n")
+
+        payload = server_health.grep_editor_log_payload(
+            self.root,
+            log,
+            pattern="MARKER",
+            since="playmode_start",
+            bridge_state={"editor_log_offset_at_playmode_start": 14, "editor_log_path": str(log)},
+        )
+
+        self.assertTrue(payload["since_anchor"]["starts_mid_line"])
+        self.assertEqual(0, payload["match_count"], "the NOMARKER line must not be reported as a MARKER hit")
+
     def test_an_offset_on_a_line_boundary_keeps_the_whole_first_line(self) -> None:
         log = self.root / "boundary.log"
-        log.write_text("L1aaaaaaa\nL2bbbbbbb\nL3MARKERc\nL4ddddddd\nL5MARKERe\n", encoding="utf-8")
+        write_log(log, "L1aaaaaaa\nL2bbbbbbb\nL3MARKERc\nL4ddddddd\nL5MARKERe\n")
 
         payload = server_health.grep_editor_log_payload(
             self.root,
@@ -321,7 +374,7 @@ class EditorLogSinceAnchorTests(unittest.TestCase):
         self-contradictory. The anchor line keeps its own key instead."""
 
         log = self.root / "big.log"
-        log.write_text("".join(f"line{n:05d} " + "x" * 38 + "\n" for n in range(1, 2001)), encoding="utf-8")
+        write_log(log, "".join(f"line{n:05d} " + "x" * 38 + "\n" for n in range(1, 2001)))
 
         payload = server_health.grep_editor_log_payload(
             self.root,
