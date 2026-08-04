@@ -13,6 +13,12 @@
 
 ### Fixed
 
+- A quiet Editor.log is no longer mistaken for a rotated one. The rotation guard refused an anchor whenever the
+  log's mtime predated the stamp describing it, but a live editor can leave its log untouched for minutes and
+  still be the writer — measured on a real project as a `request_started` stamped seven minutes after the log's
+  last write, which broke `since=` on any idle editor. Rotation is now claimed only when a replacement candidate
+  exists and looks like the newer file, and `anchor_log_rotated` is reserved for a rotation whose sibling cannot
+  serve the recorded offset.
 - A dead editor's state no longer reports itself as ready. `build_bridge_stabilization_summary` accepted an
   `editor_running` argument but defaulted it to `True`, and four of its five callers relied on the default, so a
   stale state file produced `stabilized: true` and `safe_to_retry: true` in the same payload whose

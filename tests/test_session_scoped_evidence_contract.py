@@ -847,30 +847,33 @@ class AnchorTrustBoundaryTests(unittest.TestCase):
             [(item["line"], item["message"]) for item in payload["items"]],
         )
 
-    def test_a_rotated_log_path_is_refused_even_though_the_editor_is_alive(self) -> None:
-        """Found on a real two-editor host: Unity rotates Editor.log to Editor-prev.log when a second editor
-        starts. The first editor keeps writing the renamed file while Application.consoleLogPath still returns the
-        static path, so its offsets point into the *other* editor's log. Every existing guard passes -- the paths
-        are equal, the file is big enough, and the editor is alive -- so the only usable signal is that the log
-        was last written before the stamp that claims to describe it."""
+    def test_a_quiet_log_with_no_replacement_candidate_still_anchors(self) -> None:
+        """Staleness alone is not rotation, and getting that wrong broke `since=` on any idle editor.
+
+        Caught on a live project: a `request_started` stamped at 22:28:53Z against a log last written at
+        22:21:38Z — the editor was alive and serving requests, it simply had not logged for seven minutes, and no
+        `-prev` sibling existed. The first version of this guard called that a rotated path and refused the anchor.
+        """
 
         log = self.root / "Editor.log"
-        write_log(log, "".join(f"the other editor's line {index:05d}\n" for index in range(200)))
+        prefix = "quiet but still the writer\n"
+        write_log(log, prefix + "a later line\n")
         os.utime(log, (1_700_000_000, 1_700_000_000))
 
         anchor = server_health.resolve_editor_log_since_anchor(
             log,
             since="playmode_start",
             bridge_state={
-                "editor_log_offset_at_playmode_start": 1000,
-                "editor_log_playmode_started_utc": "2026-08-04T12:30:00Z",
+                "editor_log_offset_at_playmode_start": len(prefix.encode("utf-8")),
+                # stamped long after the log was last touched
+                "editor_log_playmode_started_utc": "2026-08-04T22:28:53Z",
                 "editor_log_path": str(log),
             },
         )
 
-        self.assertFalse(anchor["anchored"])
-        self.assertEqual("anchor_log_rotated", anchor["resolved"])
-        self.assertIn("Editor-prev.log", anchor["recommended_next_action"])
+        self.assertTrue(anchor["anchored"], "a quiet log is not a replaced log")
+        self.assertNotEqual("anchor_log_rotated", anchor["resolved"])
+        self.assertNotIn("forward_resolved_editor_log_path", anchor)
 
     def test_a_log_written_after_its_stamp_still_anchors(self) -> None:
         log = self.root / "Editor.log"

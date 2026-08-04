@@ -308,6 +308,39 @@ def _parse_stamp_utc(value: Any) -> float:
         return 0.0
 
 
+def detect_rotated_editor_log(log_path: Path, stamped_utc: Any) -> Path | None:
+    """The sibling that actually holds this editor's output, when the searched path was rotated out.
+
+    Staleness alone is not rotation. A live editor can leave its log untouched for minutes and still be the
+    writer: measured on a real project, a `request_started` stamped at `22:28:53Z` against a log last written at
+    `22:21:38Z` — quiet, not replaced. Treating that as rotation refused every `since=` anchor on an idle editor.
+
+    Rotation is only claimed when a replacement candidate exists and looks like the newer file: Unity renames
+    `Editor.log` to `Editor-prev.log` when a second editor starts, and the first editor keeps writing the renamed
+    file, so the sibling is newer than both the searched log and the stamp.
+    """
+
+    predates, _, _ = _log_predates_its_own_stamp(log_path, stamped_utc)
+    if not predates:
+        return None
+
+    sibling = rotated_editor_log_sibling(log_path)
+    if not sibling.is_file():
+        return None
+
+    try:
+        sibling_mtime = float(sibling.stat().st_mtime or 0.0)
+        searched_mtime = float(log_path.stat().st_mtime or 0.0)
+    except OSError:
+        return None
+
+    if sibling_mtime <= searched_mtime:
+        return None
+
+    sibling_predates, _, _ = _log_predates_its_own_stamp(sibling, stamped_utc)
+    return None if sibling_predates else sibling
+
+
 def _log_predates_its_own_stamp(log_path: Path, stamped_utc: Any) -> tuple[bool, str, str]:
     """True when the searched log was last written before the editor stamped an offset into it.
 
@@ -436,39 +469,34 @@ def resolve_editor_log_since_anchor(
     elif requested == "request_id":
         stamped_utc = _request_started_stamp_utc(journal_events)
 
-    rotated, log_mtime_utc, stamp_utc = _log_predates_its_own_stamp(log_path, stamped_utc)
-    if rotated:
-        # Refusing here is correct but unactionable on its own: the log the editor really writes is the rotated
-        # sibling, and searching it would then fail the path check above. Resolve the stamp forward onto the
-        # sibling when the sibling is the file that postdates the stamp, so the anchor stays usable.
-        sibling = rotated_editor_log_sibling(log_path)
-        sibling_rotated, _, _ = _log_predates_its_own_stamp(sibling, stamped_utc)
-        if sibling.is_file() and not sibling_rotated:
-            anchor["forward_resolved_from_editor_log_path"] = str(log_path)
-            anchor["forward_resolved_editor_log_path"] = str(sibling)
-            anchor["forward_resolved_reason"] = (
-                "the stamped path holds a file older than the stamp, and its rotated sibling holds one newer, so "
-                "the stamping editor is writing the sibling; Unity rotates Editor.log when a second editor starts"
+    # Rotation is only claimed when a replacement candidate actually exists; a quiet log is not a replaced one.
+    rotated_sibling = detect_rotated_editor_log(log_path, stamped_utc)
+    if rotated_sibling is not None:
+        anchor["forward_resolved_from_editor_log_path"] = str(log_path)
+        anchor["forward_resolved_editor_log_path"] = str(rotated_sibling)
+        anchor["forward_resolved_reason"] = (
+            "the stamped path holds a file older than the stamp while its rotated sibling holds a newer one, so "
+            "the stamping editor is writing the sibling; Unity renames Editor.log to Editor-prev.log when a "
+            "second editor starts and the first editor keeps writing the renamed file"
+        )
+        try:
+            sibling_size = int(rotated_sibling.stat().st_size or 0)
+        except OSError:
+            sibling_size = 0
+        if sibling_size < offset:
+            anchor["resolved"] = "anchor_log_rotated"
+            anchor["anchor_source"] = source
+            anchor["searched_editor_log_mtime_utc"] = _file_mtime_utc(log_path)
+            anchor["anchor_log_rotated_reason"] = (
+                "the path was rotated and the sibling this editor writes is smaller than the recorded offset, so "
+                "no file on disk can serve this anchor"
             )
-            log_path = sibling
-            rotated = False
-
-    if rotated:
-        anchor["resolved"] = "anchor_log_rotated"
-        anchor["anchor_source"] = source
-        anchor["stamped_at_utc"] = stamp_utc
-        anchor["searched_editor_log_mtime_utc"] = log_mtime_utc
-        anchor["anchor_log_rotated_reason"] = (
-            "the log at this path was last written before the editor stamped an offset into it, so the path now "
-            "holds a different file; Unity rotates Editor.log to Editor-prev.log when a second editor starts, and "
-            "the first editor keeps writing the renamed file while Application.consoleLogPath still returns the "
-            "static path, so the offset would be applied to another editor's log"
-        )
-        anchor["recommended_next_action"] = (
-            "pass editorLogPath=<the log this editor actually writes, often Editor-prev.log on a multi-editor "
-            "host>, or reopen the project through ensure-ready --open-editor so it gets its own -logFile"
-        )
-        return anchor
+            anchor["recommended_next_action"] = (
+                "use since=playmode_start or since=bridge_generation against the current editor, or reopen the "
+                "project through ensure-ready --open-editor so the host owns the log with -logFile"
+            )
+            return anchor
+        log_path = rotated_sibling
 
     anchor["anchor_source"] = source
     if offset <= 0:
