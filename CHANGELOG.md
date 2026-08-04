@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+## 0.3.54
+
+Release tag: `v0.3.54`
+
+Current Git UPM install URL:
+
+```text
+https://github.com/FoxsterDev/xuunity-mcp.git?path=/packages/com.xuunity.light-mcp#v0.3.54
+```
+
+### Changed
+
+- Released `v0.3.54` package metadata, server metadata, package manifests, and Git UPM examples.
+
 ### Added
 
 - `unity_ui_query`, `unity_ui_exists`, `unity_ui_get_text`, `unity_ui_get_bounds`, `unity_ui_tree_snapshot`, and

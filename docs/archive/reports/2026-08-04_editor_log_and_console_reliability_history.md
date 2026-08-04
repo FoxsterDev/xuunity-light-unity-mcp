@@ -8,7 +8,7 @@ Status: analysis + plan. The defects marked **OPEN** are not fixed.
 
 ## 1. Why This Surface Keeps Breaking
 
-Seven distinct defect classes have hit this surface across `v0.3.29 → 0.3.53`. They are not seven unrelated
+Seven distinct defect classes have hit this surface across `v0.3.29 → 0.3.54`. They are not seven unrelated
 bugs; they are two root causes wearing different clothes.
 
 **Root cause A — the host guesses *which file* to read, and nothing verifies the guess.**

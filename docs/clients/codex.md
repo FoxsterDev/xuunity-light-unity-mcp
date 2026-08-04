@@ -3,9 +3,9 @@
 Use the Codex-style config when the client reads MCP servers from
 `~/.codex/config.toml`.
 
-This guide is pinned to XUUnity release `v0.3.53` from the canonical repository
+This guide is pinned to XUUnity release `v0.3.54` from the canonical repository
 `https://github.com/FoxsterDev/xuunity-mcp`. Use the matching release README:
-`https://github.com/FoxsterDev/xuunity-mcp/blob/v0.3.53/README.md`.
+`https://github.com/FoxsterDev/xuunity-mcp/blob/v0.3.54/README.md`.
 
 When a short install request does not name a client explicitly, treat the
 current host client that is executing the request as the default wiring target.
@@ -47,7 +47,7 @@ Preflight review
 - Planned project file changes: <manifest, bridge config, lockfile, none>
 - Planned user-level config changes: <exact file paths or none>
 - Restart or refresh required after mutation: <yes/no>
-- Required live proof after restart: <server listed, tools listed, unity_status_summary healthy with mcp_server_info.version=0.3.53>
+- Required live proof after restart: <server listed, tools listed, unity_status_summary healthy with mcp_server_info.version=0.3.54>
 - Planned commands after approval: <setup-apply, validate-setup, ensure-ready, request-status-summary, unity_status_summary after reload, ...>
 
 Do not run setup-apply, installer commands, helper sync, or Codex config edits
@@ -269,7 +269,7 @@ Use xuunity_light_unity MCP and list tools.
 
 Then verify a concrete Unity project:
 
-1. `unity_status_summary` and require `mcp_server_info.version=0.3.53`
+1. `unity_status_summary` and require `mcp_server_info.version=0.3.54`
 2. `unity_capabilities`
 3. `unity_health_probe`
 4. `unity_console_tail`
