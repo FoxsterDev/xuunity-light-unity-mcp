@@ -4,22 +4,34 @@ on:
   pull_request:
     paths:
       - "CHANGELOG.md"
+      - "README.md"
+      - "INSTALL.md"
+      - "SECURITY.md"
       - "docs/**"
       - "llms.txt"
       - "mcp-server.json"
       - "packages/com.xuunity.light-mcp/package.json"
       - "scripts/testing/check_release_version_consistency.py"
+      - "scripts/testing/check_release_docs_freshness.py"
+      - "scripts/testing/check_public_release_safety.py"
+      - "scripts/tools/sync_release_version.py"
       - "templates/**"
   push:
     branches:
       - master
     paths:
       - "CHANGELOG.md"
+      - "README.md"
+      - "INSTALL.md"
+      - "SECURITY.md"
       - "docs/**"
       - "llms.txt"
       - "mcp-server.json"
       - "packages/com.xuunity.light-mcp/package.json"
       - "scripts/testing/check_release_version_consistency.py"
+      - "scripts/testing/check_release_docs_freshness.py"
+      - "scripts/testing/check_public_release_safety.py"
+      - "scripts/tools/sync_release_version.py"
       - "templates/**"
   workflow_dispatch:
 
@@ -41,3 +53,18 @@ jobs:
 
       - name: Check release version consistency
         run: python3 scripts/testing/check_release_version_consistency.py
+
+      - name: Check release docs freshness
+        run: python3 scripts/testing/check_release_docs_freshness.py
+
+      # A private path or project name pushed to a public repository cannot be recalled, so this gate belongs in
+      # CI and not only in a local checklist. Without a denylist it still fails on host home paths through its
+      # built-in pattern; supply XUUNITY_PUBLIC_SAFETY_DENYLIST as a secret to also catch private names, and note
+      # that local_denylist_tokens=0 means "nothing was looked for", not "nothing was found".
+      - name: Check public release safety
+        env:
+          XUUNITY_PUBLIC_SAFETY_DENYLIST: ${{ secrets.XUUNITY_PUBLIC_SAFETY_DENYLIST }}
+        run: python3 scripts/testing/check_public_release_safety.py
+
+      - name: Check audit regressions
+        run: python3 scripts/testing/check_audit_regressions.py
