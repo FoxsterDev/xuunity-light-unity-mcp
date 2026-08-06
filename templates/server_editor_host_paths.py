@@ -268,7 +268,12 @@ def classify_editor_log(log_text: str, startup_policy: str) -> tuple[str, str] |
             "Opening project in Safe Mode",
         )
     )
-    compile_error_present = "error CS" in log_text
+    compile_error_present = (
+        "error CS" in log_text
+        or "Assembly has duplicate references" in log_text
+        or "will not be compiled" in log_text
+        or "Unable to resolve reference" in log_text
+    )
     if compile_error_present:
         if safe_mode_marker_present:
             return (

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from typing import Any, Callable
 
 
@@ -34,6 +35,15 @@ def _attach_post_settle_compile_truth(
     diagnostics = idle_wait_after.get("recent_compiler_diagnostics")
     if not isinstance(diagnostics, list):
         diagnostics = []
+    
+    script_compilation_failed = bool(idle_wait_after.get("script_compilation_failed"))
+    if script_compilation_failed and len(diagnostics) == 0:
+        editor_log_path = idle_wait_after.get("editor_log_path")
+        if editor_log_path and isinstance(editor_log_path, str):
+            phantom = _extract_phantom_compiler_diagnostics(editor_log_path)
+            if phantom:
+                diagnostics = phantom
+                idle_wait_after["compiler_diagnostics_source"] = "phantom_fallback_log_scan"
     post_settle_error_count = _int_or_zero(idle_wait_after.get("compiler_error_count"))
     script_compilation_failed = bool(idle_wait_after.get("script_compilation_failed"))
     post_settle_failed = script_compilation_failed or post_settle_error_count > 0
@@ -96,6 +106,55 @@ def _editor_relaunch_attribution_from_recovery(recovery: Any) -> dict[str, Any]:
     if isinstance(nested, dict):
         return _editor_relaunch_attribution_from_recovery(nested)
     return {}
+
+
+def _extract_phantom_compiler_diagnostics(log_path: str) -> list[dict[str, Any]]:
+    if not os.path.isfile(log_path):
+        return []
+    try:
+        size = os.path.getsize(log_path)
+        read_size = min(size, 2000000)
+        with open(log_path, "r", encoding="utf-8", errors="replace") as f:
+            f.seek(size - read_size)
+            text = f.read()
+    except Exception:
+        return []
+    
+    findings = []
+    for line in text.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+            
+        is_fatal = False
+        if "Assembly has duplicate references" in line:
+            is_fatal = True
+        elif "Unable to resolve reference" in line:
+            is_fatal = True
+        elif "Error parsing JSON" in line and ".asmdef" in line:
+            is_fatal = True
+        elif "will not be compiled because" in line and "exists outside the Assets folder" not in line:
+            is_fatal = True
+            
+        if is_fatal:
+            findings.append({
+                "message": line,
+                "file": "Editor.log",
+                "line": 0,
+                "type": "Error",
+                "severity": "Error"
+            })
+            
+    if not findings:
+        findings.append({
+            "message": "Phantom compilation failure: Unity aborted compilation but no known structural errors matched. You must read Editor.log manually to find the root cause.",
+            "file": "Editor.log",
+            "line": 0,
+            "type": "Error",
+            "severity": "Error"
+        })
+        
+    return findings[-5:]
 
 
 def _editor_relaunch_attribution_from_lifecycle(lifecycle: dict[str, Any]) -> dict[str, Any]:

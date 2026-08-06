@@ -441,6 +441,19 @@ For shared protocol integration work:
   render lane alone, and the surface refuses to call that acceptance while fixture
   and interaction evidence are absent
 
+## Phantom Compile Errors
+
+When an operator or agent reports that Unity is failing to compile but no `error CS...` diagnostic is surfaced, this is a phantom compile error (structural asmdef error). `AssetDatabase` halts compilation when a project contains duplicate assembly definitions or unresolvable assembly references, emitting these as log errors before `csc.exe` is ever invoked.
+
+The Python wrapper parses the tail of `Editor.log` directly to bypass the broken C# domain. It explicitly checks for `"Assembly has duplicate references"`, `"will not be compiled"`, and `"Unable to resolve reference"`.
+
+If the wrapper encounters a phantom failure but fails to match any known regex strings, it will inject a synthetic `Phantom compilation failure` into the diagnostics array. If you see this synthetic diagnostic as an agent, your next step MUST be:
+1. Open the tail of `Editor.log` manually.
+2. Break the log into chunks and run it through your AI context backwards (from newest to oldest).
+3. Identify the true, unknown structural error that caused compilation to abort.
+
+**Never** attempt to fix a phantom compile error by deleting `Library/ScriptAssemblies` or `Library/Bee`. Inspect the `.asmdef` structure instead.
+
 ## UI Acceptance Handoff Rule
 
 A `visual`-only pass is a handoff state, not reference acceptance. Read the
