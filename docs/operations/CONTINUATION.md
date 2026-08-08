@@ -441,18 +441,33 @@ For shared protocol integration work:
   render lane alone, and the surface refuses to call that acceptance while fixture
   and interaction evidence are absent
 
-## Phantom Compile Errors
+## Structural Compile Errors
 
-When an operator or agent reports that Unity is failing to compile but no `error CS...` diagnostic is surfaced, this is a phantom compile error (structural asmdef error). `AssetDatabase` halts compilation when a project contains duplicate assembly definitions or unresolvable assembly references, emitting these as log errors before `csc.exe` is ever invoked.
+Unity can stop before `csc.exe` runs when an assembly definition has duplicate
+or unresolved references, invalid JSON, or another structural refusal. These
+errors do not use the `error CS...` form, and the in-memory compilation callback
+can still contain older C# rows.
 
-The Python wrapper parses the tail of `Editor.log` directly to bypass the broken C# domain. It explicitly checks for `"Assembly has duplicate references"`, `"will not be compiled"`, and `"Unable to resolve reference"`.
+Refresh, compile, and direct-test post-settle envelopes scan only the current
+bridge-generation scope of the editor-reported `Editor.log`. A matching error is
+promoted ahead of secondary compiler rows with:
 
-If the wrapper encounters a phantom failure but fails to match any known regex strings, it will inject a synthetic `Phantom compilation failure` into the diagnostics array. If you see this synthetic diagnostic as an agent, your next step MUST be:
-1. Open the tail of `Editor.log` manually.
-2. Break the log into chunks and run it through your AI context backwards (from newest to oldest).
-3. Identify the true, unknown structural error that caused compilation to abort.
+- `post_settle_compile_failure_class: assembly_definition_error`
+- a typed row such as `asmdef_duplicate_reference`
+- `post_settle_structural_diagnostics_scope.trust_class: session_scoped`
+- `post_settle_compile_recommended_next_action:
+  inspect_asmdef_references_and_editor_log_before_cache_cleanup`
 
-**Never** attempt to fix a phantom compile error by deleting `Library/ScriptAssemblies` or `Library/Bee`. Inspect the `.asmdef` structure instead.
+If the bridge-generation anchor is unavailable or unusable, the wrapper refuses
+to promote the unscoped tail. If Unity reports compilation failure but neither
+the current log scope nor the compilation callback supplies a diagnostic, the
+envelope reports `compiler_diagnostics_unavailable`; it does not invent a root
+cause.
+
+Never delete `Library/ScriptAssemblies` or `Library/Bee` as a first response to
+a compile error. Inspect the typed diagnostic and session-scoped `Editor.log`,
+then fix the `.asmdef` or source error. Cache deletion is a heavyweight rebuild,
+not a diagnosis.
 
 ## UI Acceptance Handoff Rule
 

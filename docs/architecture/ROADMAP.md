@@ -66,7 +66,7 @@ survival and more about:
 
 Already implemented:
 
-- standalone public repository and current `v0.3.55` Git UPM package path under
+- standalone public repository and current `v0.3.56` Git UPM package path under
   `packages/com.xuunity.light-mcp`
 - bridge enable/disable lifecycle
 - status and capability probing
@@ -86,6 +86,9 @@ Already implemented:
 - compile validation without active platform switch
 - authoritative post-settle refresh, compile, and test verdict fields in
   compact MCP operation summaries
+- session-scoped structural assembly-definition diagnostics in refresh,
+  compile, and direct-test post-settle envelopes, with stale-log refusal and a
+  no-cache-cleanup recovery action
 - play mode control
 - Game View screenshot and resolution control
 - first scenario automation layer:
@@ -155,7 +158,7 @@ This is enough for:
 - controlled screenshot capture
 - early automation experiments
 - repeatable same-host multi-project routing and recovery
-- production Git UPM consumption through `v0.3.55`
+- production Git UPM consumption through `v0.3.56`
 
 This is not yet enough for:
 
@@ -239,7 +242,7 @@ Most valuable next milestone:
 
 Why this is next:
 
-- `v0.3.12` moved the package to the registry-native path and `v0.3.55` is the
+- `v0.3.12` moved the package to the registry-native path and `v0.3.56` is the
   current public Git UPM line
 - macOS validation is strong enough for current same-host use
 - Linux and Windows claims should remain conservative until executed on those hosts

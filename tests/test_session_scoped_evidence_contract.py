@@ -1094,6 +1094,137 @@ class PostSettleCompileTrustTests(unittest.TestCase):
         self.assertIn("post_settle_compile_recommended_next_action", compact)
 
 
+class StructuralCompileDiagnosticTests(unittest.TestCase):
+    """Structural asmdef failures must outrank stale C# rows without reviving prior-session log errors."""
+
+    def setUp(self) -> None:
+        self._temp = TemporaryDirectory()
+        self.root = Path(self._temp.name)
+        self.log = self.root / "Editor.log"
+
+    def tearDown(self) -> None:
+        self._temp.cleanup()
+
+    def _refresh(
+        self,
+        *,
+        prefix: str,
+        current: str,
+        diagnostics: list[dict],
+        offset_override: int | None = None,
+    ) -> dict:
+        prefix_bytes = write_log(self.log, prefix)
+        write_log(self.log, prefix + current)
+        offset = len(prefix_bytes) if offset_override is None else offset_override
+        return server_bridge_payloads.normalize_refresh_payload_from_lifecycle(
+            {"outcome": "refresh_completed", "settle_request_id": "req-structural"},
+            {
+                "idle_wait_after": {
+                    "heartbeat_utc": "2026-08-08T10:00:00Z",
+                    "refresh_settle_phase": "settled",
+                    "refresh_settle_request_id": "req-structural",
+                    "is_compiling": False,
+                    "is_updating": False,
+                    "playmode_state": "edit",
+                    "script_compilation_failed": True,
+                    "compiler_error_count": len(diagnostics),
+                    "recent_compiler_diagnostics": diagnostics,
+                    "compiler_diagnostics_source": "compilation_pipeline",
+                    "editor_log_path": str(self.log),
+                    "editor_log_offset_at_bridge_generation_start": offset,
+                    "editor_log_offset_bridge_generation": 42,
+                }
+            },
+        )
+
+    def test_current_structural_error_precedes_stale_csharp_diagnostic(self) -> None:
+        payload = self._refresh(
+            prefix="Assembly has duplicate references: PreviousSession\n",
+            current=(
+                "Assembly has duplicate references: UniTask\n"
+                "Assembly has duplicate references: UniTask\n"
+            ),
+            diagnostics=[{"message": "Assets/Removed.cs(1,1): error CS0246: stale"}],
+        )
+
+        messages = [item["message"] for item in payload["post_settle_diagnostics"]]
+        self.assertEqual("Assembly has duplicate references: UniTask", messages[0])
+        self.assertNotIn("Assembly has duplicate references: PreviousSession", messages)
+        self.assertIn("Assets/Removed.cs(1,1): error CS0246: stale", messages)
+        self.assertEqual(1, payload["post_settle_structural_diagnostic_count"])
+        self.assertEqual("assembly_definition_error", payload["post_settle_compile_failure_class"])
+        self.assertEqual(
+            "editor_log_bridge_generation_scope+compilation_pipeline",
+            payload["post_settle_compiler_diagnostics_source"],
+        )
+        self.assertEqual(
+            "session_scoped",
+            payload["post_settle_structural_diagnostics_scope"]["trust_class"],
+        )
+        self.assertEqual(
+            "inspect_asmdef_references_and_editor_log_before_cache_cleanup",
+            payload["post_settle_compile_recommended_next_action"],
+        )
+
+        compact = server_bridge_payloads.compact_operation_payload(payload, "unity.project.refresh")
+        self.assertEqual("assembly_definition_error", compact["post_settle_compile_failure_class"])
+        self.assertEqual(1, compact["post_settle_structural_diagnostic_count"])
+        self.assertEqual(
+            "Assembly has duplicate references: UniTask",
+            compact["post_settle_diagnostics"][0]["message"],
+        )
+
+    def test_unusable_anchor_refuses_to_promote_an_old_structural_error(self) -> None:
+        payload = self._refresh(
+            prefix="Assembly has duplicate references: PreviousSession\n",
+            current="",
+            diagnostics=[],
+            offset_override=100_000,
+        )
+
+        self.assertEqual(0, payload["post_settle_structural_diagnostic_count"])
+        self.assertEqual(
+            "unscoped_refused",
+            payload["post_settle_structural_diagnostics_scope"]["trust_class"],
+        )
+        self.assertEqual("compiler_diagnostics_unavailable", payload["post_settle_compile_failure_class"])
+        self.assertEqual("DiagnosticUnavailable", payload["post_settle_diagnostics"][0]["type"])
+        self.assertNotIn("PreviousSession", payload["post_settle_diagnostics"][0]["message"])
+
+    def test_compile_and_test_envelopes_share_the_structural_diagnostic_contract(self) -> None:
+        prefix = "bridge attached\n"
+        offset = len(write_log(self.log, prefix))
+        write_log(self.log, prefix + "Unable to resolve reference 'Missing.Assembly'\n")
+        state = {
+            "is_compiling": False,
+            "is_updating": False,
+            "script_compilation_failed": True,
+            "compiler_error_count": 0,
+            "recent_compiler_diagnostics": [],
+            "editor_log_path": str(self.log),
+            "editor_log_offset_at_bridge_generation_start": offset,
+            "editor_log_offset_bridge_generation": 9,
+        }
+
+        compile_payload = server_bridge_payloads.normalize_compile_payload_from_lifecycle(
+            {"settle_request_id": "compile-1"},
+            {"idle_wait_after": dict(state)},
+        )
+        test_payload = server_bridge_payloads.normalize_tests_payload_from_lifecycle(
+            {"status": "completed"},
+            {"idle_wait_after": dict(state)},
+        )
+
+        for payload in (compile_payload, test_payload):
+            with self.subTest(payload=payload):
+                self.assertEqual("failed", payload["post_settle_compile"])
+                self.assertEqual("assembly_definition_error", payload["post_settle_compile_failure_class"])
+                self.assertEqual(
+                    "asmdef_unresolved_reference",
+                    payload["post_settle_diagnostics"][0]["failure_class"],
+                )
+
+
 class CompactEnvelopeTests(unittest.TestCase):
     """The hot interactive tools must be able to answer without spending the whole result budget."""
 

@@ -1,14 +1,18 @@
 from __future__ import annotations
 
 import json
-import os
+from pathlib import Path
 from typing import Any, Callable
+
+from server_health import read_editor_log_scope
 
 
 POST_SETTLE_COMPILE_TRUST_CONFIRMED = "confirmed"
 POST_SETTLE_COMPILE_TRUST_EDITOR_STILL_BUSY = "editor_still_busy"
 POST_SETTLE_COMPILE_TRUST_DEFERRED_DURING_PLAYMODE = "deferred_during_playmode"
 PLAYING_PLAYMODE_STATES = {"playing", "paused", "transitioning"}
+STRUCTURAL_COMPILER_LOG_MAX_CHARS = 2_000_000
+STRUCTURAL_COMPILER_DIAGNOSTIC_SOURCE = "editor_log_bridge_generation_scope"
 
 
 def _int_or_zero(value: Any) -> int:
@@ -35,17 +39,35 @@ def _attach_post_settle_compile_truth(
     diagnostics = idle_wait_after.get("recent_compiler_diagnostics")
     if not isinstance(diagnostics, list):
         diagnostics = []
-    
+
     script_compilation_failed = bool(idle_wait_after.get("script_compilation_failed"))
-    if script_compilation_failed and len(diagnostics) == 0:
-        editor_log_path = idle_wait_after.get("editor_log_path")
-        if editor_log_path and isinstance(editor_log_path, str):
-            phantom = _extract_phantom_compiler_diagnostics(editor_log_path)
-            if phantom:
-                diagnostics = phantom
-                idle_wait_after["compiler_diagnostics_source"] = "phantom_fallback_log_scan"
-    post_settle_error_count = _int_or_zero(idle_wait_after.get("compiler_error_count"))
-    script_compilation_failed = bool(idle_wait_after.get("script_compilation_failed"))
+    structural_diagnostics: list[dict[str, Any]] = []
+    structural_scope: dict[str, Any] = {}
+    if script_compilation_failed:
+        structural_diagnostics, structural_scope = _extract_structural_compiler_diagnostics(
+            str(idle_wait_after.get("editor_log_path") or ""),
+            bridge_generation_start_offset=_int_or_zero(
+                idle_wait_after.get("editor_log_offset_at_bridge_generation_start")
+            ),
+            bridge_generation=_int_or_zero(idle_wait_after.get("editor_log_offset_bridge_generation")),
+        )
+
+    diagnostics = _merge_compiler_diagnostics(structural_diagnostics, diagnostics)
+    compiler_diagnostics_source = str(idle_wait_after.get("compiler_diagnostics_source") or "")
+    if structural_diagnostics:
+        compiler_diagnostics_source = "+".join(
+            source
+            for source in (STRUCTURAL_COMPILER_DIAGNOSTIC_SOURCE, compiler_diagnostics_source)
+            if source
+        )
+    elif script_compilation_failed and not diagnostics:
+        diagnostics = [_compiler_diagnostics_unavailable_row()]
+        compiler_diagnostics_source = compiler_diagnostics_source or "script_compilation_failed_flag"
+
+    post_settle_error_count = max(
+        _int_or_zero(idle_wait_after.get("compiler_error_count")),
+        len(structural_diagnostics),
+    )
     post_settle_failed = script_compilation_failed or post_settle_error_count > 0
     compiling_or_updating = bool(idle_wait_after.get("is_compiling")) or bool(idle_wait_after.get("is_updating"))
     if compiling_or_updating:
@@ -79,12 +101,30 @@ def _attach_post_settle_compile_truth(
     normalized["post_settle_compile"] = post_settle_compile
     normalized["post_settle_error_count"] = post_settle_error_count
     normalized["post_settle_diagnostics"] = diagnostics[:5]
-    normalized["post_settle_compiler_diagnostics_source"] = str(idle_wait_after.get("compiler_diagnostics_source") or "")
+    normalized["post_settle_compiler_diagnostics_source"] = compiler_diagnostics_source
     normalized["post_settle_script_compilation_failed"] = script_compilation_failed
+    normalized["post_settle_structural_diagnostic_count"] = len(structural_diagnostics)
+    if structural_scope:
+        normalized["post_settle_structural_diagnostics_scope"] = structural_scope
+    if structural_diagnostics:
+        normalized["post_settle_compile_failure_class"] = "assembly_definition_error"
+        normalized["post_settle_compile_recommended_next_action"] = (
+            "inspect_asmdef_references_and_editor_log_before_cache_cleanup"
+        )
+    elif (
+        script_compilation_failed
+        and diagnostics
+        and isinstance(diagnostics[0], dict)
+        and diagnostics[0].get("type") == "DiagnosticUnavailable"
+    ):
+        normalized["post_settle_compile_failure_class"] = "compiler_diagnostics_unavailable"
+        normalized["post_settle_compile_recommended_next_action"] = (
+            "inspect_session_scoped_editor_log_before_cache_cleanup"
+        )
     normalized["script_compilation_failed"] = script_compilation_failed
     normalized["compiler_error_count"] = post_settle_error_count
     normalized["recent_compiler_diagnostics"] = diagnostics[:5]
-    normalized["compiler_diagnostics_source"] = str(idle_wait_after.get("compiler_diagnostics_source") or "")
+    normalized["compiler_diagnostics_source"] = compiler_diagnostics_source
     normalized["settle_phase"] = settle_phase or str(normalized.get("settle_phase") or "")
     normalized["completion_basis"] = completion_basis or str(normalized.get("completion_basis") or "")
 
@@ -108,53 +148,115 @@ def _editor_relaunch_attribution_from_recovery(recovery: Any) -> dict[str, Any]:
     return {}
 
 
-def _extract_phantom_compiler_diagnostics(log_path: str) -> list[dict[str, Any]]:
-    if not os.path.isfile(log_path):
-        return []
-    try:
-        size = os.path.getsize(log_path)
-        read_size = min(size, 2000000)
-        with open(log_path, "r", encoding="utf-8", errors="replace") as f:
-            f.seek(size - read_size)
-            text = f.read()
-    except Exception:
-        return []
-    
-    findings = []
-    for line in text.splitlines():
-        line = line.strip()
-        if not line:
+def _structural_compile_failure_class(line: str) -> str:
+    lowered = line.lower()
+    if "assembly has duplicate references" in lowered:
+        return "asmdef_duplicate_reference"
+    if "unable to resolve reference" in lowered:
+        return "asmdef_unresolved_reference"
+    if "error parsing json" in lowered and ".asmdef" in lowered:
+        return "asmdef_json_parse_error"
+    if "will not be compiled because" in lowered and "exists outside the assets folder" not in lowered:
+        return "assembly_not_compiled"
+    return ""
+
+
+def _extract_structural_compiler_diagnostics(
+    log_path: str,
+    *,
+    bridge_generation_start_offset: int,
+    bridge_generation: int,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    scope: dict[str, Any] = {
+        "anchor": "bridge_generation",
+        "bridge_generation": bridge_generation,
+        "start_offset_bytes": bridge_generation_start_offset,
+    }
+    if not log_path:
+        scope.update({"trust_class": "unavailable", "reason": "editor_log_path_unavailable"})
+        return [], scope
+    if bridge_generation_start_offset <= 0:
+        scope.update({"trust_class": "unavailable", "reason": "bridge_generation_anchor_unavailable"})
+        return [], scope
+
+    text, read_scope = read_editor_log_scope(
+        Path(log_path),
+        session_start_offset_bytes=bridge_generation_start_offset,
+        max_chars=STRUCTURAL_COMPILER_LOG_MAX_CHARS,
+    )
+    scope.update(
+        {
+            key: value
+            for key, value in read_scope.items()
+            if key
+            in {
+                "scoped_bytes_available",
+                "truncated_to_max_chars",
+                "scope_unusable",
+                "missing",
+                "stat_failed",
+            }
+        }
+    )
+    if read_scope.get("fallback_used"):
+        scope.update({"trust_class": "unscoped_refused", "reason": "bridge_generation_anchor_unusable"})
+        return [], scope
+
+    scope["trust_class"] = "session_scoped"
+    findings: list[dict[str, Any]] = []
+    seen_messages: set[str] = set()
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        failure_class = _structural_compile_failure_class(line)
+        message_key = line.casefold()
+        if not failure_class or message_key in seen_messages:
             continue
-            
-        is_fatal = False
-        if "Assembly has duplicate references" in line:
-            is_fatal = True
-        elif "Unable to resolve reference" in line:
-            is_fatal = True
-        elif "Error parsing JSON" in line and ".asmdef" in line:
-            is_fatal = True
-        elif "will not be compiled because" in line and "exists outside the Assets folder" not in line:
-            is_fatal = True
-            
-        if is_fatal:
-            findings.append({
+        seen_messages.add(message_key)
+        findings.append(
+            {
                 "message": line,
                 "file": "Editor.log",
                 "line": 0,
-                "type": "Error",
-                "severity": "Error"
-            })
-            
-    if not findings:
-        findings.append({
-            "message": "Phantom compilation failure: Unity aborted compilation but no known structural errors matched. You must read Editor.log manually to find the root cause.",
-            "file": "Editor.log",
-            "line": 0,
-            "type": "Error",
-            "severity": "Error"
-        })
-        
-    return findings[-5:]
+                "type": "StructuralCompilationError",
+                "severity": "Error",
+                "failure_class": failure_class,
+                "evidence_source": STRUCTURAL_COMPILER_DIAGNOSTIC_SOURCE,
+            }
+        )
+    return findings[-5:], scope
+
+
+def _merge_compiler_diagnostics(
+    structural_diagnostics: list[dict[str, Any]],
+    compiler_diagnostics: list[Any],
+) -> list[Any]:
+    merged: list[Any] = []
+    seen: set[str] = set()
+    for diagnostic in [*structural_diagnostics, *compiler_diagnostics]:
+        if isinstance(diagnostic, dict):
+            key = str(
+                diagnostic.get("message") or json.dumps(diagnostic, sort_keys=True, default=str)
+            ).strip().casefold()
+        else:
+            key = str(diagnostic).strip().casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        merged.append(diagnostic)
+    return merged
+
+
+def _compiler_diagnostics_unavailable_row() -> dict[str, Any]:
+    return {
+        "message": (
+            "Unity reports script compilation failed, but no current-session compiler diagnostic was available. "
+            "Inspect Editor.log from the bridge-generation anchor before considering cache cleanup."
+        ),
+        "file": "Editor.log",
+        "line": 0,
+        "type": "DiagnosticUnavailable",
+        "severity": "Warning",
+    }
 
 
 def _editor_relaunch_attribution_from_lifecycle(lifecycle: dict[str, Any]) -> dict[str, Any]:
@@ -457,6 +559,9 @@ def _compact_post_settle_fields(payload: dict[str, Any]) -> dict[str, Any]:
             "post_settle_error_count",
             "post_settle_script_compilation_failed",
             "post_settle_compiler_diagnostics_source",
+            "post_settle_structural_diagnostic_count",
+            "post_settle_structural_diagnostics_scope",
+            "post_settle_compile_failure_class",
             "settle_phase",
             "completion_basis",
             "settled_at_utc",

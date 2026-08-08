@@ -2,6 +2,29 @@
 
 ## Unreleased
 
+## 0.3.56
+
+Release tag: `v0.3.56`
+
+Current Git UPM install URL:
+
+```text
+https://github.com/FoxsterDev/xuunity-mcp.git?path=/packages/com.xuunity.light-mcp#v0.3.56
+```
+
+### Changed
+
+- Released `v0.3.56` package metadata, server metadata, package manifests, and Git UPM examples.
+
+### Fixed
+
+- Refresh, compile, and direct-test post-settle envelopes now promote structural assembly-definition failures
+  from the current bridge generation of `Editor.log`, even when Unity's in-memory diagnostic list still contains
+  older C# rows. Duplicate references, unresolved references, invalid `.asmdef` JSON, and assemblies Unity refuses
+  to compile are typed as `assembly_definition_error`, placed before secondary compiler diagnostics, and retained
+  in compact output with a no-cache-cleanup recovery action. The fallback refuses an unusable log anchor instead
+  of presenting a prior-session error as current truth.
+
 ## 0.3.55
 
 Release tag: `v0.3.55`

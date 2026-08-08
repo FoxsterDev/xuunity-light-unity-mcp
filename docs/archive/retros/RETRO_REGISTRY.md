@@ -1,8 +1,8 @@
 # XUUnity Light Unity MCP Public Retro Registry
 
 Status: active public registry
-Last triage: 2026-08-02 (re-evaluated against released source line `v0.3.53` plus current source at `01cb97e` and the guarded-interaction PlayMode proof slice)
-Current released source line: `v0.3.55`
+Last triage: 2026-08-08 (re-evaluated against released source line `v0.3.56`, current `master` at `4861bbc`, and the structural compile-diagnostic completion slice)
+Current released source line: `v0.3.56`
 
 Update this file whenever a public-safe MCP retro is added, moved, renamed, or
 deleted. Host-private and project-specific retros belong in the host's single
@@ -25,6 +25,27 @@ host-local registry.
 - `Completed Public History` is the place to find reusable lessons already
   implemented, applied, superseded, or retained only for history.
 - Prompt templates are listed separately and are not backlog items.
+
+## Re-Evaluation 2026-08-08
+
+- `master`, `origin/master`, and release `v0.3.56` were checked through current
+  `4861bbc`. The decision-verdict envelope, authoritative post-settle truth,
+  UI/path proof, infrastructure/product failure split, and all seven items from
+  the 2026-08-03 interactive evidence retro remain implemented. The August 3
+  row was stale as active backlog and moves to completed history.
+- The 2026-08-04 offline-status retro's required-argument, typed-refusal,
+  editor-open attribution, and stale-state liveness items shipped through
+  `v0.3.56`; no item reopened.
+- The August 6 structural compile-diagnostic fallback was only partial at
+  `5b96ac9`: it ran only when the C# diagnostic list was empty, so it missed the
+  reported stale-C#-row case, and its log read was not session-scoped. Current
+  source completes that slice with bridge-generation anchoring, structural-first
+  merge/deduplication, typed failure fields, compact-envelope preservation, and
+  stale-log refusal. A Unity `2022.3.62f3` duplicate-reference fault injection
+  returned the typed verdict and recovered to authoritative green after cleanup.
+- UTC timestamp parser consolidation remains an unscheduled small refactor. SDK
+  orchestration and token-efficiency residuals remain open but rank below this
+  false-root-cause validation defect.
 
 ## Re-Evaluation 2026-08-02
 
@@ -225,7 +246,6 @@ the entire Windows install root-cause set (python3 delegation, UTF-8 BOM,
 | 2026-06-02 | `2026-06-02_token_efficiency_response_envelope_retro.md` | Response-envelope token efficiency: compact-by-default across MCP tool surfaces | mostly implemented; P2 residual | Compact-by-default shipped `v0.3.32`-`v0.3.44` for scenario, refresh, compile, build-config compile, test, `unity_status_summary`, `ensure-ready`, and batch CLI, each with `includeFullPayload`/`--output` opt-in (STATUS.md "Compact MCP envelopes"). Remaining (ROADMAP.md "Phase 2" residual): broader multi-project compact ceilings, a token ledger, and fast-path profiles. |
 | 2026-06-11 | `2026-06-11_token_accounting_and_fast_path_retro.md` | Token-accounting ledger, one-shot package-pin verifier, fast-path prompt profile | partial; P2 | The biggest win (compact output) shipped through `v0.3.40`/`v0.3.44`, and the fast path is documented in `docs/agents/PACKAGE_BUMP_FAST_PATH.md`, but no token-accounting ledger, one-shot verify-package-pin verifier, or runner token-budget hints exist in source or ROADMAP/STATUS. Overlaps the response-envelope row above as the token-efficiency tail. |
 | 2026-06-17 | `2026-06-17_windows_setup_failure_retro.md` | Native Windows setup failure postmortem; residual = live Windows/Linux host proof | Windows root causes fixed + CI-exercised in `v0.3.43`; live-host proof still open (P2) | The concrete Windows helper failures (path-with-spaces, ExecutionPolicy, `python3` delegation, PID liveness, discovery) are fixed and CI-exercised end to end. STATUS.md still marks a live Windows/Linux host session with a real Unity editor as needing execution proof (ROADMAP Phase 3 breadth). This row now tracks that single remaining cross-platform proof item; the Windows install root-cause retros (2026-06-09 v1/v2, 2026-06-10) are completed history. |
-| 2026-08-03 | `2026-08-03_multi_scene_ui_targeting_and_session_scoped_evidence_retro.md` | Interactive-lane evidence gaps: UI target scope (active scene only vs additively loaded scenes and `DontDestroyOnLoad`), session-scoped log queries, live-editor verdict buckets, play-mode-aware errors, screenshot payload budget | all 7 priority items landed on unreleased source (P0 UI scope, P0 log anchor, P1 verdict buckets, P1 play-mode errors + trust class, P1 screenshot budget, P2 compact envelopes for playmode/screenshot, P2 hook-fire guidance); `unity_status` compact was measured and deliberately dropped - `unity_status_summary` already is that projection, and registering a second one silently changed the default payload for every existing `unity_status` caller; host-side proven by `tests/test_session_scoped_evidence_contract.py`, live-validated on an additive multi-scene consumer project (Unity 6000.0.58f2, devmode) 2026-08-03: SMOKE_TESTS 21-23 all pass, and the live run exposed two defects the source review missed (selector-level out-of-scope emitted no diagnostic at all; `dont_destroy_on_load_status` contradicted its own included flag) - both fixed | Execution was clean (no Unity-side failure in ~40 operations and four batch runs), so this is purely an evidence/contract row. `unity_ui_query`/`unity_ui_tree_snapshot`/`unity_ui_click` resolve targets in the active scene only and returned `ui_target_not_found` for UI in additively loaded scenes and `DontDestroyOnLoad`, which made the requested interactive verification impossible. `source=editor_log` grep and shell wait loops have no session boundary, so a stale marker line from a previous play session produced a false positive. Secondary: live-editor batch refusals count as `projects_failed` in the aggregate rollup, a play-mode-blocked compile reports a generic "editor is busy", a refresh during play mode reports a non-authoritative `post_settle_compile: passed`, and `unity_status`/`unity_playmode_state`/`unity_game_view_screenshot` still lack compact envelopes (one `includeImage: true` call overflowed the result budget at 184k chars). |
 
 > Re-confirmed 2026-07-15 against `v0.3.45` plus current source: the response-envelope /
 > token-efficiency backlog is no longer a blanket compile/refresh/test/status
@@ -240,6 +260,8 @@ the entire Windows install root-cause set (python3 delegation, UTF-8 BOM,
 
 | Date | File | Scope | Registry Status | Notes |
 | --- | --- | --- | --- | --- |
+| 2026-08-06 | `2026-08-06_structural_compile_diagnostics_retro.md` | Structural `.asmdef` and assembly-resolution failures hidden behind stale C# diagnostics | implemented and live-validated in current source | Refresh, compile, and direct-test post-settle envelopes scan only the current bridge-generation log scope, prioritize typed structural errors, preserve them in compact output, refuse stale/unscoped promotion, and direct operators to inspect `.asmdef` evidence before cache cleanup. Unity `2022.3.62f3` duplicate-reference injection and green recovery passed. |
+| 2026-08-03 | `2026-08-03_multi_scene_ui_targeting_and_session_scoped_evidence_retro.md` | Interactive-lane evidence gaps: UI target scope, session-scoped log queries, live-editor verdict buckets, play-mode-aware errors, screenshot budget | implemented and released through `v0.3.55` | All seven priority items shipped. `unity_status` compact was deliberately dropped because `unity_status_summary` already owns that projection; changing `unity_status` would silently alter the default for existing callers. Host contracts and live additive-scene proof pass. |
 | 2026-07-31 | `2026-07-31_shipped_ui_acceptance_toolchain_first_run_retro.md` | First post-release consumer run of the `v0.3.49` reference-driven UI acceptance slice | reusable residuals released in `v0.3.51`; generic runtime-interaction proof added in current source | All nine priority improvements shipped. Current source adds a uGUI-gated PlayMode guarded-click test proving receipt, exactly-once delivery, semantic state change, and refusal on Unity `2022.3` and `6000.0`. Consumer-specific fixtures/interactions and independent vision judges remain host-private adoption work. |
 | 2026-07-30 | `2026-07-30_reference_driven_ui_completion_and_visual_acceptance_retro.md` | Reference-image contract, deterministic fixture, semantic/prefab inspection, isolated render, comparison, guarded interaction, AI vision, and device lane | implemented and released in `v0.3.49` | The complete P0/P1/P2 dependency chain is released. Comparison is resolution-independent similarity rather than pixel equality, and visual/semantic/interaction/vision/device lanes fail closed when required evidence is absent. |
 | 2026-07-17 | `2026-07-17_prefab_ui_authoring_and_visual_iteration_gap_retro.md` | Prefab/UI inspection, mutation, isolated render, passive readiness, and mutation-delta safety | implemented through `v0.3.49` | Passive polling and mutation-delta trust shipped before `v0.3.49`; the release adds prefab/UI semantic read, binding validation, isolated render, guarded mutation, and guarded semantic click. Project-specific hook adoption remains consumer work, not a reusable MCP capability gap. |
