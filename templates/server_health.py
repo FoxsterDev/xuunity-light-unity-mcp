@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import calendar
 import os
 import re
 import sys
@@ -9,6 +8,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from server_bridge_paths import default_editor_log_path
+from server_core import parse_utc_timestamp
 
 FRESH_HEARTBEAT_MAX_AGE_SECONDS = 5.0
 STALE_HEARTBEAT_MAX_AGE_SECONDS = 15.0
@@ -322,16 +322,10 @@ def _parse_stamp_utc(value: Any) -> float:
     `time.timezone` is only correct where standard time is in force year-round. Measured on the same stamp: exact
     on a no-DST host, and off by 3600 s on Europe/Berlin, America/New_York, and Australia/Sydney — where the error
     lands in the opposite half of the year. That hour propagates into the log-lane staleness threshold and the
-    rotation guard, so `calendar.timegm` is the only correct conversion here.
+    rotation guard, so the shared UTC parser is the only correct conversion here.
     """
 
-    text = str(value or "").strip()
-    if not text:
-        return 0.0
-    try:
-        return float(calendar.timegm(time.strptime(text, "%Y-%m-%dT%H:%M:%SZ")))
-    except (TypeError, ValueError, OverflowError):
-        return 0.0
+    return parse_utc_timestamp(value) or 0.0
 
 
 def detect_rotated_editor_log(log_path: Path, stamped_utc: Any) -> Path | None:

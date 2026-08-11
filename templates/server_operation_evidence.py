@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-import calendar
 import json
 import time
 from pathlib import Path
 from typing import Any
 
-from server_core import render_launcher_cli
+from server_core import parse_utc_timestamp as parse_core_utc_timestamp, render_launcher_cli
 
 
 ARTIFACT_GROUP_NAMES = (
@@ -20,14 +19,7 @@ ARTIFACT_GROUP_NAMES = (
 
 
 def parse_utc_timestamp(value: Any) -> float | None:
-    text = str(value or "").strip()
-    if not text:
-        return None
-
-    try:
-        return float(calendar.timegm(time.strptime(text, "%Y-%m-%dT%H:%M:%SZ")))
-    except ValueError:
-        return None
+    return parse_core_utc_timestamp(value)
 
 
 def _normalize_path(project_root: Path, path_value: Any) -> Path | None:

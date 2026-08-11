@@ -1,7 +1,7 @@
 # XUUnity MCP Design: Consolidate The UTC Timestamp Parser
 
 Date: `2026-08-04`
-Status: `backlog` — not scheduled. Recorded because the failure it prevents already happened once.
+Status: `implemented in current source` — 2026-08-11. Recorded because the failure it prevents already happened once.
 Size: small. One shared helper, five thin call sites, no behaviour change intended.
 
 ## Why This Exists
@@ -35,9 +35,8 @@ Four names, one conversion, and two different contracts for absent input.
 
 ## Proposal
 
-Add one canonical helper and reduce every site to a call. The obvious home is a module all of these can import
-without a cycle; `server_core.py` is the current candidate, to be confirmed against the import graph rather than
-assumed.
+Add one canonical helper and reduce every site to a call. `server_core.py` is the cycle-free home and now owns the
+conversion; per-module wrappers retain their established empty-input contracts.
 
 ```python
 def parse_utc_timestamp(value: Any) -> float | None:

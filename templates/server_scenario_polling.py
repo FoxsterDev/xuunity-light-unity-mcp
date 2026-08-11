@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 import sys
-import calendar
 import time
 from pathlib import Path
 from typing import Any, Callable
 
-from server_core import render_launcher_cli
+from server_core import parse_utc_timestamp, render_launcher_cli
 
 
 TRANSIENT_SCENARIO_POLL_ERROR_CODES = frozenset(
@@ -24,13 +23,7 @@ def is_terminal_scenario_status(status: Any, scenario_terminal_statuses: set[str
 
 
 def parse_utc_seconds(value: Any) -> float | None:
-    text = str(value or "").strip()
-    if not text:
-        return None
-    try:
-        return float(calendar.timegm(time.strptime(text, "%Y-%m-%dT%H:%M:%SZ")))
-    except Exception:
-        return None
+    return parse_utc_timestamp(value)
 
 
 def summarize_step_for_heartbeat(step: Any) -> str:

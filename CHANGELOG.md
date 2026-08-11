@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Fixed
+
+- Consolidated the host-side UTC timestamp parser used by bridge heartbeat, journal, scenario polling, operation
+  evidence, and Editor.log health paths. Every consumer now shares the timezone- and DST-independent conversion
+  while retaining its existing invalid/empty timestamp contract.
+
 ## 0.3.56
 
 Release tag: `v0.3.56`

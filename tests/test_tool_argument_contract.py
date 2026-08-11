@@ -16,6 +16,7 @@ import inspect
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -23,9 +24,14 @@ TEMPLATES = REPO_ROOT / "templates"
 if str(TEMPLATES) not in sys.path:
     sys.path.insert(0, str(TEMPLATES))
 
+import server_bridge_journal  # noqa: E402
+import server_bridge_state  # noqa: E402
 import server_health  # noqa: E402
 import server_mcp_tools  # noqa: E402
+import server_operation_evidence  # noqa: E402
+import server_scenario_polling  # noqa: E402
 import server_specs_tools  # noqa: E402
+from server_core import parse_utc_timestamp  # noqa: E402
 
 TOOLS = server_specs_tools.TOOLS
 
@@ -343,13 +349,21 @@ class HostileTimezoneStampTests(unittest.TestCase):
             os.environ["TZ"] = self._original_tz
         time.tzset()
 
-    def parse_under(self, timezone_name: str, stamp: str) -> tuple[float, int]:
+    def parse_under(self, timezone_name: str, stamp: str) -> tuple[dict[str, float | None], int]:
         import calendar
 
         os.environ["TZ"] = timezone_name
         time.tzset()
-        return server_health._parse_stamp_utc(stamp), calendar.timegm(
-            time.strptime(stamp, "%Y-%m-%dT%H:%M:%SZ")
+        return (
+            {
+                "core": parse_utc_timestamp(stamp),
+                "bridge_state": server_bridge_state.parse_utc_timestamp(stamp),
+                "journal": server_bridge_journal.parse_journal_utc_timestamp(stamp),
+                "operation_evidence": server_operation_evidence.parse_utc_timestamp(stamp),
+                "scenario_polling": server_scenario_polling.parse_utc_seconds(stamp),
+                "health": server_health._parse_stamp_utc(stamp),
+            },
+            calendar.timegm(time.strptime(stamp, "%Y-%m-%dT%H:%M:%SZ")),
         )
 
     def test_the_stamp_parses_exactly_under_dst_timezones(self) -> None:
@@ -363,7 +377,35 @@ class HostileTimezoneStampTests(unittest.TestCase):
         for timezone_name, stamp in cases:
             with self.subTest(timezone=timezone_name, stamp=stamp):
                 parsed, expected = self.parse_under(timezone_name, stamp)
-                self.assertEqual(float(expected), parsed, f"{timezone_name} {stamp}")
+                self.assertEqual(
+                    {name: float(expected) for name in parsed},
+                    parsed,
+                    f"{timezone_name} {stamp}",
+                )
+
+    def test_heartbeat_age_uses_the_shared_timezone_safe_parser(self) -> None:
+        stamp = "2026-08-04T22:28:53Z"
+        expected_epoch = 1785882533.0
+        with mock.patch.object(server_bridge_state.time, "time", return_value=expected_epoch + 3.5):
+            self.assertEqual(3.5, server_bridge_state.heartbeat_age_seconds({"heartbeat_utc": stamp}))
+
+    def test_each_legacy_empty_contract_is_preserved(self) -> None:
+        for parser in (
+            parse_utc_timestamp,
+            server_bridge_state.parse_utc_timestamp,
+            server_operation_evidence.parse_utc_timestamp,
+            server_scenario_polling.parse_utc_seconds,
+        ):
+            self.assertIsNone(parser(""))
+            self.assertIsNone(parser("not a stamp"))
+        self.assertEqual(0.0, server_bridge_journal.parse_journal_utc_timestamp(""))
+        self.assertEqual(0.0, server_bridge_journal.parse_journal_utc_timestamp("not a stamp"))
+
+    def test_bridge_state_keeps_its_strict_whitespace_contract(self) -> None:
+        stamp = "2026-08-04T22:28:53Z"
+        self.assertIsNotNone(server_bridge_state.parse_utc_timestamp(stamp))
+        self.assertIsNone(server_bridge_state.parse_utc_timestamp(f" {stamp}"))
+        self.assertIsNone(server_bridge_state.parse_utc_timestamp(f"{stamp} "))
 
     def test_a_blank_or_malformed_stamp_is_zero_not_an_exception(self) -> None:
         self.assertEqual(0.0, server_health._parse_stamp_utc(""))

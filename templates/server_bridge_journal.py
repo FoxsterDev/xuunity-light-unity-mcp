@@ -1,14 +1,13 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
-import calendar
 import sys
 import time
 import uuid
 from pathlib import Path
 from typing import Any
 
-from server_core import read_json, write_json
+from server_core import parse_utc_timestamp, read_json, write_json
 from server_bridge_paths import request_journal_dir
 
 def bridge_identity_from_state(state: dict[str, Any] | None) -> tuple[int, str]:
@@ -246,14 +245,7 @@ def write_host_request_journal_event(
 
 
 def parse_journal_utc_timestamp(value: Any) -> float:
-    text = str(value or "").strip()
-    if not text:
-        return 0.0
-
-    try:
-        return float(calendar.timegm(time.strptime(text, "%Y-%m-%dT%H:%M:%SZ")))
-    except ValueError:
-        return 0.0
+    return parse_utc_timestamp(value) or 0.0
 
 
 def read_request_journal_events(project_root: Path, request_id: str) -> list[dict[str, Any]]:

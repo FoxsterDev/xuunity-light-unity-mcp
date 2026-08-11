@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
-import calendar
 import time
 from pathlib import Path
 from typing import Any
@@ -12,7 +11,7 @@ from server_bridge_constants import (
     TCP_LOOPBACK_BRIDGE_TRANSPORT,
 )
 from server_bridge_paths import bridge_config_path, bridge_state_path
-from server_core import ToolInvocationError, read_json, render_launcher_cli
+from server_core import ToolInvocationError, parse_utc_timestamp as parse_core_utc_timestamp, read_json, render_launcher_cli
 from server_host_platform import current_host_platform_adapter
 
 def bridge_enabled(project_root: Path) -> bool:
@@ -90,9 +89,8 @@ def heartbeat_age_seconds(state: dict[str, Any]) -> float | None:
     if not isinstance(heartbeat_utc, str) or not heartbeat_utc:
         return None
 
-    try:
-        heartbeat_unix = calendar.timegm(time.strptime(heartbeat_utc, "%Y-%m-%dT%H:%M:%SZ"))
-    except ValueError:
+    heartbeat_unix = parse_core_utc_timestamp(heartbeat_utc)
+    if heartbeat_unix is None:
         return None
 
     return max(0.0, time.time() - heartbeat_unix)
@@ -139,13 +137,9 @@ def annotate_bridge_state_with_liveness(state: dict[str, Any] | None) -> dict[st
 
 
 def parse_utc_timestamp(value: Any) -> float | None:
-    if not isinstance(value, str) or not value:
+    if not isinstance(value, str) or not value or value != value.strip():
         return None
-
-    try:
-        return float(calendar.timegm(time.strptime(value, "%Y-%m-%dT%H:%M:%SZ")))
-    except ValueError:
-        return None
+    return parse_core_utc_timestamp(value)
 
 
 def state_is_idle(state: dict[str, Any]) -> bool:

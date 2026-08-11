@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import calendar
 import json
+import time
 from pathlib import Path
 from typing import Any
 
@@ -12,6 +14,17 @@ class ToolInvocationError(Exception):
         self.code = code
         self.message = message
         self.details = details or {}
+
+
+def parse_utc_timestamp(value: Any) -> float | None:
+    """Return epoch seconds for a wire-format UTC timestamp, independent of host timezone."""
+    text = str(value or "").strip()
+    if not text:
+        return None
+    try:
+        return float(calendar.timegm(time.strptime(text, "%Y-%m-%dT%H:%M:%SZ")))
+    except (TypeError, ValueError, OverflowError):
+        return None
 
 
 def read_json(path: Path) -> Any:

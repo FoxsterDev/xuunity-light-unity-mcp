@@ -1,7 +1,7 @@
 # XUUnity Light Unity MCP Public Retro Registry
 
 Status: active public registry
-Last triage: 2026-08-08 (re-evaluated against released source line `v0.3.56`, current `master` at `4861bbc`, and the structural compile-diagnostic completion slice)
+Last triage: 2026-08-11 (re-evaluated against released source line `v0.3.56`, current `master` at `487b07e`, and the UTC parser consolidation slice)
 Current released source line: `v0.3.56`
 
 Update this file whenever a public-safe MCP retro is added, moved, renamed, or
@@ -25,6 +25,19 @@ host-local registry.
 - `Completed Public History` is the place to find reusable lessons already
   implemented, applied, superseded, or retained only for history.
 - Prompt templates are listed separately and are not backlog items.
+
+## Re-Evaluation 2026-08-11
+
+- `master`, `origin/master`, and release `v0.3.56` align at `487b07e`. The decision-verdict envelope,
+  authoritative post-settle truth, UI/path proof, infrastructure/product failure split, and the structural
+  compile-diagnostic fallback all remain released and closed.
+- The former UTC parser-consolidation design is now implemented in current source: `server_core` owns the
+  timezone- and DST-independent conversion, while heartbeat, journal, scenario, operation-evidence, and
+  Editor.log consumers preserve their established absent-value contracts. Focused hostile-timezone coverage
+  exercises every consumer; no payload contract changed.
+- SDK GUI/batch/portfolio orchestration remains the highest broad P1 backlog but exceeds one safe grooming
+  slice. The token-efficiency and live Windows/Linux proof tails remain P2. No private/project-specific backlog
+  was promoted.
 
 ## Re-Evaluation 2026-08-08
 
