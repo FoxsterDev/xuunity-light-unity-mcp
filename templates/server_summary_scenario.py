@@ -837,6 +837,100 @@ def build_applied_mutation_settle_summary(steps: list[Any], cleanup_start_index:
     }
 
 
+REFRESH_TIMEOUT_RECOVERY_ACTION = "request_status_summary_then_compile_gate"
+REFRESH_TIMEOUT_EDITOR_FAILURE_ACTION = "recover_editor_session"
+REFRESH_TIMEOUT_GENERIC_INFRA_ACTION = "verify_editor_settled_then_retry_or_increase_timeout"
+_REFRESH_TIMEOUT_UNREACHABLE_HEALTH = {"offline", "stale", "anr", "anr_suspected", "bridge_disabled"}
+_REFRESH_TIMEOUT_EVIDENCE_FIELDS = (
+    "settle_phase_at_timeout",
+    "refresh_settle_pending_at_timeout",
+    "editor_is_compiling_at_timeout",
+    "editor_is_updating_at_timeout",
+    "playmode_state_at_timeout",
+    "stable_idle_ticks_at_timeout",
+)
+
+
+def build_refresh_timeout_recovery_summary(normalized: dict[str, Any], step_items: list[Any]) -> dict[str, Any]:
+    """Classify a timed-out scenario refresh wait and name one concrete recovery path.
+
+    The waiter can time out while the underlying Unity refresh is still
+    settling, already settled, or lost to lifecycle churn.  The bare timeout
+    does not say which, and a blind retry can hide a completed operation.
+    """
+    if str(normalized.get("status") or "") == "passed":
+        return {}
+
+    _, first_failed = _first_failed_raw_step(step_items)
+    if first_failed is None:
+        return {}
+    if str(first_failed.get("kind") or "") != "project_refresh":
+        return {}
+    if str(first_failed.get("error_code") or "") != "project_refresh_timeout":
+        return {}
+
+    payload = _parse_step_payload_json(first_failed)
+    evidence_present = bool(payload.get("settle_timed_out"))
+    unity_classification = str(payload.get("settle_timeout_classification") or "")
+    host_health = str(normalized.get("host_health_classification") or "")
+    relaunch_attribution = _extract_editor_relaunch_attribution(normalized)
+
+    if host_health in _REFRESH_TIMEOUT_UNREACHABLE_HEALTH:
+        classification = "editor_failure"
+        classification_source = "host_health_classification"
+    elif evidence_present and unity_classification:
+        classification = unity_classification
+        classification_source = "unity_step_evidence"
+    elif relaunch_attribution:
+        classification = "lost_final_accounting"
+        classification_source = "editor_relaunch_attribution"
+    else:
+        classification = "unclassified_legacy_payload"
+        classification_source = "none"
+
+    project_root = str(normalized.get("project_root") or "")
+    summary: dict[str, Any] = {
+        "timeout_step_id": str(first_failed.get("stepId") or first_failed.get("step_id") or ""),
+        "timeout_classification": classification,
+        "classification_source": classification_source,
+        "editor_reachability_after_timeout": host_health or "unknown_at_summary_time",
+        "operation_may_have_completed": True,
+    }
+
+    if classification == "editor_failure":
+        summary["recommended_next_action"] = REFRESH_TIMEOUT_EDITOR_FAILURE_ACTION
+        summary["note"] = (
+            "The editor was not reachable when this summary was built; the Unity refresh outcome is unproven. "
+            "Recover the editor session, then request final status for this run."
+        )
+        recovery_cli_args = ["ensure-ready"]
+        if project_root:
+            recovery_cli_args.extend(["--project-root", project_root])
+        recovery_cli_args.append("--open-editor")
+        summary["recovery_cli_args"] = recovery_cli_args
+    else:
+        summary["recommended_next_action"] = REFRESH_TIMEOUT_RECOVERY_ACTION
+        summary["note"] = (
+            "The Unity refresh operation may have completed even though the scenario refresh waiter timed out. "
+            "Run the status summary, then a compile gate, before retrying or trusting a retry."
+        )
+        recovery_cli_args = ["request-status-summary"]
+        if project_root:
+            recovery_cli_args.extend(["--project-root", project_root])
+        summary["recovery_cli_args"] = recovery_cli_args
+        summary["compile_gate_tool"] = "unity_compile_player_scripts"
+        compile_gate_arguments: dict[str, Any] = {}
+        if project_root:
+            compile_gate_arguments["projectRoot"] = project_root
+        summary["compile_gate_tool_arguments"] = compile_gate_arguments
+
+    for key in _REFRESH_TIMEOUT_EVIDENCE_FIELDS:
+        if key in payload:
+            summary[key] = payload.get(key)
+
+    return summary
+
+
 def classify_scenario_failure(
     normalized: dict[str, Any],
     step_items: list[Any],
@@ -1129,6 +1223,12 @@ def build_scenario_result_summary(payload: dict[str, Any], scenario_terminal_sta
             first_failed_step["mutation_step_id"] = str(applied_mutation_settle_summary.get("mutation_step_id") or "")
             first_failed_step["mutation_outcome"] = str(applied_mutation_settle_summary.get("mutation_outcome") or "")
 
+    refresh_timeout_recovery = build_refresh_timeout_recovery_summary(normalized, step_items)
+    if refresh_timeout_recovery:
+        summary["refresh_timeout_recovery"] = refresh_timeout_recovery
+        if not applied_mutation_settle_summary and "recommended_next_action" not in summary:
+            summary["recommended_next_action"] = str(refresh_timeout_recovery.get("recommended_next_action") or "")
+
     for key in (
         "host_health_classification",
         "host_health_reason",
@@ -1212,6 +1312,13 @@ def build_scenario_decision_verdict(payload: dict[str, Any], scenario_terminal_s
             playmode_guard_summary.get("recommended_next_action")
             or "exit_playmode_then_rerun_if_fresh_start_required"
         )
+    refresh_timeout_recovery = summary.get("refresh_timeout_recovery")
+    if (
+        isinstance(refresh_timeout_recovery, dict)
+        and failure_class == "infrastructure_timeout"
+        and recommended_next_action == REFRESH_TIMEOUT_GENERIC_INFRA_ACTION
+    ):
+        recommended_next_action = str(refresh_timeout_recovery.get("recommended_next_action") or recommended_next_action)
     first_failure = summary.get("first_failed_step")
     if first_failure is None and isinstance(summary.get("error"), dict):
         first_failure = dict(summary.get("error") or {})
@@ -1297,6 +1404,7 @@ def build_scenario_decision_verdict(payload: dict[str, Any], scenario_terminal_s
         "path_coverage_summary",
         "profile_mutation_summary",
         "applied_mutation_settle_summary",
+        "refresh_timeout_recovery",
         "structured_timing",
         "artifact_manifest",
     ):

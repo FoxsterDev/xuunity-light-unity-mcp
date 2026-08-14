@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+### Added
+
+- A scenario `project_refresh` step that times out waiting for settle now explains itself instead of leaving a bare
+  `project_refresh_timeout`. The Unity step captures settle evidence at the timeout instant (settle phase, pending
+  flag, compiling/updating flags, Play Mode state, stable idle ticks) and classifies it as `package_settle_timeout`,
+  `compile_import_churn_timeout`, `editor_busy_timeout`, `idle_confirmation_incomplete`, or `lost_final_accounting`.
+  Scenario summaries and the run-and-wait decision verdict promote a `refresh_timeout_recovery` block with the
+  classification, its source, editor reachability, a concrete recovery command, and an explicit note that the Unity
+  operation may have completed even though the waiter timed out. When the editor is reachable the recommended next
+  action becomes `request_status_summary_then_compile_gate`; when host health says the editor is unreachable the
+  classification is `editor_failure` and the action is `recover_editor_session`. Results written by an older package
+  classify as `unclassified_legacy_payload` and still carry the guidance. The released
+  `applied_mutation_settle_timeout` and cleanup verdicts keep their existing actions.
+
 ### Fixed
 
 - Direct EditMode and PlayMode test responses no longer silently overwrite the

@@ -67,6 +67,10 @@ The registries are routing aids, not substitutes for source freshness.
 
 ### Task 0 — registry normalization
 
+Status: `complete 2026-08-14`. The design-plan history, designs index, and
+public retro registry were reconciled against current source at `b13cb69`;
+the next run selects the first unimplemented start-now slice.
+
 Before Portfolio Slice 1, perform one public-safe documentation-only grooming
 pass:
 
@@ -161,6 +165,11 @@ release failure class:
 Recommended size-aware order:
 
 `S1 → D1 → P1 → P2 → C1 → T3 → T1 → P3`
+
+Progress: S1 is complete (2026-08-14, host contract tests plus Unity `2022.3`
+current-source and Unity `6000.0` released-package live fault injection; see
+the evidence-ergonomics design row). The next unimplemented start-now item is
+D1.
 
 D1 is deliberately early even though Unity licensing can add calendar cost: it
 is the proof foundation for later Unity package changes. If runner licensing is

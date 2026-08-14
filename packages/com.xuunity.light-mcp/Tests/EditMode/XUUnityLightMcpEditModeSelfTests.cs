@@ -135,6 +135,113 @@ namespace XUUnity.LightMcp.Tests.EditMode
         }
 
         [Test]
+        public void RefreshSettleTimeout_CompileChurnWinsOverSettlePhase()
+        {
+            Assert.That(
+                XUUnityLightMcpScenarioRefreshStepHandler.ClassifyRefreshSettleTimeout(true, false, true, "waiting_for_package_settle"),
+                Is.EqualTo("compile_import_churn_timeout"));
+            Assert.That(
+                XUUnityLightMcpScenarioRefreshStepHandler.ClassifyRefreshSettleTimeout(false, true, false, ""),
+                Is.EqualTo("compile_import_churn_timeout"));
+        }
+
+        [Test]
+        public void RefreshSettleTimeout_ClassifiesPendingPhases()
+        {
+            Assert.That(
+                XUUnityLightMcpScenarioRefreshStepHandler.ClassifyRefreshSettleTimeout(false, false, true, "waiting_for_package_settle"),
+                Is.EqualTo("package_settle_timeout"));
+            Assert.That(
+                XUUnityLightMcpScenarioRefreshStepHandler.ClassifyRefreshSettleTimeout(false, false, true, "waiting_for_stable_idle_ticks"),
+                Is.EqualTo("idle_confirmation_incomplete"));
+            Assert.That(
+                XUUnityLightMcpScenarioRefreshStepHandler.ClassifyRefreshSettleTimeout(false, false, true, "waiting_for_editor_idle"),
+                Is.EqualTo("editor_busy_timeout"));
+        }
+
+        [Test]
+        public void RefreshSettleTimeout_NotPendingIsLostFinalAccounting()
+        {
+            Assert.That(
+                XUUnityLightMcpScenarioRefreshStepHandler.ClassifyRefreshSettleTimeout(false, false, false, "settled"),
+                Is.EqualTo("lost_final_accounting"));
+            Assert.That(
+                XUUnityLightMcpScenarioRefreshStepHandler.ClassifyRefreshSettleTimeout(false, false, false, ""),
+                Is.EqualTo("lost_final_accounting"));
+        }
+
+        [Test]
+        public void RefreshTimeoutPayload_MergesExistingPayloadWithEvidence()
+        {
+            var existing = JsonUtility.ToJson(new XUUnityLightMcpProjectRefreshPayload
+            {
+                outcome = "refresh_started",
+                asset_database_refreshed = true,
+                package_resolve_requested = true,
+            });
+
+            var json = XUUnityLightMcpScenarioRefreshStepHandler.BuildRefreshTimeoutPayloadJson(
+                existing,
+                false,
+                false,
+                false,
+                "settled",
+                "edit",
+                1,
+                "req-settle-1");
+
+            var payload = JsonUtility.FromJson<XUUnityLightMcpProjectRefreshTimeoutPayload>(json);
+            Assert.That(payload.asset_database_refreshed, Is.True);
+            Assert.That(payload.package_resolve_requested, Is.True);
+            Assert.That(payload.settle_timed_out, Is.True);
+            Assert.That(payload.settle_timeout_classification, Is.EqualTo("lost_final_accounting"));
+            Assert.That(payload.operation_may_have_completed, Is.True);
+            Assert.That(payload.settle_phase_at_timeout, Is.EqualTo("settled"));
+            Assert.That(payload.settle_phase, Is.EqualTo("settled"));
+            Assert.That(payload.playmode_state_at_timeout, Is.EqualTo("edit"));
+            Assert.That(payload.stable_idle_ticks_at_timeout, Is.EqualTo(1));
+            Assert.That(payload.settle_request_id, Is.EqualTo("req-settle-1"));
+        }
+
+        [Test]
+        public void RefreshTimeoutPayload_BusyEvidenceDoesNotClaimCompletion()
+        {
+            var json = XUUnityLightMcpScenarioRefreshStepHandler.BuildRefreshTimeoutPayloadJson(
+                "",
+                false,
+                false,
+                true,
+                "waiting_for_package_settle",
+                "edit",
+                0,
+                "req-settle-2");
+
+            var payload = JsonUtility.FromJson<XUUnityLightMcpProjectRefreshTimeoutPayload>(json);
+            Assert.That(payload.settle_timeout_classification, Is.EqualTo("package_settle_timeout"));
+            Assert.That(payload.operation_may_have_completed, Is.False);
+            Assert.That(payload.refresh_settle_pending_at_timeout, Is.True);
+        }
+
+        [Test]
+        public void RefreshTimeoutPayload_MalformedExistingPayloadFallsBackToFreshEvidence()
+        {
+            var json = XUUnityLightMcpScenarioRefreshStepHandler.BuildRefreshTimeoutPayloadJson(
+                "{not valid json",
+                true,
+                false,
+                true,
+                "waiting_for_editor_idle",
+                "edit",
+                0,
+                "req-settle-3");
+
+            var payload = JsonUtility.FromJson<XUUnityLightMcpProjectRefreshTimeoutPayload>(json);
+            Assert.That(payload.settle_timed_out, Is.True);
+            Assert.That(payload.settle_timeout_classification, Is.EqualTo("compile_import_churn_timeout"));
+            Assert.That(payload.editor_is_compiling_at_timeout, Is.True);
+        }
+
+        [Test]
         public void ResponseWriter_SuccessAndErrorPreserveRequestContract()
         {
             var success = XUUnityLightMcpResponseWriter.Success("req-1", "unity.selftest", "{\"ok\":true}");

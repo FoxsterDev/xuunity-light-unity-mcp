@@ -688,5 +688,245 @@ class ScenarioDecisionVerdictTests(unittest.TestCase):
         self.assertEqual("host_launchable_not_active", payload["cold_start_reason"])
 
 
+class RefreshTimeoutRecoveryTests(unittest.TestCase):
+    def _refresh_timeout_payload(
+        self,
+        *,
+        step_payload: dict | None = None,
+        extra_payload_fields: dict | None = None,
+    ) -> dict:
+        step = {
+            "stepId": "refresh",
+            "kind": "project_refresh",
+            "status": "failed",
+            "outcome": "refresh_waiting_for_settle",
+            "error_code": "project_refresh_timeout",
+            "error_message": "Timed out waiting for project refresh to settle.",
+        }
+        if step_payload is not None:
+            step["payload_json"] = json.dumps(step_payload)
+        payload = {
+            "project_root": "/tmp/FakeProject",
+            "run_id": "run-refresh-timeout",
+            "scenario_name": "RefreshOnly",
+            "status": "failed",
+            "terminal": True,
+            "succeeded": False,
+            "steps": [step],
+        }
+        if extra_payload_fields:
+            payload.update(extra_payload_fields)
+        return payload
+
+    def _unity_evidence(self, classification: str, **overrides) -> dict:
+        evidence = {
+            "settle_timed_out": True,
+            "settle_timeout_classification": classification,
+            "settle_phase_at_timeout": "waiting_for_package_settle",
+            "refresh_settle_pending_at_timeout": True,
+            "editor_is_compiling_at_timeout": False,
+            "editor_is_updating_at_timeout": False,
+            "playmode_state_at_timeout": "edit",
+            "stable_idle_ticks_at_timeout": 0,
+            "operation_may_have_completed": False,
+        }
+        evidence.update(overrides)
+        return evidence
+
+    def test_package_settle_evidence_classifies_and_recommends_status_then_compile_gate(self) -> None:
+        payload = self._refresh_timeout_payload(step_payload=self._unity_evidence("package_settle_timeout"))
+
+        verdict = server_summaries.build_scenario_decision_verdict(payload, {"passed", "failed"})
+
+        recovery = verdict["refresh_timeout_recovery"]
+        self.assertEqual("package_settle_timeout", recovery["timeout_classification"])
+        self.assertEqual("unity_step_evidence", recovery["classification_source"])
+        self.assertEqual("request_status_summary_then_compile_gate", recovery["recommended_next_action"])
+        self.assertEqual("request_status_summary_then_compile_gate", verdict["recommended_next_action"])
+        self.assertTrue(recovery["operation_may_have_completed"])
+        self.assertIn("may have completed", recovery["note"])
+        self.assertEqual(
+            ["request-status-summary", "--project-root", "/tmp/FakeProject"],
+            recovery["recovery_cli_args"],
+        )
+        self.assertEqual("unity_compile_player_scripts", recovery["compile_gate_tool"])
+        self.assertEqual({"projectRoot": "/tmp/FakeProject"}, recovery["compile_gate_tool_arguments"])
+        self.assertEqual("waiting_for_package_settle", recovery["settle_phase_at_timeout"])
+        self.assertEqual("infrastructure_timeout", verdict["failure_class"])
+        self.assertEqual("inconclusive", verdict["verdict"])
+
+    def test_compile_churn_and_lost_accounting_evidence_are_preserved(self) -> None:
+        for classification, phase in (
+            ("compile_import_churn_timeout", "waiting_for_editor_idle"),
+            ("lost_final_accounting", ""),
+            ("idle_confirmation_incomplete", "waiting_for_stable_idle_ticks"),
+            ("editor_busy_timeout", "waiting_for_editor_idle"),
+        ):
+            payload = self._refresh_timeout_payload(
+                step_payload=self._unity_evidence(classification, settle_phase_at_timeout=phase)
+            )
+
+            verdict = server_summaries.build_scenario_decision_verdict(payload, {"passed", "failed"})
+
+            recovery = verdict["refresh_timeout_recovery"]
+            self.assertEqual(classification, recovery["timeout_classification"])
+            self.assertEqual(phase, recovery["settle_phase_at_timeout"])
+            self.assertEqual("request_status_summary_then_compile_gate", verdict["recommended_next_action"])
+
+    def test_legacy_payload_without_evidence_still_guides_but_says_unclassified(self) -> None:
+        payload = self._refresh_timeout_payload()
+
+        verdict = server_summaries.build_scenario_decision_verdict(payload, {"passed", "failed"})
+
+        recovery = verdict["refresh_timeout_recovery"]
+        self.assertEqual("unclassified_legacy_payload", recovery["timeout_classification"])
+        self.assertEqual("none", recovery["classification_source"])
+        self.assertEqual("unknown_at_summary_time", recovery["editor_reachability_after_timeout"])
+        self.assertEqual("request_status_summary_then_compile_gate", verdict["recommended_next_action"])
+        self.assertNotIn("settle_phase_at_timeout", recovery)
+
+    def test_offline_host_health_overrides_step_evidence_as_editor_failure(self) -> None:
+        payload = self._refresh_timeout_payload(
+            step_payload=self._unity_evidence("lost_final_accounting", operation_may_have_completed=True),
+            extra_payload_fields={"host_health_classification": "offline"},
+        )
+
+        verdict = server_summaries.build_scenario_decision_verdict(payload, {"passed", "failed"})
+
+        recovery = verdict["refresh_timeout_recovery"]
+        self.assertEqual("editor_failure", recovery["timeout_classification"])
+        self.assertEqual("host_health_classification", recovery["classification_source"])
+        self.assertEqual("offline", recovery["editor_reachability_after_timeout"])
+        self.assertEqual("recover_editor_session", recovery["recommended_next_action"])
+        self.assertEqual("recover_editor_session", verdict["recommended_next_action"])
+        self.assertIn("unproven", recovery["note"])
+        self.assertEqual(
+            ["ensure-ready", "--project-root", "/tmp/FakeProject", "--open-editor"],
+            recovery["recovery_cli_args"],
+        )
+        self.assertNotIn("compile_gate_tool", recovery)
+
+    def test_editor_relaunch_attribution_classifies_lost_final_accounting(self) -> None:
+        payload = self._refresh_timeout_payload(
+            extra_payload_fields={
+                "editor_relaunched": True,
+                "previous_editor_pid": 100,
+                "current_editor_pid": 200,
+                "bridge_generation_before": 3,
+                "bridge_generation_after": 4,
+                "cold_start_reason": "editor_process_lost",
+            }
+        )
+
+        verdict = server_summaries.build_scenario_decision_verdict(payload, {"passed", "failed"})
+
+        recovery = verdict["refresh_timeout_recovery"]
+        self.assertEqual("lost_final_accounting", recovery["timeout_classification"])
+        self.assertEqual("editor_relaunch_attribution", recovery["classification_source"])
+        self.assertEqual("request_status_summary_then_compile_gate", verdict["recommended_next_action"])
+
+    def test_applied_mutation_settle_timeout_keeps_released_action(self) -> None:
+        payload = self._refresh_timeout_payload(step_payload=self._unity_evidence("package_settle_timeout"))
+        payload["steps"].insert(
+            0,
+            {
+                "stepId": "set_profile",
+                "kind": "project_defined_hook",
+                "status": "passed",
+                "outcome": "operation_succeeded",
+                "payload_json": json.dumps({"outcome": "environment_applied"}),
+            },
+        )
+
+        verdict = server_summaries.build_scenario_decision_verdict(payload, {"passed", "failed"})
+
+        self.assertEqual("applied_mutation_settle_timeout", verdict["failure_class"])
+        self.assertEqual("verify_editor_settled_before_next_mutation", verdict["recommended_next_action"])
+        recovery = verdict["refresh_timeout_recovery"]
+        self.assertEqual("package_settle_timeout", recovery["timeout_classification"])
+        self.assertEqual("request_status_summary_then_compile_gate", recovery["recommended_next_action"])
+
+    def test_cleanup_refresh_timeout_keeps_cleanup_action(self) -> None:
+        payload = self._refresh_timeout_payload(step_payload=self._unity_evidence("package_settle_timeout"))
+        payload["steps"].insert(
+            0,
+            {"stepId": "work", "kind": "status", "status": "passed"},
+        )
+        payload["cleanup_start_index"] = 1
+
+        verdict = server_summaries.build_scenario_decision_verdict(payload, {"passed", "failed"})
+
+        self.assertEqual("cleanup", verdict["failure_class"])
+        self.assertEqual("inspect_cleanup_failure_and_restore_state", verdict["recommended_next_action"])
+        self.assertIn("refresh_timeout_recovery", verdict)
+
+    def test_non_refresh_failures_get_no_recovery_block(self) -> None:
+        payload = {
+            "project_root": "/tmp/FakeProject",
+            "run_id": "run-other-failure",
+            "scenario_name": "CompileOnly",
+            "status": "failed",
+            "terminal": True,
+            "succeeded": False,
+            "steps": [
+                {
+                    "stepId": "compile",
+                    "kind": "compile_player_scripts",
+                    "status": "failed",
+                    "error_code": "compile_player_scripts_timeout",
+                }
+            ],
+        }
+
+        verdict = server_summaries.build_scenario_decision_verdict(payload, {"passed", "failed"})
+
+        self.assertNotIn("refresh_timeout_recovery", verdict)
+        self.assertEqual(
+            "verify_editor_settled_then_retry_or_increase_timeout",
+            verdict["recommended_next_action"],
+        )
+
+    def test_explicit_recommended_next_action_is_not_overridden(self) -> None:
+        payload = self._refresh_timeout_payload(
+            step_payload=self._unity_evidence("package_settle_timeout"),
+            extra_payload_fields={"recommended_next_action": "custom_operator_action"},
+        )
+
+        verdict = server_summaries.build_scenario_decision_verdict(payload, {"passed", "failed"})
+
+        self.assertEqual("custom_operator_action", verdict["recommended_next_action"])
+        self.assertIn("refresh_timeout_recovery", verdict)
+
+    def test_result_summary_attaches_block_and_action_without_contradicting_mutation_summary(self) -> None:
+        plain = self._refresh_timeout_payload(step_payload=self._unity_evidence("package_settle_timeout"))
+        summary = server_summaries.build_scenario_result_summary(plain, {"passed", "failed"})
+        self.assertEqual("request_status_summary_then_compile_gate", summary["recommended_next_action"])
+        self.assertIn("refresh_timeout_recovery", summary)
+
+        mutated = self._refresh_timeout_payload(step_payload=self._unity_evidence("package_settle_timeout"))
+        mutated["steps"].insert(
+            0,
+            {
+                "stepId": "set_profile",
+                "kind": "project_defined_hook",
+                "status": "passed",
+                "outcome": "operation_succeeded",
+                "payload_json": json.dumps({"outcome": "environment_applied"}),
+            },
+        )
+        mutated_summary = server_summaries.build_scenario_result_summary(mutated, {"passed", "failed"})
+        self.assertIn("applied_mutation_settle_summary", mutated_summary)
+        self.assertNotIn("recommended_next_action", mutated_summary)
+
+    def test_passed_scenario_never_carries_recovery_block(self) -> None:
+        payload = self._refresh_timeout_payload(step_payload=self._unity_evidence("package_settle_timeout"))
+        payload["status"] = "passed"
+        payload["succeeded"] = True
+
+        summary = server_summaries.build_scenario_result_summary(payload, {"passed", "failed"})
+
+        self.assertNotIn("refresh_timeout_recovery", summary)
+
+
 if __name__ == "__main__":
     unittest.main()

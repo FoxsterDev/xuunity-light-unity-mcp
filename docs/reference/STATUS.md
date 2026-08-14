@@ -54,6 +54,15 @@ Migration note:
 - Current source also keeps a terminal scenario inconclusive when a confirmed
   project-hook `*_applied` mutation is followed by a refresh-settle timeout,
   while explicitly separating the applied mutation from the unproven settle.
+- Current source classifies every other scenario refresh-settle timeout from
+  Unity-side evidence captured at the timeout instant (package settle,
+  compile/import churn, busy editor, incomplete idle confirmation, or lost
+  final accounting; host health adds `editor_failure`, and older-package
+  results classify as `unclassified_legacy_payload`). The scenario summary and
+  decision verdict promote a `refresh_timeout_recovery` block with a concrete
+  recovery command and the explicit note that the Unity operation may have
+  completed; the recommended next action becomes
+  `request_status_summary_then_compile_gate` while the editor is reachable.
 - Current source adds a capability-gated uGUI PlayMode package test assembly.
   It drives the real guarded-click scenario-step path and proves exactly-once
   delivery, a decision-bearing receipt, semantic state change, the runtime

@@ -22,8 +22,8 @@ evidence, self-review notes, and post-retro risks/follow-ups.
 
 ## Current Designs
 
-See `DESIGN_PLAN_HISTORY.md` for per-doc status and the `2026-07-12` re-review
-against released `v0.3.44`.
+See `DESIGN_PLAN_HISTORY.md` for per-doc status and the `2026-08-14` Task 0
+registry-normalization re-review against current source.
 
 - `DESIGN_PLAN_HISTORY.md`
 - `XUUNITY_MCP_BALANCED_PRODUCT_PORTFOLIO_DESIGN_2026-08-14.md`

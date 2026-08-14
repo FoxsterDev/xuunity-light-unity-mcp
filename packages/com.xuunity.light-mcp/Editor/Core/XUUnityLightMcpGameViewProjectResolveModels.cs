@@ -87,7 +87,7 @@ namespace XUUnity.LightMcp.Editor.Core
         }
 
         [Serializable]
-        internal sealed class XUUnityLightMcpProjectRefreshPayload
+        internal class XUUnityLightMcpProjectRefreshPayload
         {
             public string backend_id = "xuunity.light_unity_mcp";
             public string project_root = "";
@@ -108,6 +108,20 @@ namespace XUUnity.LightMcp.Editor.Core
             public string settle_request_id = "";
             public string settle_phase = "";
             public string validation_evidence = "unity_mcp";
+        }
+
+        [Serializable]
+        internal sealed class XUUnityLightMcpProjectRefreshTimeoutPayload : XUUnityLightMcpProjectRefreshPayload
+        {
+            public bool settle_timed_out;
+            public string settle_timeout_classification = "";
+            public string settle_phase_at_timeout = "";
+            public bool refresh_settle_pending_at_timeout;
+            public bool editor_is_compiling_at_timeout;
+            public bool editor_is_updating_at_timeout;
+            public string playmode_state_at_timeout = "";
+            public int stable_idle_ticks_at_timeout;
+            public bool operation_may_have_completed;
         }
 
         [Serializable]

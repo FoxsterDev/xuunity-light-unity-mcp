@@ -282,6 +282,19 @@ Pass criteria:
   `trust_class=mutation_applied_unsettled`, and
   `applied_mutation_settle_summary`. Treat the mutation as applied and the
   settle as unproven; verify the editor is settled before the next mutation.
+- any other scenario whose first failure is a `project_refresh` step with
+  `project_refresh_timeout` carries a `refresh_timeout_recovery` block. It
+  classifies the timeout from Unity-side settle evidence captured at the
+  timeout instant (`package_settle_timeout`, `compile_import_churn_timeout`,
+  `editor_busy_timeout`, `idle_confirmation_incomplete`,
+  `lost_final_accounting`), from host health (`editor_failure` when the editor
+  is unreachable), or reports `unclassified_legacy_payload` for results written
+  by an older package. Unless the editor is unreachable, the verdict-level
+  `recommended_next_action` becomes `request_status_summary_then_compile_gate`
+  with a concrete `recovery_cli_args` command and a note that the Unity
+  operation may have completed even though the waiter timed out; do not retry
+  blind. When the editor is unreachable the action is
+  `recover_editor_session` with an `ensure-ready` recovery command.
 
 ### 4a. Filtered Test Zero-Match Recovery
 

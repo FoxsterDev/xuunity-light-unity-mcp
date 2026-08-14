@@ -45,7 +45,7 @@ Updated: `2026-05-15`
 | Generic profile mutation scenario template | Implemented | `templates/scenarios/profile_mutation_probe_template.json` uses placeholder project actions and cleanup steps |
 | Consumer profile restore scenario/shortcut | Implemented in one consumer overlay | Verified through a host-local scenario and wrapper shortcut outside public `AIRoot` |
 | Hardened consumer profile timing probe | Implemented in one consumer overlay | Uses target switch, settle, compile gate, `assert_scene`, Play Mode probe, restore, settle, and compile closeout |
-| `project_refresh_timeout` guidance | Not implemented | Timeout message and payload still need richer recovery guidance |
+| `project_refresh_timeout` guidance | Implemented (2026-08-14) | Scenario refresh timeouts carry Unity-side settle evidence captured at the timeout instant plus a host-side `refresh_timeout_recovery` block: classification (package settle / compile-import churn / busy editor / incomplete idle confirmation / lost final accounting / `editor_failure` from host health / `unclassified_legacy_payload` for older-package results), `recommended_next_action=request_status_summary_then_compile_gate` while the editor is reachable, a concrete recovery command, and the explicit "operation may have completed" note. Host contract tests plus live fault injection on Unity `2022.3` (current-source package, evidence-backed classification) and a Unity `6000.0` consumer (released package, legacy classification) passed. |
 | Profile mutation closeout reminder in summaries | Implemented | `server_summaries.py` adds `profile_mutation_summary` and restore recommendations |
 | Compact console query | Implemented | `unity.console.grep`, `request-console-grep`, `unity_console_grep`, and `console_grep` scenario steps are available |
 | Compact loading timing helper | Implemented | `unity_loading_timing` and `request-loading-timing` summarize loading/startup timing evidence through `unity.console.grep` |
@@ -70,10 +70,12 @@ profile-flow work:
   assertion primitive.
 - Profile or environment mutation scenarios depend on authors remembering the
   correct settle, compile, smoke, and restore sequence.
-- `project_refresh_timeout` does not currently guide the operator toward the
-  next safe evidence step when the editor later appears healthy.
 - Scenario summaries do not automatically warn that a profile or environment
   mutation still needs restoration or explicit closeout evidence.
+
+The former `project_refresh_timeout` gap is closed: the timeout payload now
+carries settle evidence and the summaries guide the operator to the status
+summary plus compile gate when the editor is reachable.
 
 ## Required Core Additions
 

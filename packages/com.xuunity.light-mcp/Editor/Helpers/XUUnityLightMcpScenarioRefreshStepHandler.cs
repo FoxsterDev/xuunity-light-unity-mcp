@@ -96,8 +96,92 @@ namespace XUUnity.LightMcp.Editor.Helpers
             stepResult.status = "failed";
             stepResult.error_code = "project_refresh_timeout";
             stepResult.error_message = "Timed out waiting for project refresh to settle.";
+            stepResult.payload_json = BuildRefreshTimeoutPayloadJson(stepResult.payload_json, state.pendingNestedStableTickCount);
             ClearPendingNestedOperation(state);
             return true;
+        }
+
+        public static string ClassifyRefreshSettleTimeout(bool isCompiling, bool isUpdating, bool settlePending, string settlePhase)
+        {
+            if (isCompiling || isUpdating)
+            {
+                return "compile_import_churn_timeout";
+            }
+
+            if (settlePending)
+            {
+                if (string.Equals(settlePhase, "waiting_for_package_settle", StringComparison.Ordinal))
+                {
+                    return "package_settle_timeout";
+                }
+
+                if (string.Equals(settlePhase, "waiting_for_stable_idle_ticks", StringComparison.Ordinal))
+                {
+                    return "idle_confirmation_incomplete";
+                }
+
+                return "editor_busy_timeout";
+            }
+
+            return "lost_final_accounting";
+        }
+
+        public static string BuildRefreshTimeoutPayloadJson(string existingPayloadJson, int stableIdleTicks)
+        {
+            return BuildRefreshTimeoutPayloadJson(
+                existingPayloadJson,
+                EditorApplication.isCompiling,
+                EditorApplication.isUpdating,
+                XUUnityLightMcpBridgeRuntimeState.RefreshSettlePending,
+                XUUnityLightMcpBridgeRuntimeState.RefreshSettlePhase,
+                XUUnityLightMcpPlayModeStateOperation.ResolvePlayModeState(),
+                stableIdleTicks,
+                XUUnityLightMcpBridgeRuntimeState.RefreshSettleRequestId);
+        }
+
+        public static string BuildRefreshTimeoutPayloadJson(
+            string existingPayloadJson,
+            bool isCompiling,
+            bool isUpdating,
+            bool settlePending,
+            string settlePhase,
+            string playmodeState,
+            int stableIdleTicks,
+            string settleRequestId)
+        {
+            XUUnityLightMcpProjectRefreshTimeoutPayload payload = null;
+            if (!string.IsNullOrWhiteSpace(existingPayloadJson))
+            {
+                try
+                {
+                    payload = JsonUtility.FromJson<XUUnityLightMcpProjectRefreshTimeoutPayload>(existingPayloadJson);
+                }
+                catch (Exception)
+                {
+                    payload = null;
+                }
+            }
+
+            payload = payload ?? new XUUnityLightMcpProjectRefreshTimeoutPayload();
+
+            var normalizedPhase = settlePhase ?? "";
+            var classification = ClassifyRefreshSettleTimeout(isCompiling, isUpdating, settlePending, normalizedPhase);
+            payload.settle_timed_out = true;
+            payload.settle_timeout_classification = classification;
+            payload.settle_phase_at_timeout = normalizedPhase;
+            payload.refresh_settle_pending_at_timeout = settlePending;
+            payload.editor_is_compiling_at_timeout = isCompiling;
+            payload.editor_is_updating_at_timeout = isUpdating;
+            payload.playmode_state_at_timeout = playmodeState ?? "";
+            payload.stable_idle_ticks_at_timeout = stableIdleTicks;
+            payload.operation_may_have_completed = classification == "lost_final_accounting" || classification == "idle_confirmation_incomplete";
+            payload.settle_phase = normalizedPhase;
+            if (string.IsNullOrWhiteSpace(payload.settle_request_id))
+            {
+                payload.settle_request_id = settleRequestId ?? "";
+            }
+
+            return JsonUtility.ToJson(payload);
         }
 
         public static string BuildProjectRefreshArgsJson(XUUnityLightMcpScenarioStepDefinition step)

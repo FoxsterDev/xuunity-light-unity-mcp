@@ -1,7 +1,7 @@
 # XUUnity Light Unity MCP Public Retro Registry
 
 Status: active public registry
-Last triage: 2026-08-11 (re-evaluated against released source line `v0.3.56`, current `master` at `487b07e`, and the UTC parser consolidation slice)
+Last triage: 2026-08-14 (re-evaluated against released source line `v0.3.56` and current `master` at `b13cb69`, which commits the test-result accounting slice and the balanced product portfolio design)
 Current released source line: `v0.3.56`
 
 Update this file whenever a public-safe MCP retro is added, moved, renamed, or
@@ -53,6 +53,21 @@ host-local registry.
   passed; the Unity 6000 package-test filter's zero-match is a consumer discovery gap, not package-test evidence.
 - SDK GUI/batch/portfolio orchestration remains the highest broad P1 backlog; it is still too large for one safe
   vertical slice. Token-efficiency and live Windows/Linux proof remain P2.
+- Task 0 registry normalization (same day, later): the slice above is now committed at `b13cb69`. The design-plan
+  history was reconciled against current source: the two SDK rows no longer list `sdk.package_restore` as unbuilt
+  (complete and fail-closed, host tests `5/5`), the enterprise readiness row records the locally closed B5
+  runtime-interaction proof, the read-only UI-primitives rows reflect the uGUI/TMP read surface shipped 2026-07-30,
+  and test-result accounting is removed from the open-priority summary. No active retro row changed status.
+- Portfolio slice S1 (same day, later): scenario refresh-settle timeouts now carry Unity-side settle
+  evidence captured at the timeout instant and a host-side `refresh_timeout_recovery` block that classifies the
+  timeout (package settle, compile/import churn, busy editor, incomplete idle confirmation, lost final accounting,
+  `editor_failure` from host health, or `unclassified_legacy_payload` for older-package results), names a concrete
+  recovery command, and states that the operation may have completed; the verdict-level action becomes
+  `request_status_summary_then_compile_gate` while the editor is reachable. Host suite `832` passed with 13 expected
+  platform skips; live fault injection passed on a Unity `2022.3` development-system lane (current-source package,
+  EditMode `75/75`, PlayMode `18` passed with one expected skip) and on a Unity `6000.0` real-consumer editor running
+  the released `v0.3.56` package (legacy classification with guidance intact). Released applied-mutation and cleanup
+  verdict actions are unchanged.
 
 ## Re-Evaluation 2026-08-08
 
