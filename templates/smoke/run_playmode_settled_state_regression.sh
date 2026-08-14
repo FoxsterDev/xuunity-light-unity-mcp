@@ -164,19 +164,37 @@ PY
   --poll-interval-ms "$POLL_INTERVAL_MS" \
   --include-full-payload >"$TMP_DIR/scenario.json" || fail_step "scenario_playmode_request"
 
-python3 - "$TMP_DIR/direct.json" "$TMP_DIR/scenario.json" <<'PY'
+python3 - "$TMP_DIR/direct.json" "$TMP_DIR/scenario.json" "$PROJECT_ROOT" <<'PY'
 import json
 import sys
 from pathlib import Path
 
 direct = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
 scenario = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
+project_root = Path(sys.argv[3])
 
 if direct.get("status") != "ok":
     raise SystemExit("direct request did not complete with status=ok")
 
 direct_payload = json.loads(direct.get("payload_json") or "{}")
 direct_state = str(direct_payload.get("playmode_state_after_settle") or "")
+direct_request_id = str(direct.get("request_id") or "")
+if not direct_request_id:
+    raise SystemExit("direct response is missing request_id")
+
+persisted_path = (
+    project_root
+    / "Library"
+    / "XUUnityLightMcp"
+    / "state"
+    / "test_results"
+    / f"{direct_request_id}.json"
+)
+if not persisted_path.is_file():
+    raise SystemExit(f"persisted test result is missing for request_id={direct_request_id}")
+persisted = json.loads(persisted_path.read_text(encoding="utf-8-sig"))
+if str(persisted.get("request_id") or "") != direct_request_id:
+    raise SystemExit("persisted test result request_id does not match direct response")
 
 if str(scenario.get("status") or scenario.get("terminal_status") or "") != "passed":
     raise SystemExit("scenario run did not finish with status=passed")
@@ -198,9 +216,44 @@ if scenario_state != "edit":
 if direct_state != scenario_state:
     raise SystemExit(f"settled state mismatch between direct and scenario responses: direct='{direct_state}', scenario='{scenario_state}'")
 
+persisted_state = str(persisted.get("playmode_state_after_settle") or "")
+if persisted_state != direct_state:
+    raise SystemExit(
+        "settled state mismatch between direct response and persisted result: "
+        f"direct='{direct_state}', persisted='{persisted_state}'"
+    )
+
+for field in (
+    "playmode_state_after_test_callbacks",
+    "playmode_state_after_host_settle",
+    "playmode_state_after_settle_source",
+    "playmode_state_accounting_consistent",
+    "playmode_state_after_settle_trust_class",
+    "lifecycle_churn_observed",
+):
+    if field not in direct_payload or field not in persisted:
+        raise SystemExit(f"required accounting field is missing from direct or persisted result: {field}")
+    if direct_payload.get(field) != persisted.get(field):
+        raise SystemExit(
+            f"accounting field mismatch for {field}: "
+            f"direct={direct_payload.get(field)!r}, persisted={persisted.get(field)!r}"
+        )
+
+if str(direct_payload.get("playmode_state_after_host_settle") or "") != "edit":
+    raise SystemExit("direct response did not preserve host-settled Edit Mode evidence")
+if str(direct_payload.get("playmode_state_after_settle_source") or "") != "idle_wait_after":
+    raise SystemExit("direct response did not source the compatibility field from idle_wait_after")
+if str(direct_payload.get("persisted_test_result_reconciliation") or "") != "reconciled":
+    raise SystemExit("direct response did not confirm persisted test-result reconciliation")
+
 summary = {
+    "request_id": direct_request_id,
     "direct_status": direct_payload.get("status"),
     "direct_settled_state": direct_state,
+    "persisted_settled_state": persisted_state,
+    "callback_state": direct_payload.get("playmode_state_after_test_callbacks"),
+    "accounting_consistent": direct_payload.get("playmode_state_accounting_consistent"),
+    "lifecycle_churn_observed": direct_payload.get("lifecycle_churn_observed"),
     "scenario_status": scenario.get("status"),
     "scenario_step_status": playmode_step.get("status"),
     "scenario_settled_state": scenario_state,
@@ -212,4 +265,4 @@ PY
   --project-root "$PROJECT_ROOT" \
   --timeout-ms 15000 >"$TMP_DIR/final_status.json" || fail_step "final_status"
 
-echo "[pass] playmode-settled-state direct=scenario=edit"
+echo "[pass] playmode-settled-state direct=persisted=scenario=edit"

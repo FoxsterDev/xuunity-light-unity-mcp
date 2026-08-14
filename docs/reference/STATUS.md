@@ -42,6 +42,12 @@ Migration note:
 - `v0.3.34+` makes refresh, compile, build-config compile, and direct test MCP
   responses compact by default while preserving authoritative post-settle
   verdict fields and `includeFullPayload=true` recovery.
+- Current source preserves both callback-time and host-idle Play Mode states on
+  direct test responses and their matching persisted test result. The
+  compatibility field names its source; a disagreement is explicit and never
+  changes the callback-derived test verdict or totals. Full and compact
+  final-status recovery preserve the same fields, including explicit legacy
+  source labeling and lifecycle-churn accounting.
 - Current source qualifies refresh `playmode_state_after_settle` with explicit
   source/trust metadata; bridge identity churn yields `stale_risk` and directs
   PlayMode-sensitive callers to confirm via `unity_playmode_state`.

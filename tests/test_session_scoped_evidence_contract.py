@@ -32,7 +32,9 @@ for candidate in (TEMPLATES_DIR, RUNNER_DIR):
         sys.path.insert(0, str(candidate))
 
 import run_multi_project
+import server_batch_orchestrator
 import server_bridge_payloads
+import server_core
 import server_editor_host_paths  # noqa: E402
 import server_health
 import server_specs
@@ -1084,6 +1086,113 @@ class PostSettleCompileTrustTests(unittest.TestCase):
         )
 
         self.assertEqual("confirmed", payload["post_settle_compile_trust_class"])
+
+    def test_test_result_accounting_preserves_callback_state_and_marks_host_settle_difference(self) -> None:
+        payload = server_bridge_payloads.normalize_tests_payload_from_lifecycle(
+            {
+                "status": "passed",
+                "playmode_state_after_settle": "playing",
+                "playmode_state_after_test_callbacks": "playing",
+                "playmode_state_after_settle_source": "unity_test_callbacks",
+            },
+            {
+                "operation": "unity.tests.run_playmode",
+                "idle_wait_after": {
+                    "is_compiling": False,
+                    "is_updating": False,
+                    "is_playing": False,
+                    "playmode_state": "edit",
+                    "compiler_error_count": 0,
+                    "script_compilation_failed": False,
+                    "recent_compiler_diagnostics": [],
+                },
+            },
+        )
+
+        self.assertEqual("playing", payload["playmode_state_after_test_callbacks"])
+        self.assertEqual("edit", payload["playmode_state_after_host_settle"])
+        self.assertEqual("edit", payload["playmode_state_after_settle"])
+        self.assertEqual("idle_wait_after", payload["playmode_state_after_settle_source"])
+        self.assertFalse(payload["playmode_state_accounting_consistent"])
+        self.assertIn("callbacks reported 'playing'", payload["playmode_state_accounting_note"])
+        self.assertEqual("confirmed", payload["playmode_state_after_settle_trust_class"])
+
+    def test_host_reconciles_written_test_result_without_changing_test_totals(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            project_root = Path(temp_dir)
+            request_id = "test-accounting"
+            result_path = (
+                project_root
+                / "Library"
+                / "XUUnityLightMcp"
+                / "state"
+                / "test_results"
+                / f"{request_id}.json"
+            )
+            server_core.write_json(
+                result_path,
+                {
+                    "request_id": request_id,
+                    "response_handoff_state": "written",
+                    "total": 4,
+                    "passed": 4,
+                    "failed": 0,
+                    "playmode_state_after_settle": "playing",
+                    "playmode_state_after_test_callbacks": "playing",
+                },
+            )
+            payload = server_bridge_payloads.normalize_tests_payload_from_lifecycle(
+                {
+                    "status": "passed",
+                    "playmode_state_after_settle": "playing",
+                    "playmode_state_after_test_callbacks": "playing",
+                },
+                {
+                    "operation": "unity.tests.run_playmode",
+                    "bridge_identity_transition": {
+                        "previous_bridge_generation": 4,
+                        "current_bridge_generation": 5,
+                        "reclassified_status": "settled_after_lifecycle_reset",
+                    },
+                    "idle_wait_after": {
+                        "is_compiling": False,
+                        "is_updating": False,
+                        "is_playing": False,
+                        "playmode_state": "edit",
+                        "compiler_error_count": 0,
+                        "script_compilation_failed": False,
+                        "recent_compiler_diagnostics": [],
+                    },
+                },
+            )
+
+            outcome = server_batch_orchestrator.reconcile_persisted_test_result_after_lifecycle(
+                project_root,
+                request_id,
+                "unity.tests.run_playmode",
+                payload,
+                wait_timeout_seconds=0,
+            )
+            persisted = server_core.read_json(result_path)
+
+        self.assertEqual("reconciled", outcome)
+        self.assertEqual(4, persisted["total"])
+        self.assertEqual(4, persisted["passed"])
+        self.assertEqual("playing", persisted["playmode_state_after_test_callbacks"])
+        self.assertEqual("edit", persisted["playmode_state_after_host_settle"])
+        self.assertEqual("edit", persisted["playmode_state_after_settle"])
+        self.assertEqual("idle_wait_after", persisted["playmode_state_after_settle_source"])
+        self.assertFalse(persisted["playmode_state_accounting_consistent"])
+        self.assertTrue(payload["lifecycle_churn_observed"])
+        self.assertTrue(persisted["lifecycle_churn_observed"])
+        self.assertEqual("stale_risk", payload["playmode_state_after_settle_trust_class"])
+        self.assertEqual("stale_risk", persisted["playmode_state_after_settle_trust_class"])
+        self.assertIn("bridge identity changed", persisted["playmode_state_after_settle_note"])
+
+        compact = server_bridge_payloads.compact_operation_payload(payload, "unity.tests.run_playmode")
+        self.assertEqual("playing", compact["playmode_state_after_test_callbacks"])
+        self.assertEqual("edit", compact["playmode_state_after_host_settle"])
+        self.assertEqual("stale_risk", compact["playmode_state_after_settle_trust_class"])
 
     def test_the_trust_class_survives_the_compact_envelope(self) -> None:
         payload = self._refresh("playing", is_playing=True)

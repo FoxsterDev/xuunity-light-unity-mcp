@@ -39,6 +39,21 @@ host-local registry.
   slice. The token-efficiency and live Windows/Linux proof tails remain P2. No private/project-specific backlog
   was promoted.
 
+## Re-Evaluation 2026-08-14
+
+- `master` and `origin/master` align at `29b3484`; the latest release remains `v0.3.56` at `487b07e` before this
+  uncommitted grooming slice. The decision-verdict, authoritative post-settle, UI/path, infrastructure
+  classification, and structural compile-diagnostic clusters remain closed.
+- The previously partial test-result-accounting design is now implemented and Unity-validated in current source:
+  direct test payloads retain callback-time and host-idle Play Mode observations, disclose source and disagreement,
+  and atomically reconcile the matching written persisted test result. Test verdicts and callback-derived totals
+  remain unchanged. Full/compact recovery summaries preserve the same fields, legacy artifacts are source-labeled,
+  lifecycle churn is consistent with the settled-state trust class, and automated smoke compares the matching
+  persisted result. Focused host, Unity 2022 local-package, and Unity 6000 consumer compile/scenario smoke evidence
+  passed; the Unity 6000 package-test filter's zero-match is a consumer discovery gap, not package-test evidence.
+- SDK GUI/batch/portfolio orchestration remains the highest broad P1 backlog; it is still too large for one safe
+  vertical slice. Token-efficiency and live Windows/Linux proof remain P2.
+
 ## Re-Evaluation 2026-08-08
 
 - `master`, `origin/master`, and release `v0.3.56` were checked through current

@@ -54,6 +54,19 @@ class SmokePayloadContractTests(unittest.TestCase):
         ]:
             self._assert_block_has_full_payload(filename, start, end)
 
+    def test_playmode_settled_state_smoke_compares_the_matching_persisted_result(self) -> None:
+        text = (SMOKE_DIR / "run_playmode_settled_state_regression.sh").read_text(encoding="utf-8")
+
+        self.assertIn('direct_request_id = str(direct.get("request_id") or "")', text)
+        self.assertIn('/ "test_results"', text)
+        self.assertIn('persisted_state != direct_state', text)
+        self.assertIn('"playmode_state_after_test_callbacks"', text)
+        self.assertIn('"playmode_state_after_host_settle"', text)
+        self.assertIn('"playmode_state_after_settle_source"', text)
+        self.assertIn('"playmode_state_accounting_consistent"', text)
+        self.assertIn('"lifecycle_churn_observed"', text)
+        self.assertIn('persisted_test_result_reconciliation', text)
+
     def test_post_change_validation_emits_durable_phase_lines(self) -> None:
         text = (SMOKE_DIR / "run_post_change_validation.sh").read_text(encoding="utf-8")
         for phase in [

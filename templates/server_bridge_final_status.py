@@ -26,6 +26,43 @@ from server_bridge_state import (
 from server_core import ToolInvocationError, read_json, render_launcher_cli
 from server_operation_evidence import attach_operation_evidence_to_final_status
 
+
+TEST_PLAYMODE_ACCOUNTING_FIELDS = (
+    "playmode_state_after_settle",
+    "playmode_state_after_test_callbacks",
+    "playmode_state_after_host_settle",
+    "playmode_state_after_settle_source",
+    "playmode_state_accounting_consistent",
+    "playmode_state_accounting_note",
+    "playmode_state_after_settle_trust_class",
+    "playmode_state_after_settle_note",
+    "playmode_state_after_settle_recommended_next_action",
+    "persisted_test_result_reconciliation",
+)
+
+
+def _test_playmode_accounting_summary(
+    source_payload: dict[str, Any] | None,
+    *,
+    source: str,
+) -> dict[str, Any]:
+    if not isinstance(source_payload, dict):
+        return {}
+
+    summary = {
+        field: source_payload[field]
+        for field in TEST_PLAYMODE_ACCOUNTING_FIELDS
+        if field in source_payload
+    }
+    if (
+        source == "persisted_test_result"
+        and "playmode_state_after_settle" in source_payload
+        and not source_payload.get("playmode_state_after_settle_source")
+    ):
+        summary["playmode_state_after_settle_source"] = "legacy_persisted_result"
+    return summary
+
+
 def derive_editor_running_from_state(state: dict[str, Any] | None) -> bool:
     """Whether the state's own editor is alive, when the caller did not say.
 
@@ -316,6 +353,8 @@ def build_compact_final_status_projection(final_status: dict[str, Any]) -> dict[
             "filter_requested",
             "filter_summary",
             "recommended_recovery_command",
+            "lifecycle_churn_observed",
+            *TEST_PLAYMODE_ACCOUNTING_FIELDS,
         ):
             if key in final_status:
                 compact[key] = final_status.get(key)
@@ -932,7 +971,7 @@ def build_test_verdict_summary(
         else str((source_payload or {}).get("recommended_recovery_command") or "")
     )
 
-    return {
+    summary = {
         "result_payload_available": source_payload is not None,
         "result_payload_source": source,
         "result_payload_reason": reason,
@@ -964,6 +1003,8 @@ def build_test_verdict_summary(
         "recommended_recovery_command": recommended_recovery_command,
         "result_trust_class": trust_class,
     }
+    summary.update(_test_playmode_accounting_summary(source_payload, source=source))
+    return summary
 
 
 def _test_filter_was_requested(payload: dict[str, Any] | None) -> bool:

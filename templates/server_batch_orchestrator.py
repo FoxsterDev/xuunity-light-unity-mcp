@@ -105,6 +105,7 @@ from server_bridge_runtime import (
     wait_for_editor_idle,
     wait_for_playmode_state,
 )
+from server_bridge_paths import test_result_path
 from server_editor_host import (
     activate_unity_editor,
     bridge_state_is_ready,
@@ -1048,6 +1049,65 @@ def normalize_response_payload_from_lifecycle(response: dict[str, Any], lifecycl
     )
 
 
+def reconcile_persisted_test_result_after_lifecycle(
+    project_root: Path,
+    request_id: str,
+    operation: str,
+    payload: dict[str, Any],
+    *,
+    wait_timeout_seconds: float = 1.0,
+) -> str:
+    """Apply the host's post-idle test-state accounting to the matching durable result.
+
+    Unity owns callback-time test totals and state, while the host owns the later idle observation.
+    The editor marks its result `written` only after it has finished publishing, so waiting for that
+    state avoids racing an older package's final result write. A missing or still-pending artifact is
+    non-fatal: the direct response retains the explicit provenance fields either way.
+    """
+
+    if operation not in {"unity.tests.run_playmode", "unity.tests.run_editmode"} or not request_id:
+        return "not_applicable"
+
+    result_path = test_result_path(project_root, request_id)
+    deadline = time.monotonic() + max(0.0, wait_timeout_seconds)
+    persisted: dict[str, Any] | None = None
+    while True:
+        try:
+            candidate = read_json(result_path)
+        except (OSError, ValueError):
+            candidate = None
+        if isinstance(candidate, dict) and str(candidate.get("request_id") or "") == request_id:
+            if str(candidate.get("response_handoff_state") or "") == "written":
+                persisted = candidate
+                break
+        if time.monotonic() >= deadline:
+            return "pending_or_unavailable"
+        time.sleep(0.05)
+
+    for field in (
+        "playmode_state_after_settle",
+        "playmode_state_after_test_callbacks",
+        "playmode_state_after_host_settle",
+        "playmode_state_after_settle_source",
+        "playmode_state_accounting_consistent",
+        "playmode_state_accounting_note",
+        "playmode_state_after_settle_trust_class",
+        "playmode_state_after_settle_note",
+        "playmode_state_after_settle_recommended_next_action",
+        "lifecycle_churn_observed",
+    ):
+        if field in payload:
+            persisted[field] = payload[field]
+        else:
+            persisted.pop(field, None)
+
+    try:
+        write_json(result_path, persisted)
+    except OSError:
+        return "write_failed"
+    return "reconciled"
+
+
 def resolve_operation_timeout_ms(
     project_root: Path,
     operation: str,
@@ -1252,6 +1312,14 @@ def invoke_bridge(project_root_value: str, operation: str, args: dict[str, Any],
                         except json.JSONDecodeError:
                             parsed_payload = None
                         if isinstance(parsed_payload, dict):
+                            reconciliation = reconcile_persisted_test_result_after_lifecycle(
+                                project_root,
+                                request_id,
+                                operation,
+                                parsed_payload,
+                            )
+                            if reconciliation != "not_applicable":
+                                parsed_payload["persisted_test_result_reconciliation"] = reconciliation
                             journal_events = read_request_journal_events(project_root, request_id)
                             response["payload_json"] = json.dumps(
                                 attach_operation_evidence_to_payload(

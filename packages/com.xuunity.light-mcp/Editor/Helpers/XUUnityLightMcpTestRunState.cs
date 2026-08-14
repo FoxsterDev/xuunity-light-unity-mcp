@@ -188,7 +188,12 @@ namespace XUUnity.LightMcp.Editor.Helpers
                     ? "settled_after_timeout"
                     : "completed";
                 state.completion_basis = completionBasis ?? "";
-                state.playmode_state_after_settle = playmodeStateAfterSettle ?? "";
+                state.playmode_state_after_test_callbacks = playmodeStateAfterSettle ?? "";
+                state.playmode_state_after_host_settle = "";
+                state.playmode_state_after_settle = state.playmode_state_after_test_callbacks;
+                state.playmode_state_after_settle_source = "unity_test_callbacks";
+                state.playmode_state_accounting_consistent = true;
+                state.playmode_state_accounting_note = "";
                 state.status = ResolveStatus(state);
                 state.test_verdict = state.status;
                 state.recommended_next_action = ResolveRecommendedNextAction(state);
@@ -321,6 +326,11 @@ namespace XUUnity.LightMcp.Editor.Helpers
                 completed_at_utc = state.completed_at_utc ?? "",
                 completion_basis = state.completion_basis ?? "",
                 playmode_state_after_settle = state.playmode_state_after_settle ?? "",
+                playmode_state_after_test_callbacks = state.playmode_state_after_test_callbacks ?? "",
+                playmode_state_after_host_settle = state.playmode_state_after_host_settle ?? "",
+                playmode_state_after_settle_source = state.playmode_state_after_settle_source ?? "",
+                playmode_state_accounting_consistent = state.playmode_state_accounting_consistent,
+                playmode_state_accounting_note = state.playmode_state_accounting_note ?? "",
                 run_phase = state.run_phase ?? "",
                 last_progress_at_utc = state.last_progress_at_utc ?? "",
                 timeout_classification = state.timeout_classification ?? "",

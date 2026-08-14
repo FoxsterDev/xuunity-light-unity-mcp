@@ -4,6 +4,14 @@
 
 ### Fixed
 
+- Direct EditMode and PlayMode test responses no longer silently overwrite the
+  callback-time Play Mode state with the host's post-idle observation. They now
+  retain both observations, identify the source used by the compatibility field,
+  flag a disagreement without changing test totals or verdicts, and reconcile
+  the matching persisted test-result artifact after Unity has finished writing it.
+  Final-status recovery retains the same provenance, legacy artifacts receive an
+  explicit source label, and lifecycle churn cannot contradict the settled-state
+  trust class.
 - Consolidated the host-side UTC timestamp parser used by bridge heartbeat, journal, scenario polling, operation
   evidence, and Editor.log health paths. Every consumer now shares the timezone- and DST-independent conversion
   while retaining its existing invalid/empty timestamp contract.

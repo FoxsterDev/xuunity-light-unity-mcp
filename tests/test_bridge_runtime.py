@@ -1378,6 +1378,84 @@ class BridgeRuntimeTests(unittest.TestCase):
         self.assertEqual("unity_completed_confirmed", summary["result_trust_class"])
         self.assertEqual("none", summary["recommended_next_action"])
 
+    def test_persisted_test_result_provenance_survives_full_and_compact_final_status(self) -> None:
+        summary = server_bridge_runtime.build_test_verdict_summary(
+            project_root=Path("/tmp/FakeProject"),
+            request_id="req-playmode-accounting",
+            operation="unity.tests.run_playmode",
+            response_payload=None,
+            persisted_test_result={
+                "run_phase": "response_written",
+                "completed_at_utc": "2026-08-14T10:00:02Z",
+                "total": 1,
+                "passed": 1,
+                "failed": 0,
+                "skipped": 0,
+                "playmode_state_after_settle": "edit",
+                "playmode_state_after_test_callbacks": "playing",
+                "playmode_state_after_host_settle": "edit",
+                "playmode_state_after_settle_source": "idle_wait_after",
+                "playmode_state_accounting_consistent": False,
+                "playmode_state_accounting_note": "callback-time and host-idle state differ",
+                "playmode_state_after_settle_trust_class": "stale_risk",
+                "playmode_state_after_settle_note": "bridge identity changed during post-test settle",
+                "playmode_state_after_settle_recommended_next_action": "confirm_via_unity_playmode_state",
+                "lifecycle_churn_observed": True,
+            },
+            request_submitted=True,
+            request_started=True,
+            request_completed=True,
+            completion_status="ok",
+            operation_outcome="completed_ok",
+            active_state={"playmode_state": "edit"},
+            bridge_changed_since_submission=True,
+        )
+
+        self.assertEqual("persisted_test_result", summary["result_payload_source"])
+        self.assertEqual("edit", summary["playmode_state_after_settle"])
+        self.assertEqual("playing", summary["playmode_state_after_test_callbacks"])
+        self.assertEqual("edit", summary["playmode_state_after_host_settle"])
+        self.assertEqual("idle_wait_after", summary["playmode_state_after_settle_source"])
+        self.assertFalse(summary["playmode_state_accounting_consistent"])
+        self.assertEqual("stale_risk", summary["playmode_state_after_settle_trust_class"])
+        self.assertTrue(summary["lifecycle_churn_observed"])
+
+        final_status = {"operation": "unity.tests.run_playmode", **summary}
+        compact = server_bridge_final_status.build_compact_final_status_projection(final_status)
+        self.assertEqual("edit", compact["playmode_state_after_settle"])
+        self.assertEqual("playing", compact["playmode_state_after_test_callbacks"])
+        self.assertEqual("idle_wait_after", compact["playmode_state_after_settle_source"])
+        self.assertFalse(compact["playmode_state_accounting_consistent"])
+        self.assertEqual("stale_risk", compact["playmode_state_after_settle_trust_class"])
+        self.assertTrue(compact["lifecycle_churn_observed"])
+
+    def test_legacy_persisted_test_result_gets_explicit_source(self) -> None:
+        summary = server_bridge_runtime.build_test_verdict_summary(
+            project_root=Path("/tmp/FakeProject"),
+            request_id="req-legacy-playmode-accounting",
+            operation="unity.tests.run_playmode",
+            response_payload=None,
+            persisted_test_result={
+                "run_phase": "response_written",
+                "completed_at_utc": "2026-08-14T10:00:02Z",
+                "total": 1,
+                "passed": 1,
+                "playmode_state_after_settle": "playing",
+            },
+            request_submitted=True,
+            request_started=True,
+            request_completed=True,
+            completion_status="ok",
+            operation_outcome="completed_ok",
+            active_state=None,
+            bridge_changed_since_submission=False,
+        )
+
+        self.assertEqual("playing", summary["playmode_state_after_settle"])
+        self.assertEqual("legacy_persisted_result", summary["playmode_state_after_settle_source"])
+        self.assertNotIn("playmode_state_after_host_settle", summary)
+        self.assertNotIn("playmode_state_accounting_consistent", summary)
+
     def test_direct_filtered_zero_match_exposes_compact_validation_counts(self) -> None:
         project_root = Path("/tmp/Project With Spaces")
         payload = server_operation_evidence.attach_operation_evidence_to_payload(

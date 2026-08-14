@@ -1,9 +1,9 @@
 # XUUnity MCP Test Result Accounting Consistency Design
 
 Date: `2026-05-16`
-Status: `backlog design note, reviewed against current source`
+Status: `implemented and Unity validated in current source`
 
-Last source review: `2026-05-16`
+Last source review: `2026-08-14`
 
 ## Purpose
 
@@ -14,6 +14,42 @@ The issue does not currently invalidate test pass/fail verdicts. It affects
 operator trust in secondary state accounting, specifically the value reported
 for `playmode_state_after_settle` when comparing the direct response payload
 with the persisted compact test-result artifact.
+
+## Implementation Closeout (2026-08-14)
+
+The source now preserves the Unity Test Runner callback-time observation as
+`playmode_state_after_test_callbacks`, records the host's later idle observation
+as `playmode_state_after_host_settle`, and keeps the backward-compatible
+`playmode_state_after_settle` with an explicit source. A disagreement is marked
+by `playmode_state_accounting_consistent: false` and a short note; it never
+changes callback-derived test totals, failures, or the test verdict.
+
+After the editor publishes the completed result, the host waits for its
+`response_handoff_state: written` marker and atomically reconciles the matching
+persisted result with the host-settled fields. If the result is still pending or
+unavailable, the direct response says so rather than claiming artifact parity.
+The compact envelope retains the provenance, disagreement, and reconciliation
+fields. Full and compact final-status recovery retain the same accounting fields.
+Old artifacts remain readable and are explicitly source-labeled
+`legacy_persisted_result` without inventing host-settled evidence. A bridge
+identity transition marks both lifecycle churn and the settled-state trust risk.
+The settled-state regression now compares the direct response with its matching
+persisted result as well as the scenario result.
+
+Validation closeout: focused host regression passed; a Unity 2022 consumer ran
+the local package's EditMode `69/69` and PlayMode `19` tests with the real
+callback-time `playing` versus host-idle `edit` mismatch reconciled in the
+persisted result; a Unity 6000 consumer compiled the local package and passed
+its acceptance, contract, and six-profile compile smoke. That consumer's
+package-test filter discovered no package tests, so this does not replace the
+passing Unity 2022 package-test lane.
+
+Post-review closeout: the corrected Unity package fixture passed the local
+EditMode `69/69` lane. The upgraded settled-state smoke then exercised a real
+PlayMode bridge-generation change and proved callback `playing`, host-settled
+`edit`, `lifecycle_churn_observed: true`, and matching direct, persisted, and
+scenario compatibility values. The compact final-status recovery for that same
+request retained all accounting and trust fields.
 
 ## Observed Symptom
 
@@ -168,14 +204,17 @@ Bridge lifecycle event context:
 - The reclassification is useful lifecycle evidence, but it is not by itself a
   failed request or failed test-run signal.
 
-Existing regression gap:
+Closed regression gap:
 
-- `templates/smoke/run_playmode_settled_state_regression.sh` currently verifies
-  direct and scenario response payloads both report `edit`.
-- That smoke does not compare the response payload against
-  `Library/XUUnityLightMcp/state/test_results/<request_id>.json`.
-- Therefore the current smoke can pass while the persisted compact artifact
-  still carries the older Unity-side callback-time state.
+- Before the 2026-08-14 implementation,
+  `templates/smoke/run_playmode_settled_state_regression.sh` verified only that
+  direct and scenario response payloads both reported `edit`.
+- It now resolves the direct response's request id, reads the matching
+  `Library/XUUnityLightMcp/state/test_results/<request_id>.json`, and compares
+  the compatibility state, callback/host observations, source, consistency,
+  trust, and lifecycle-churn fields.
+- The smoke also requires the direct response to confirm successful persisted
+  result reconciliation.
 
 Source-grounded conclusion:
 

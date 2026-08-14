@@ -112,6 +112,29 @@ namespace XUUnity.LightMcp.Tests.EditMode
         }
 
         [Test]
+        public void TestRunPayload_PreservesCallbackTimePlayModeAccountingProvenance()
+        {
+            var payload = XUUnityLightMcpTestRunState.BuildPayloadForState(
+                new XUUnityLightMcpPersistedTestRunState
+                {
+                    project_root = "selftest",
+                    playmode_state_after_settle = "playing",
+                    playmode_state_after_test_callbacks = "playing",
+                    playmode_state_after_host_settle = "",
+                    playmode_state_after_settle_source = "unity_test_callbacks",
+                    playmode_state_accounting_consistent = true,
+                    playmode_state_accounting_note = ""
+                });
+
+            Assert.That(payload.playmode_state_after_settle, Is.EqualTo("playing"));
+            Assert.That(payload.playmode_state_after_test_callbacks, Is.EqualTo("playing"));
+            Assert.That(payload.playmode_state_after_host_settle, Is.Empty);
+            Assert.That(payload.playmode_state_after_settle_source, Is.EqualTo("unity_test_callbacks"));
+            Assert.That(payload.playmode_state_accounting_consistent, Is.True);
+            Assert.That(payload.playmode_state_accounting_note, Is.Empty);
+        }
+
+        [Test]
         public void ResponseWriter_SuccessAndErrorPreserveRequestContract()
         {
             var success = XUUnityLightMcpResponseWriter.Success("req-1", "unity.selftest", "{\"ok\":true}");

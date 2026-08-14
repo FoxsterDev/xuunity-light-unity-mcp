@@ -152,6 +152,11 @@ namespace XUUnity.LightMcp.Editor.Core
             public string completed_at_utc = "";
             public string completion_basis = "";
             public string playmode_state_after_settle = "";
+            public string playmode_state_after_test_callbacks = "";
+            public string playmode_state_after_host_settle = "";
+            public string playmode_state_after_settle_source = "";
+            public bool playmode_state_accounting_consistent;
+            public string playmode_state_accounting_note = "";
             public string run_phase = "";
             public string last_progress_at_utc = "";
             public string timeout_classification = "";
@@ -206,6 +211,11 @@ namespace XUUnity.LightMcp.Editor.Core
             public string last_finished_test = "";
             public string completion_basis = "";
             public string playmode_state_after_settle = "";
+            public string playmode_state_after_test_callbacks = "";
+            public string playmode_state_after_host_settle = "";
+            public string playmode_state_after_settle_source = "";
+            public bool playmode_state_accounting_consistent;
+            public string playmode_state_accounting_note = "";
             public bool lifecycle_churn_observed;
         }
 }

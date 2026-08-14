@@ -426,11 +426,43 @@ def normalize_tests_payload_from_lifecycle(payload: dict[str, Any], lifecycle: d
     if not isinstance(idle_wait_after, dict):
         return normalized
 
-    normalized["playmode_state_after_settle"] = str(
-        idle_wait_after.get("playmode_state")
+    callback_state = str(
+        normalized.get("playmode_state_after_test_callbacks")
         or normalized.get("playmode_state_after_settle")
         or ""
     )
+    host_settle_state = str(idle_wait_after.get("playmode_state") or "")
+    if callback_state:
+        normalized["playmode_state_after_test_callbacks"] = callback_state
+    if not normalized.get("playmode_state_after_settle_source") and callback_state:
+        normalized["playmode_state_after_settle_source"] = "unity_test_callbacks"
+
+    if host_settle_state:
+        normalized["playmode_state_after_host_settle"] = host_settle_state
+        normalized["playmode_state_after_settle"] = host_settle_state
+        normalized["playmode_state_after_settle_source"] = "idle_wait_after"
+        accounting_consistent = not callback_state or callback_state == host_settle_state
+        normalized["playmode_state_accounting_consistent"] = accounting_consistent
+        if accounting_consistent:
+            normalized.pop("playmode_state_accounting_note", None)
+        else:
+            normalized["playmode_state_accounting_note"] = (
+                "Unity Test Runner callbacks reported "
+                f"{callback_state!r}; the host observed {host_settle_state!r} after editor idle. "
+                "playmode_state_after_settle uses the host-settled value."
+            )
+
+        transition = lifecycle.get("bridge_identity_transition")
+        if isinstance(transition, dict) and transition:
+            normalized["lifecycle_churn_observed"] = True
+            normalized["playmode_state_after_settle_trust_class"] = "stale_risk"
+            normalized["playmode_state_after_settle_note"] = (
+                "bridge identity changed during post-test settle; confirm current Play Mode via unity_playmode_state"
+            )
+            normalized["playmode_state_after_settle_recommended_next_action"] = "confirm_via_unity_playmode_state"
+        else:
+            normalized["playmode_state_after_settle_trust_class"] = "confirmed"
+
     _attach_post_settle_compile_truth(
         normalized,
         idle_wait_after,
@@ -568,7 +600,11 @@ def _compact_post_settle_fields(payload: dict[str, Any]) -> dict[str, Any]:
             "editor_is_compiling_after_settle",
             "editor_is_updating_after_settle",
             "playmode_state_after_settle",
+            "playmode_state_after_test_callbacks",
+            "playmode_state_after_host_settle",
             "playmode_state_after_settle_source",
+            "playmode_state_accounting_consistent",
+            "playmode_state_accounting_note",
             "playmode_state_after_settle_trust_class",
             "playmode_state_after_settle_note",
             "playmode_state_after_settle_recommended_next_action",
@@ -670,6 +706,7 @@ def _compact_tests_payload(payload: dict[str, Any], operation: str) -> dict[str,
             "duration_seconds",
             "result_path",
             "settle_request_id",
+            "persisted_test_result_reconciliation",
         ),
     )
     failures = payload.get("failures") or payload.get("first_failures")
