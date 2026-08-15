@@ -251,6 +251,12 @@ def build_parser() -> argparse.ArgumentParser:
     console_tail_cmd.add_argument("--include-type", action="append", default=[])
     console_tail_cmd.add_argument("--limit", type=int, default=50)
     console_tail_cmd.add_argument(
+        "--max-payload-bytes",
+        type=int,
+        default=None,
+        help="Deterministic byte ceiling for returned items. Omit or 0 for the 16384 default; -1 for the unbounded raw tail.",
+    )
+    console_tail_cmd.add_argument(
         "--since",
         choices=["playmode_start", "bridge_generation", "request_id"],
         default="",

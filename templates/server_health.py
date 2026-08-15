@@ -35,6 +35,16 @@ EDITOR_LOG_STALE_MATCH_CAVEAT = (
     "Editor.log accumulates across editor sessions and play sessions, so an unanchored match may predate the "
     "current run; pass since=playmode_start or since=bridge_generation to bound the search to this session."
 )
+CONSOLE_TAIL_DEFAULT_MAX_PAYLOAD_BYTES = 16384
+CONSOLE_ITEM_BYTE_OVERHEAD = 64
+CONSOLE_TAIL_BYTE_TRUNCATION_MARKER = "\n[truncated_by_byte_budget]"
+CONSOLE_TAIL_TRUNCATION_RECOVERY_TOOL = "unity_console_grep"
+CONSOLE_TAIL_TRUNCATION_RECOVERY_HINT = (
+    "Use unity_console_grep with a pattern (same source) to fetch the specific entries compactly."
+)
+CONSOLE_TAIL_FULL_PAYLOAD_RECOVERY_HINT = (
+    "Re-run unity_console_tail with maxPayloadBytes=-1 for the unbounded raw tail; raise limit for more items."
+)
 SINCE_ANCHORS = ("playmode_start", "bridge_generation", "request_id")
 SINCE_ANCHOR_STATE_KEYS = {
     "playmode_start": "editor_log_offset_at_playmode_start",
@@ -881,6 +891,7 @@ def tail_editor_log_payload(
     since_request_id: str = "",
     bridge_state_is_live: bool = True,
     explicit_path_requested: bool = False,
+    max_payload_bytes: Any = None,
 ) -> dict[str, Any]:
     limit = max(1, int(limit or 50))
     anchor = resolve_editor_log_since_anchor(
@@ -920,7 +931,7 @@ def tail_editor_log_payload(
         }
         for line_number, line in visible_lines
     ]
-    return {
+    payload = {
         "backend_id": "xuunity.light_unity_mcp",
         "project_root": str(project_root),
         "source": "editor_log",
@@ -945,6 +956,100 @@ def tail_editor_log_payload(
         "recommended_next_action": "use_source_editor_log_grep_for_compile_errors",
         "validation_evidence": "unity_editor_log",
     }
+    return apply_console_tail_byte_budget(payload, max_payload_bytes)
+
+
+def resolve_console_tail_byte_budget(requested: Any) -> int:
+    try:
+        value = int(requested)
+    except (TypeError, ValueError):
+        return CONSOLE_TAIL_DEFAULT_MAX_PAYLOAD_BYTES
+    if value < 0:
+        return -1
+    return CONSOLE_TAIL_DEFAULT_MAX_PAYLOAD_BYTES if value == 0 else value
+
+
+def estimate_console_item_bytes(item: dict[str, Any]) -> int:
+    if not isinstance(item, dict):
+        return CONSOLE_ITEM_BYTE_OVERHEAD
+    total = CONSOLE_ITEM_BYTE_OVERHEAD
+    for field in ("type", "message", "timestamp", "stack_trace"):
+        value = item.get(field)
+        if value:
+            total += len(str(value).encode("utf-8"))
+    return total
+
+
+def _truncate_utf8(value: str, max_bytes: int) -> str:
+    if not value or max_bytes <= 0:
+        return ""
+    encoded = value.encode("utf-8")
+    if len(encoded) <= max_bytes:
+        return value
+    return encoded[:max_bytes].decode("utf-8", errors="ignore")
+
+
+def _truncate_console_item_to_budget(item: dict[str, Any], budget: int) -> dict[str, Any]:
+    clone = dict(item or {})
+    clone["stack_trace"] = ""
+    fixed_bytes = CONSOLE_ITEM_BYTE_OVERHEAD + len(CONSOLE_TAIL_BYTE_TRUNCATION_MARKER.encode("utf-8"))
+    for field in ("type", "timestamp"):
+        value = clone.get(field)
+        if value:
+            fixed_bytes += len(str(value).encode("utf-8"))
+    available_for_message = max(0, budget - fixed_bytes)
+    message = str(clone.get("message") or "")
+    if len(message.encode("utf-8")) > available_for_message:
+        message = _truncate_utf8(message, available_for_message)
+    clone["message"] = message + CONSOLE_TAIL_BYTE_TRUNCATION_MARKER
+    return clone
+
+
+def apply_console_tail_byte_budget(payload: dict[str, Any], requested: Any, *, enforced_by: str = "host") -> dict[str, Any]:
+    annotated = dict(payload or {})
+    if "max_payload_bytes" in annotated:
+        return annotated
+
+    budget = resolve_console_tail_byte_budget(requested)
+    items = [item for item in (annotated.get("items") or []) if isinstance(item, dict)]
+    annotated["max_payload_bytes"] = budget
+    annotated["byte_budget_enforced_by"] = enforced_by
+
+    if budget < 0:
+        annotated["payload_bytes_estimate"] = sum(estimate_console_item_bytes(item) for item in items)
+        annotated["byte_budget_truncated"] = False
+        annotated["items_dropped_for_byte_budget"] = 0
+        annotated["newest_item_truncated"] = False
+    else:
+        kept_from_index = len(items)
+        running_bytes = 0
+        for index in range(len(items) - 1, -1, -1):
+            item_bytes = estimate_console_item_bytes(items[index])
+            if running_bytes + item_bytes > budget:
+                break
+            running_bytes += item_bytes
+            kept_from_index = index
+
+        if kept_from_index >= len(items) and items:
+            truncated_newest = _truncate_console_item_to_budget(items[-1], budget)
+            annotated["items"] = [truncated_newest]
+            annotated["items_dropped_for_byte_budget"] = len(items) - 1
+            annotated["newest_item_truncated"] = True
+            annotated["payload_bytes_estimate"] = estimate_console_item_bytes(truncated_newest)
+        else:
+            annotated["items"] = items[kept_from_index:]
+            annotated["items_dropped_for_byte_budget"] = kept_from_index
+            annotated["newest_item_truncated"] = False
+            annotated["payload_bytes_estimate"] = running_bytes
+        annotated["byte_budget_truncated"] = (
+            annotated["items_dropped_for_byte_budget"] > 0 or annotated["newest_item_truncated"]
+        )
+
+    if annotated["byte_budget_truncated"] or bool(annotated.get("truncated")):
+        annotated["truncation_recovery_tool"] = CONSOLE_TAIL_TRUNCATION_RECOVERY_TOOL
+        annotated["truncation_recovery_hint"] = CONSOLE_TAIL_TRUNCATION_RECOVERY_HINT
+        annotated["full_payload_recovery_hint"] = CONSOLE_TAIL_FULL_PAYLOAD_RECOVERY_HINT
+    return annotated
 
 
 def console_grep_false_empty_applies(payload: dict[str, Any], include_types: list[str] | None) -> bool:

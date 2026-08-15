@@ -454,6 +454,7 @@ def cmd_request_console_tail(args):
     project_root = ensure_project_root(args.project_root)
     source = str(getattr(args, "source", "editor_log") or "editor_log")
     limit = max(1, int(args.limit or 50))
+    max_payload_bytes = getattr(args, "max_payload_bytes", None)
     if source == "editor_log":
         since = str(getattr(args, "since", "") or "")
         since_request_id = str(getattr(args, "since_request_id", "") or "").strip()
@@ -478,6 +479,7 @@ def cmd_request_console_tail(args):
             since_request_id=since_request_id,
             bridge_state_is_live=anchor_state_is_live,
             explicit_path_requested=bool(explicit_log_path),
+            max_payload_bytes=max_payload_bytes,
         )
         print_json(
             {
@@ -488,14 +490,17 @@ def cmd_request_console_tail(args):
         )
         return
 
+    bridge_args = {
+        "limit": limit,
+        "includeTypes": args.include_type or None,
+        "source": "console",
+    }
+    if max_payload_bytes is not None:
+        bridge_args["maxPayloadBytes"] = int(max_payload_bytes)
     response = invoke_bridge(
         str(project_root),
         "unity.console.tail",
-        {
-            "limit": limit,
-            "includeTypes": args.include_type or None,
-            "source": "console",
-        },
+        bridge_args,
         args.timeout_ms,
     )
     if response.get("status") == "ok":
@@ -505,6 +510,7 @@ def cmd_request_console_tail(args):
             payload = {}
         if isinstance(payload, dict):
             payload = annotate_console_tail_payload(payload)
+            payload = apply_console_tail_byte_budget(payload, max_payload_bytes)
             response = dict(response)
             response["payload_json"] = json.dumps(payload, ensure_ascii=True)
     print_json(response)

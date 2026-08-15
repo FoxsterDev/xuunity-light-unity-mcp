@@ -150,6 +150,7 @@ namespace XUUnity.LightMcp.Editor.Helpers
             {
                 limit = step.limit > 0 ? step.limit : 50,
                 includeTypes = step.includeTypes,
+                maxPayloadBytes = step.maxPayloadBytes,
             };
 
             return ProcessNestedOperationStep("unity.console.tail", JsonUtility.ToJson(args), stepResult);

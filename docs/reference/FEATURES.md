@@ -67,7 +67,7 @@ Unity MCP implementations when the user wants safe production validation.
 | Project refresh | `unity_project_refresh` | `Supported` | Refreshes AssetDatabase and can request package resolve or health re-probe; compact default preserves settled refresh fields and full payload is opt-in. |
 | EDM4U | `unity_edm4u_resolve` | `Project-dependent` | Requires External Dependency Manager for Unity, Android Build Support, a whitelisted resolver menu, and active BuildTarget.Android for the Android lane. The result explicitly leaves resolver-output freshness unproven. |
 | SDK validation | `unity_sdk_dependency_verify` | `Project-dependent` | Requires explicit generated-artifact expectations. |
-| Console | `unity_console_tail` | `Core` | Returns recent path-backed Editor.log lines by default; explicit `source=console` returns normalized in-memory Console-buffer items with stale-buffer caveats. |
+| Console | `unity_console_tail` | `Core` | Returns recent path-backed Editor.log lines by default; explicit `source=console` returns normalized in-memory Console-buffer items with stale-buffer caveats. Payloads are byte-bounded (`maxPayloadBytes`, default 16384; `-1` for the unbounded raw tail) with explicit drop/truncation accounting and `unity_console_grep` named as the compact recovery tool. |
 | Console | `unity_console_grep` | `Core` | Returns compact console or Editor.log matches by string or regex without stack traces by default; use `source=editor_log` for path-backed log-presence checks. |
 | Console | `unity_loading_timing` | `Core` | Returns compact loading/startup timing evidence through `unity.console.grep`. |
 | Scene | `unity_scene_snapshot` | `Core` | Lightweight active-scene snapshot. |

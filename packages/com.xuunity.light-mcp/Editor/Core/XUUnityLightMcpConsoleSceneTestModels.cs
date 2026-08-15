@@ -9,6 +9,7 @@ namespace XUUnity.LightMcp.Editor.Core
             public int limit = 50;
             public string[] includeTypes = null;
             public string source = "console";
+            public int maxPayloadBytes;
         }
 
         [Serializable]
@@ -34,7 +35,7 @@ namespace XUUnity.LightMcp.Editor.Core
         }
 
         [Serializable]
-        internal sealed class XUUnityLightMcpConsolePayload
+        internal class XUUnityLightMcpConsolePayload
         {
             public string backend_id = "xuunity.light_unity_mcp";
             public string project_root = "";
@@ -52,6 +53,20 @@ namespace XUUnity.LightMcp.Editor.Core
             public string console_tail_caveat = "";
             public string recommended_next_action = "";
             public string validation_evidence = "unity_mcp";
+        }
+
+        [Serializable]
+        internal sealed class XUUnityLightMcpConsoleTailBoundedPayload : XUUnityLightMcpConsolePayload
+        {
+            public int max_payload_bytes;
+            public int payload_bytes_estimate;
+            public bool byte_budget_truncated;
+            public int items_dropped_for_byte_budget;
+            public bool newest_item_truncated;
+            public string byte_budget_enforced_by = "unity_bridge";
+            public string truncation_recovery_tool = "";
+            public string truncation_recovery_hint = "";
+            public string full_payload_recovery_hint = "";
         }
 
         [Serializable]

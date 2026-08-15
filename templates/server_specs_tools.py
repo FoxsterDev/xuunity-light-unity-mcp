@@ -1347,6 +1347,19 @@ TOOLS: dict[str, dict[str, Any]] = {
                     "description": "Optional Editor.log path when source=editor_log. Defaults to the host-managed project log path.",
                 },
                 "limit": {"type": "integer", "default": 50, "minimum": 1},
+                "maxPayloadBytes": {
+                    "type": "integer",
+                    "default": 16384,
+                    "minimum": -1,
+                    "description": (
+                        "Deterministic byte ceiling for returned items (message, stack trace, timestamp, type, "
+                        "plus a fixed per-item overhead). Oldest items are dropped first and the drop is reported "
+                        "in items_dropped_for_byte_budget/byte_budget_truncated; an oversized single newest item "
+                        "is content-truncated and flagged as newest_item_truncated. Omit or 0 for the 16384 "
+                        "default; -1 for the unbounded raw tail. On truncation the payload names "
+                        "unity_console_grep as the compact recovery tool."
+                    )
+                },
                 "includeTypes": {
                     "type": "array",
                     "items": {"type": "string"},

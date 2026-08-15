@@ -168,8 +168,24 @@ Recommended size-aware order:
 
 Progress: S1 is complete (2026-08-14, host contract tests plus Unity `2022.3`
 current-source and Unity `6000.0` released-package live fault injection; see
-the evidence-ergonomics design row). The next unimplemented start-now item is
-D1.
+the evidence-ergonomics design row). D1 is complete (2026-08-14: the
+`Unity Package CI` workflow, the `no-ugui` lane, the tested consumer scaffold,
+and `check_release_ci_gates.py` blocking tag preparation, wired into the
+publishing checklist, the release skill, and the tag-push `Release Tag Gate`
+workflow; local CI-equivalent batch `-runTests` proof passed all four
+version × lane combinations on Unity `2022.3` and `6000.0`, and a live gate run
+against the real repository correctly blocked on the not-yet-pushed workflow.
+The first green GitHub run still requires the maintainer to configure Unity
+license secrets and push; that external dependency is recorded in
+`docs/operations/UNITY_PACKAGE_CI.md` and does not weaken the acceptance
+contract). P1 is complete (2026-08-14: `unity_console_tail`, the CLI, and the
+`console_tail` scenario step enforce a deterministic `maxPayloadBytes` ceiling
+— default `16384`, `-1` raw — in the Unity bridge with a host-side fallback
+for older packages, oldest-first drops, an explicit newest-item truncation
+marker, full accounting fields, and `unity_console_grep` named as the compact
+recovery tool; 18 focused host tests, host suite `890` green, and live
+bounded/truncated/raw proofs plus EditMode `81/81` through the bridge on both
+Unity `2022.3` and `6000.0`). The next unimplemented start-now item is P2.
 
 D1 is deliberately early even though Unity licensing can add calendar cost: it
 is the proof foundation for later Unity package changes. If runner licensing is

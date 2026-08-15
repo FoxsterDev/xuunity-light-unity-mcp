@@ -63,6 +63,19 @@ Migration note:
   recovery command and the explicit note that the Unity operation may have
   completed; the recommended next action becomes
   `request_status_summary_then_compile_gate` while the editor is reachable.
+- Current source byte-bounds console tail payloads: `unity_console_tail` and
+  the `console_tail` scenario step enforce a deterministic `maxPayloadBytes`
+  ceiling (default `16384`, `-1` for the unbounded raw tail) in the Unity
+  bridge, with a host-side fallback for older packages, oldest-first drops, an
+  explicit newest-item truncation marker, full accounting fields, and
+  `unity_console_grep` named as the compact recovery tool on truncation.
+- Current source adds automated Unity package CI and a release tag gate: the
+  `Unity Package CI` workflow compiles the package and runs EditMode/PlayMode
+  self-tests on Unity `2022.3` and `6000.0` in `ugui` and `no-ugui` consumer
+  lanes, a missing license secret fails loudly instead of skipping, and
+  `scripts/testing/check_release_ci_gates.py` blocks tag preparation until
+  `Integration Tests`, `Unity Package CI`, and `Discovery Checks` are green for
+  the release SHA (re-verified in CI by the `Release Tag Gate` workflow).
 - Current source adds a capability-gated uGUI PlayMode package test assembly.
   It drives the real guarded-click scenario-step path and proves exactly-once
   delivery, a decision-bearing receipt, semantic state change, the runtime

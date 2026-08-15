@@ -54,6 +54,8 @@ Release is blocked until all of the following are true:
 - `docs/install.html` shows the current Git UPM tag
 - `docs/reference/LISTING_KIT.md` shows the current Git UPM tag
 - the top `CHANGELOG.md` section describes the release and current package URL
+- `python3 scripts/testing/check_release_ci_gates.py` reports every required
+  CI gate green for the release SHA after the master push
 
 Minimum release closeout sequence:
 
@@ -66,8 +68,16 @@ bash init_xuunity_light_unity_mcp.sh --target both --force
 scripts/testing/run_host_python_tests.sh
 scripts/testing/run_site_ui_checks.sh
 git push origin master
+python3 scripts/testing/check_release_ci_gates.py --wait-seconds 1800
 git push origin v<next-version>
 ```
+
+The CI gate step is mandatory and sits between the master push and the tag
+push: it exits non-zero until `Integration Tests`, `Unity Package CI`, and
+`Discovery Checks` all have a completed, successful run for the release SHA.
+Do not push the tag while it is red, pending, or unable to verify. See
+`UNITY_PACKAGE_CI.md` for the workflow, license secrets, and the tag-push
+`Release Tag Gate` workflow that re-verifies the same contract in CI.
 
 If the site version, install tag, listing metadata, refresh launcher install
 output, or client startup docs are stale, do not tag the release and do not

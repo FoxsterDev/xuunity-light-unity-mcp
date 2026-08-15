@@ -23,6 +23,13 @@ a platform-only failure.
 5. Create the release commit before the annotated tag. If CI fails after a tag
    was created or pushed, prefer a follow-up fix commit unless the maintainer
    explicitly asks to retag.
+6. After pushing master and before pushing the tag, run
+   `python3 scripts/testing/check_release_ci_gates.py --wait-seconds 1800`.
+   It blocks the tag until `Integration Tests`, `Unity Package CI`, and
+   `Discovery Checks` each have a completed successful `push`/`workflow_dispatch`
+   run for the release SHA. Failed, pending, missing, or unverifiable gates all
+   block; never bypass by tagging anyway. The tag-push `Release Tag Gate`
+   workflow re-verifies the same contract in CI.
 
 ## Windows CI Assumptions
 

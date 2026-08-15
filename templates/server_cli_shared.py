@@ -20,6 +20,7 @@ from server_health import (
     FRESH_HEARTBEAT_MAX_AGE_SECONDS,
     annotate_console_grep_false_empty,
     annotate_console_tail_payload,
+    apply_console_tail_byte_budget,
     build_editor_log_identity,
     grep_editor_log_payload,
     tail_editor_log_payload,

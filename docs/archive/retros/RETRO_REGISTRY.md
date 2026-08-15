@@ -68,6 +68,28 @@ host-local registry.
   EditMode `75/75`, PlayMode `18` passed with one expected skip) and on a Unity `6000.0` real-consumer editor running
   the released `v0.3.56` package (legacy classification with guidance intact). Released applied-mutation and cleanup
   verdict actions are unchanged.
+- Portfolio slice D1 (same day, later): automated Unity package CI and a release tag gate. The `Unity Package CI`
+  workflow compiles the package and runs its EditMode/PlayMode self-tests on Unity `2022.3` and `6000.0` through
+  pinned `unityci/editor` images in `ugui` and `no-ugui` consumer lanes scaffolded by a tested Python script; a
+  missing Unity license secret fails the preflight loudly instead of skipping. `check_release_ci_gates.py` blocks
+  tag preparation until `Integration Tests`, `Unity Package CI`, and `Discovery Checks` have a completed successful
+  `push`/`workflow_dispatch` run for the release SHA, wired into the publishing checklist, the release skill, and
+  the tag-push `Release Tag Gate` workflow; contract tests pin workflow names, version pins, lanes, and
+  license-failure behavior. Local CI-equivalent batch `-runTests` proof passed all four version × lane combinations
+  (no-uGUI: EditMode `75/75`, PlayMode `5/5`; uGUI: EditMode `112/112`, PlayMode `18` passed with one expected skip
+  on both lines); a live gate run against the real repository correctly blocked on the not-yet-pushed workflow while
+  passing the two existing gates. Host suite `872` passed with 13 expected platform skips. First green GitHub run
+  requires maintainer-configured Unity license secrets (external dependency recorded in
+  `docs/operations/UNITY_PACKAGE_CI.md`).
+- Portfolio slice P1 (same day, later): byte-bounded console tail. `unity_console_tail` / `request-console-tail`
+  and the `console_tail` scenario step enforce a deterministic `maxPayloadBytes` ceiling (default `16384`, `-1`
+  raw) in the Unity bridge, with a host-side fallback annotating older-package payloads, oldest-first drops, an
+  explicit newest-item truncation marker, full accounting fields (`byte_budget_enforced_by`,
+  `byte_budget_truncated`, `items_dropped_for_byte_budget`, `newest_item_truncated`, `payload_bytes_estimate`),
+  and `unity_console_grep` named as the compact recovery tool on truncation. 18 focused host tests; host suite
+  `890` passed with 13 expected platform skips; live proofs on Unity `2022.3` and `6000.0` (current-source
+  bridge-enforced truncation with identical accounting on both lines, unbounded `-1` raw recovery, and package
+  EditMode `81/81` through the bridge on each), with both scratch editors closed via verified process exit.
 
 ## Re-Evaluation 2026-08-08
 

@@ -32,6 +32,7 @@ from server_health import (
     FRESH_HEARTBEAT_MAX_AGE_SECONDS,
     annotate_console_grep_false_empty,
     annotate_console_tail_payload,
+    apply_console_tail_byte_budget,
     build_editor_log_identity,
     build_editor_log_diagnosis,
     classify_project_health,
@@ -1748,6 +1749,10 @@ def call_unity_console_tail_tool(arguments: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(limit, int):
         raise JsonRpcError(-32602, "limit must be an integer.")
 
+    max_payload_bytes = arguments.get("maxPayloadBytes")
+    if max_payload_bytes is not None and not isinstance(max_payload_bytes, int):
+        raise JsonRpcError(-32602, "maxPayloadBytes must be an integer when provided.")
+
     include_types = _optional_string_list_argument(arguments, "includeTypes")
     since = _editor_log_since_argument(arguments)
     since_request_id = str(arguments.get("sinceRequestId") or "").strip()
@@ -1773,18 +1778,22 @@ def call_unity_console_tail_tool(arguments: dict[str, Any]) -> dict[str, Any]:
                 journal_events=anchor_journal_events,
                 since_request_id=since_request_id,
                 bridge_state_is_live=anchor_state_is_live,
+                max_payload_bytes=max_payload_bytes,
             )
         )
 
+    bridge_args = {
+        "limit": max(1, limit),
+        "includeTypes": include_types or None,
+        "source": "console",
+    }
+    if max_payload_bytes is not None:
+        bridge_args["maxPayloadBytes"] = max_payload_bytes
     try:
         response = invoke_bridge(
             str(project_root),
             "unity.console.tail",
-            {
-                "limit": max(1, limit),
-                "includeTypes": include_types or None,
-                "source": "console",
-            },
+            bridge_args,
             timeout_ms,
         )
     except ToolInvocationError as exc:
@@ -1796,6 +1805,7 @@ def call_unity_console_tail_tool(arguments: dict[str, Any]) -> dict[str, Any]:
             payload = {}
         if isinstance(payload, dict):
             payload = annotate_console_tail_payload(payload)
+            payload = apply_console_tail_byte_budget(payload, max_payload_bytes)
             response = dict(response)
             response["payload_json"] = json.dumps(payload, ensure_ascii=True)
     return bridge_response_to_tool_result(response)

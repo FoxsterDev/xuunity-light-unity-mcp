@@ -242,6 +242,116 @@ namespace XUUnity.LightMcp.Tests.EditMode
         }
 
         [Test]
+        public void ConsoleTailByteBudget_ResolvesTheSharedConvention()
+        {
+            Assert.That(XUUnityLightMcpConsoleTailOperation.ResolveConsoleTailByteBudget(0), Is.EqualTo(16384));
+            Assert.That(XUUnityLightMcpConsoleTailOperation.ResolveConsoleTailByteBudget(-1), Is.EqualTo(-1));
+            Assert.That(XUUnityLightMcpConsoleTailOperation.ResolveConsoleTailByteBudget(-50), Is.EqualTo(-1));
+            Assert.That(XUUnityLightMcpConsoleTailOperation.ResolveConsoleTailByteBudget(4096), Is.EqualTo(4096));
+        }
+
+        [Test]
+        public void ConsoleTailByteBudget_EstimateCountsUtf8BytesPlusOverhead()
+        {
+            var item = new XUUnityLightMcpConsoleItem
+            {
+                type = "log",
+                message = "ррр",
+                timestamp = "",
+                stack_trace = "de",
+            };
+            Assert.That(
+                XUUnityLightMcpConsoleTailOperation.EstimateConsoleItemBytes(item),
+                Is.EqualTo(64 + 3 + 6 + 2));
+        }
+
+        [Test]
+        public void ConsoleTailByteBudget_DropsOldestItemsFirstWithAccounting()
+        {
+            var items = new List<XUUnityLightMcpConsoleItem>();
+            for (var index = 0; index < 5; index++)
+            {
+                items.Add(new XUUnityLightMcpConsoleItem { type = "log", message = $"item-{index}-" + new string('x', 100) });
+            }
+            var perItem = XUUnityLightMcpConsoleTailOperation.EstimateConsoleItemBytes(items[0]);
+
+            var kept = XUUnityLightMcpConsoleTailOperation.ApplyConsoleTailByteBudget(
+                items,
+                perItem * 2 + 10,
+                out var dropped,
+                out var newestTruncated,
+                out var bytesEstimate);
+
+            Assert.That(kept.Count, Is.EqualTo(2));
+            Assert.That(kept[0].message, Does.StartWith("item-3"));
+            Assert.That(kept[1].message, Does.StartWith("item-4"));
+            Assert.That(dropped, Is.EqualTo(3));
+            Assert.That(newestTruncated, Is.False);
+            Assert.That(bytesEstimate, Is.LessThanOrEqualTo(perItem * 2 + 10));
+        }
+
+        [Test]
+        public void ConsoleTailByteBudget_TruncatesAnOversizedNewestItemToFit()
+        {
+            var items = new List<XUUnityLightMcpConsoleItem>
+            {
+                new XUUnityLightMcpConsoleItem { type = "log", message = "old" },
+                new XUUnityLightMcpConsoleItem
+                {
+                    type = "exception",
+                    message = "giant-" + new string('y', 5000),
+                    stack_trace = new string('s', 5000),
+                },
+            };
+
+            var kept = XUUnityLightMcpConsoleTailOperation.ApplyConsoleTailByteBudget(
+                items,
+                512,
+                out var dropped,
+                out var newestTruncated,
+                out var bytesEstimate);
+
+            Assert.That(kept.Count, Is.EqualTo(1));
+            Assert.That(dropped, Is.EqualTo(1));
+            Assert.That(newestTruncated, Is.True);
+            Assert.That(kept[0].message, Does.StartWith("giant-"));
+            Assert.That(kept[0].message, Does.EndWith("[truncated_by_byte_budget]"));
+            Assert.That(kept[0].stack_trace, Is.Empty);
+            Assert.That(bytesEstimate, Is.LessThanOrEqualTo(512));
+            Assert.That(XUUnityLightMcpConsoleTailOperation.EstimateConsoleItemBytes(kept[0]), Is.LessThanOrEqualTo(512));
+        }
+
+        [Test]
+        public void ConsoleTailByteBudget_UnboundedKeepsEverything()
+        {
+            var items = new List<XUUnityLightMcpConsoleItem>
+            {
+                new XUUnityLightMcpConsoleItem { type = "log", message = new string('x', 50000) },
+                new XUUnityLightMcpConsoleItem { type = "log", message = new string('y', 50000) },
+            };
+
+            var kept = XUUnityLightMcpConsoleTailOperation.ApplyConsoleTailByteBudget(
+                items,
+                -1,
+                out var dropped,
+                out var newestTruncated,
+                out var bytesEstimate);
+
+            Assert.That(kept.Count, Is.EqualTo(2));
+            Assert.That(dropped, Is.EqualTo(0));
+            Assert.That(newestTruncated, Is.False);
+            Assert.That(bytesEstimate, Is.GreaterThan(100000));
+        }
+
+        [Test]
+        public void ConsoleTailByteBudget_TruncateUtf8NeverSplitsBytesPastTheBudget()
+        {
+            var truncated = XUUnityLightMcpConsoleTailOperation.TruncateUtf8("ррррр", 5);
+            Assert.That(System.Text.Encoding.UTF8.GetByteCount(truncated), Is.LessThanOrEqualTo(5));
+            Assert.That(truncated, Is.EqualTo("рр"));
+        }
+
+        [Test]
         public void ResponseWriter_SuccessAndErrorPreserveRequestContract()
         {
             var success = XUUnityLightMcpResponseWriter.Success("req-1", "unity.selftest", "{\"ok\":true}");

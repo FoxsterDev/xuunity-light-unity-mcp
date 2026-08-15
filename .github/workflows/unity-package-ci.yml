@@ -1,0 +1,85 @@
+name: Unity Package CI
+
+on:
+  push:
+    # No path filter: every master SHA must carry Unity gate evidence so the
+    # release tag gate never reports "missing" for a release commit.
+    branches:
+      - master
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  license-preflight:
+    name: Unity License Preflight
+    # Fork PRs do not receive repository secrets; skip there. Master pushes and
+    # same-repo PRs must fail loudly when the license secrets are missing —
+    # a skipped Unity gate must never read as a passed one.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require Unity license secrets
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+          UNITY_SERIAL: ${{ secrets.UNITY_SERIAL }}
+        shell: bash
+        run: |
+          if [ -n "$UNITY_LICENSE" ] || { [ -n "$UNITY_EMAIL" ] && [ -n "$UNITY_PASSWORD" ] && [ -n "$UNITY_SERIAL" ]; }; then
+            echo "Unity license secrets are configured."
+            exit 0
+          fi
+          echo "::error::Unity license secrets are not configured. Set UNITY_LICENSE (personal .ulf contents) or UNITY_EMAIL + UNITY_PASSWORD + UNITY_SERIAL. See docs/operations/UNITY_PACKAGE_CI.md. This gate must fail, not skip, so a release tag cannot be prepared without Unity evidence."
+          exit 1
+
+  unity-tests:
+    name: Unity Tests (${{ matrix.unity-version }}, ${{ matrix.lane }})
+    needs: license-preflight
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        unity-version: ["2022.3.62f1", "6000.0.58f2"]
+        lane: [ugui, no-ugui]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Scaffold CI consumer project
+        run: |
+          python3 scripts/testing/scaffold_unity_ci_project.py \
+            --project-root CiProject \
+            --unity-version "${{ matrix.unity-version }}" \
+            --lane "${{ matrix.lane }}"
+
+      - name: Run package EditMode and PlayMode tests
+        id: unity-tests
+        uses: game-ci/unity-test-runner@v4.3.1
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+          UNITY_SERIAL: ${{ secrets.UNITY_SERIAL }}
+        with:
+          projectPath: CiProject
+          unityVersion: ${{ matrix.unity-version }}
+          customImage: unityci/editor:ubuntu-${{ matrix.unity-version }}-base-3
+          testMode: all
+          artifactsPath: test-results
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: unity-test-results-${{ matrix.unity-version }}-${{ matrix.lane }}
+          path: ${{ steps.unity-tests.outputs.artifactsPath }}
+          retention-days: 14

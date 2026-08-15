@@ -32,6 +32,7 @@ namespace XUUnity.LightMcp.Editor.Core
             public string[] requiredRootNames = null;
             public bool allowDirty = true;
             public int limit;
+            public int maxPayloadBytes;
             public string pattern = "";
             public bool regex;
             public bool ignoreCase = true;

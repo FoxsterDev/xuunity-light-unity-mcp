@@ -4,6 +4,26 @@
 
 ### Added
 
+- Byte-bounded console tail. `unity_console_tail` / `request-console-tail` and the `console_tail` scenario step now
+  enforce a deterministic payload byte ceiling (`maxPayloadBytes` / `--max-payload-bytes`, default `16384`; `-1`
+  returns the unbounded raw tail). Oldest items are dropped first; a single oversized newest item is
+  content-truncated with an explicit marker. Every response carries the accounting fields `max_payload_bytes`,
+  `byte_budget_enforced_by` (`unity_bridge` for the current package, `host` fallback for older packages),
+  `byte_budget_truncated`, `items_dropped_for_byte_budget`, `newest_item_truncated`, and `payload_bytes_estimate`,
+  and on truncation names `unity_console_grep` as the compact recovery tool. Raw `-1` behavior and existing
+  `limit`/type filters are unchanged.
+- Automated Unity package CI and a release tag gate. The `Unity Package CI` workflow compiles the package and runs
+  its shipped EditMode/PlayMode self-tests on two supported Unity lines (`2022.3` and `6000.0`) through pinned
+  `unityci/editor` images, each in two consumer lanes: `ugui` and a `no-ugui` project that proves the package and its
+  core test assemblies work without uGUI. Consumer projects are scaffolded by the tested
+  `scripts/testing/scaffold_unity_ci_project.py`, which pins `com.unity.test-framework` through the same policy the
+  setup wizard uses. A missing Unity license secret fails the workflow loudly instead of skipping it. Release/tag
+  preparation is now blocked on CI evidence: `scripts/testing/check_release_ci_gates.py` requires a completed,
+  successful `push`/`workflow_dispatch` run of `Integration Tests` (Python on Windows/macOS/Linux),
+  `Unity Package CI`, and `Discovery Checks` for the release SHA before the tag may be pushed, and the tag-push
+  `Release Tag Gate` workflow re-verifies the same contract in CI. Contract tests pin workflow names, Unity version
+  pins, lanes, and license-failure behavior to the gate script and documentation
+  (`docs/operations/UNITY_PACKAGE_CI.md`).
 - A scenario `project_refresh` step that times out waiting for settle now explains itself instead of leaving a bare
   `project_refresh_timeout`. The Unity step captures settle evidence at the timeout instant (settle phase, pending
   flag, compiling/updating flags, Play Mode state, stable idle ticks) and classifies it as `package_settle_timeout`,
