@@ -2,8 +2,30 @@
 
 ## Unreleased
 
+## 0.3.57
+
+Release tag: `v0.3.57`
+
+Current Git UPM install URL:
+
+```text
+https://github.com/FoxsterDev/xuunity-mcp.git?path=/packages/com.xuunity.light-mcp#v0.3.57
+```
+
+### Changed
+
+- Released `v0.3.57` package metadata, server metadata, package manifests, and Git UPM examples.
+
 ### Added
 
+- Compact scene and view envelopes. `unity_scene_open`, `unity_scene_snapshot`, and `unity_game_view_configure`
+  now return compact operation envelopes by default, matching the released compact behavior of refresh, compile,
+  test, Play Mode, and screenshot responses: the duplicated host lifecycle evidence block is dropped, the
+  operation's own facts are preserved (scene transition, scene content with `root_object_count`, resolved game
+  view), and `includeFullPayload=true` opts back into the full bridge payload. Live measurement: a scene-open
+  response shrank from ~12,000 to ~540 bytes with identical decision content. The Game View screenshot
+  image-byte budget is documented: base64 inlines only within `imageBudgetBytes` (default `48000`), otherwise
+  `image_omitted_reason=payload_budget` directs the operator to read `file_path`.
 - Byte-bounded console tail. `unity_console_tail` / `request-console-tail` and the `console_tail` scenario step now
   enforce a deterministic payload byte ceiling (`maxPayloadBytes` / `--max-payload-bytes`, default `16384`; `-1`
   returns the unbounded raw tail). Oldest items are dropped first; a single oversized newest item is

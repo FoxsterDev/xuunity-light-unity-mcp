@@ -185,7 +185,14 @@ for older packages, oldest-first drops, an explicit newest-item truncation
 marker, full accounting fields, and `unity_console_grep` named as the compact
 recovery tool; 18 focused host tests, host suite `890` green, and live
 bounded/truncated/raw proofs plus EditMode `81/81` through the bridge on both
-Unity `2022.3` and `6000.0`). The next unimplemented start-now item is P2.
+Unity `2022.3` and `6000.0`). P2 is complete (2026-08-14: `unity_scene_open`,
+`unity_scene_snapshot`, and `unity_game_view_configure` return compact
+envelopes by default with `includeFullPayload=true` opt-in, joining the
+already-compact refresh/compile/test/Play Mode/screenshot responses; the
+screenshot image-byte budget is documented; 7 focused host tests, host suite
+`897` green, and live end-to-end proofs on Unity `2022.3` and `6000.0` showed
+a scene-open response shrinking from ~12,000 to ~540 bytes with identical
+decision content). The next unimplemented start-now item is C1.
 
 D1 is deliberately early even though Unity licensing can add calendar cost: it
 is the proof foundation for later Unity package changes. If runner licensing is

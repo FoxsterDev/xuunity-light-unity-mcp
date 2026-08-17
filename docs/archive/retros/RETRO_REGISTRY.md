@@ -90,6 +90,15 @@ host-local registry.
   `890` passed with 13 expected platform skips; live proofs on Unity `2022.3` and `6000.0` (current-source
   bridge-enforced truncation with identical accounting on both lines, unbounded `-1` raw recovery, and package
   EditMode `81/81` through the bridge on each), with both scratch editors closed via verified process exit.
+- Portfolio slice P2 (same day, later): compact scene/view envelopes. `unity_scene_open`, `unity_scene_snapshot`,
+  and `unity_game_view_configure` now default to compact operation envelopes (duplicated host lifecycle evidence
+  dropped, scene transition/content and resolved view preserved, `root_object_count` added) with
+  `includeFullPayload=true` opting back into the full bridge payload — completing the compact-by-default contract
+  across the interactive scene/playmode/view loop; the screenshot image-byte budget (`imageBudgetBytes`, default
+  `48000`) is documented in the public references. 7 focused host tests; host suite `897` passed with 13 expected
+  platform skips; live end-to-end proofs through the real bridge on Unity `2022.3` and `6000.0` (identical
+  envelopes on both lines; scene-open response ~12,000 → ~540 bytes with identical decision content; full opt-in
+  verified; editor-open attribution retained). Both scratch editors closed via verified process exit.
 
 ## Re-Evaluation 2026-08-08
 

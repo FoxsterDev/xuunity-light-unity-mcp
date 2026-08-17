@@ -1,7 +1,7 @@
 # Features
 
 Date: `2026-07-06`
-Status: `current for v0.3.56`
+Status: `current for v0.3.57`
 
 XUUnity Light Unity MCP is optimized for validation-first Unity Editor
 automation: status, compile, tests, scene checks, Game View evidence, scenario
@@ -70,15 +70,15 @@ Unity MCP implementations when the user wants safe production validation.
 | Console | `unity_console_tail` | `Core` | Returns recent path-backed Editor.log lines by default; explicit `source=console` returns normalized in-memory Console-buffer items with stale-buffer caveats. Payloads are byte-bounded (`maxPayloadBytes`, default 16384; `-1` for the unbounded raw tail) with explicit drop/truncation accounting and `unity_console_grep` named as the compact recovery tool. |
 | Console | `unity_console_grep` | `Core` | Returns compact console or Editor.log matches by string or regex without stack traces by default; use `source=editor_log` for path-backed log-presence checks. |
 | Console | `unity_loading_timing` | `Core` | Returns compact loading/startup timing evidence through `unity.console.grep`. |
-| Scene | `unity_scene_snapshot` | `Core` | Lightweight active-scene snapshot. |
-| Scene | `unity_scene_open` | `Core` | Opens a project-relative `Assets/...` scene in Edit Mode for deterministic boot-flow or scenario setup; dirty open scenes require explicit discard approval. |
+| Scene | `unity_scene_snapshot` | `Core` | Lightweight active-scene snapshot. Compact scene envelope by default (scene facts, root objects, `root_object_count`); `includeFullPayload=true` returns the full bridge payload with host lifecycle evidence. |
+| Scene | `unity_scene_open` | `Core` | Opens a project-relative `Assets/...` scene in Edit Mode for deterministic boot-flow or scenario setup; dirty open scenes require explicit discard approval. Compact scene-transition envelope by default; `includeFullPayload=true` opts into the full bridge payload. |
 | Scene | `unity_scene_assert` | `Core` | Asserts scene name, path, root objects, or dirty state. |
 | Tests | `unity_tests_run_editmode` | `Core` | Runs EditMode tests with normalized result accounting. |
 | Tests | `unity_tests_run_playmode` | `Supported` | Runs PlayMode tests with normalized result accounting; usefulness depends on project test coverage. |
 | Play Mode | `unity_playmode_state` | `Core` | Reads normalized Play Mode state. |
 | Play Mode | `unity_playmode_set` | `Supported` | Enters/exits Play Mode or controls pause state. |
-| Game View | `unity_game_view_configure` | `Reflection-gated` | Sets active Game View fixed resolution after capability checks. |
-| Game View | `unity_game_view_screenshot` | `Reflection-gated` | Captures Unity Editor Game View screenshot evidence after capability checks. |
+| Game View | `unity_game_view_configure` | `Reflection-gated` | Sets active Game View fixed resolution after capability checks. Compact resolved-view envelope by default; `includeFullPayload=true` opts into the full bridge payload. |
+| Game View | `unity_game_view_screenshot` | `Reflection-gated` | Captures Unity Editor Game View screenshot evidence after capability checks. Compact capture envelope by default; base64 inlines only within `imageBudgetBytes` (default `48000`, ~66k base64 characters), otherwise the payload reports `image_omitted_reason=payload_budget` and the operator reads `file_path`. |
 | Compile | `unity_compile_player_scripts` | `Core` | Compiles player scripts for one target/options/defines combination without active target switch; compact summaries include authoritative post-settle compile fields. |
 | Compile | `unity_compile_matrix` | `Core` | Runs multiple compile checks across targets/options/defines; compact summaries preserve per-lane verdicts and post-settle compiler truth. |
 | Compile | `unity_compile_build_config_matrix` | `Project-dependent` | Resolves build profiles from Unity build-config assets and runs matrix validation; compact default and full payload opt-in match other compile tools. |
@@ -158,8 +158,8 @@ Unity MCP implementations when the user wants safe production validation.
 
 | Target | Status | Validation notes |
 | --- | --- | --- |
-| Current package path | `Validated` | Production Git UPM path is `packages/com.xuunity.light-mcp#v0.3.56`; old `templates/unity-package#v0.3.11` is migration-only. |
-| macOS host tools | `Validated in this release environment` | Host Python unittest suite passed for `v0.3.56`: `805` tests with `13` expected skips. |
+| Current package path | `Validated` | Production Git UPM path is `packages/com.xuunity.light-mcp#v0.3.57`; old `templates/unity-package#v0.3.11` is migration-only. |
+| macOS host tools | `Validated in this release environment` | Host Python unittest suite passed for `v0.3.57`: `897` tests with `13` expected skips. |
 | Linux host tools | `Portable path provided` | Unix launcher is bash-compatible and avoids zsh-only expansion; Linux host execution should still be smoke-tested on a Linux Unity workstation. |
 | Native Windows clients | `Template provided` | Windows JSON/TOML configs, `run.cmd`, and `run.ps1` are included and syntax/config files are statically validated; native Windows MCP connection still needs host smoke validation. |
 | Claude Code | `Template provided` | Project `.mcp.json`, Windows `.mcp.windows.json`, and user-scope installer path are documented. |
