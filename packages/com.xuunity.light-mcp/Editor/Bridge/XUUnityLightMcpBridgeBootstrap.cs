@@ -51,6 +51,7 @@ namespace XUUnity.LightMcp.Editor.Bridge
             {
                 try
                 {
+                    XUUnityLightMcpPlayModeLivenessTracker.Sample();
                     XUUnityLightMcpBridgeStateWriter.WriteHeartbeat();
                 }
                 catch (Exception ex)

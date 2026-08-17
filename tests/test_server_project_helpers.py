@@ -1652,6 +1652,60 @@ class ServerProjectHelperTests(unittest.TestCase):
         self.assertIsNotNone(summary["active_test_last_progress_age_seconds"])
         self.assertEqual(240000, summary["active_test_runtime_timeout_ms"])
 
+    def test_status_summary_surfaces_playmode_liveness_when_the_bridge_reports_it(self) -> None:
+        summary = server.build_status_summary(
+            Path("/tmp/FakeProject"),
+            {
+                "editor_pid": 123,
+                "editor_running": True,
+                "mcp_reachable": True,
+                "playmode_state": "playing",
+                "playmode_frame_count": 4321,
+                "playmode_frames_advanced_last_interval": 0,
+                "editor_application_focused": False,
+                "playmode_loop_liveness": "throttled",
+                "playmode_liveness_warning": "playmode_throttled_editor_unfocused",
+                "playmode_liveness_remediation": "focus_the_unity_editor_or_set_interaction_mode_to_no_throttling",
+            },
+            read_best_effort_bridge_state=lambda _: {},
+            try_read_bridge_state=lambda _: {},
+            pid_is_alive=lambda _: True,
+            heartbeat_age_seconds=lambda _: 1.0,
+            derive_busy_reason=lambda _: "",
+            summarize_state_for_error=lambda _: "playing",
+        )
+
+        self.assertEqual("throttled", summary["playmode_loop_liveness"])
+        self.assertEqual(0, summary["playmode_frames_advanced_last_interval"])
+        self.assertEqual(4321, summary["playmode_frame_count"])
+        self.assertFalse(summary["editor_application_focused"])
+        self.assertEqual("playmode_throttled_editor_unfocused", summary["playmode_liveness_warning"])
+        self.assertEqual(
+            "focus_the_unity_editor_or_set_interaction_mode_to_no_throttling",
+            summary["playmode_liveness_remediation"],
+        )
+
+    def test_status_summary_omits_playmode_liveness_for_older_packages(self) -> None:
+        summary = server.build_status_summary(
+            Path("/tmp/FakeProject"),
+            {
+                "editor_pid": 123,
+                "editor_running": True,
+                "mcp_reachable": True,
+                "playmode_state": "playing",
+            },
+            read_best_effort_bridge_state=lambda _: {},
+            try_read_bridge_state=lambda _: {},
+            pid_is_alive=lambda _: True,
+            heartbeat_age_seconds=lambda _: 1.0,
+            derive_busy_reason=lambda _: "",
+            summarize_state_for_error=lambda _: "playing",
+        )
+
+        self.assertNotIn("playmode_loop_liveness", summary)
+        self.assertNotIn("playmode_liveness_warning", summary)
+        self.assertNotIn("playmode_frame_count", summary)
+
     def test_run_in_project_request_lock_serializes_same_project_mutations(self) -> None:
         context = types.SimpleNamespace(request_lock=threading.Lock())
         entry_order: list[str] = []

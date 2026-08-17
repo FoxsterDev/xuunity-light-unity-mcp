@@ -7,6 +7,7 @@ using UnityEditor.SceneManagement;
 using NUnit.Framework;
 using UnityEditor.TestTools.TestRunner.Api;
 using UnityEngine;
+using XUUnity.LightMcp.Editor.Bridge;
 using XUUnity.LightMcp.Editor.Core;
 using XUUnity.LightMcp.Editor.Helpers;
 using XUUnity.LightMcp.Editor.Operations;
@@ -654,6 +655,53 @@ namespace XUUnity.LightMcp.Tests.EditMode
             Assert.That(payload.playmode_state, Is.Not.Empty);
             Assert.That(payload.health_status, Is.Not.Empty);
             Assert.That(payload.supported_operations, Does.Contain("unity.status"));
+            Assert.That(payload.playmode_loop_liveness, Is.EqualTo("not_playing"));
+            Assert.That(payload.playmode_frame_count, Is.GreaterThanOrEqualTo(0));
+            Assert.That(payload.playmode_liveness_warning, Is.Empty);
+            Assert.That(payload.playmode_liveness_remediation, Is.Empty);
+        }
+
+        [Test]
+        public void PlayModeStateOperation_ReportsLivenessFieldsInEditMode()
+        {
+            var payload = XUUnityLightMcpPlayModeStateOperation.BuildPayload();
+
+            Assert.That(payload.playmode_state, Is.EqualTo("edit"));
+            Assert.That(payload.playmode_loop_liveness, Is.EqualTo("not_playing"));
+            Assert.That(payload.playmode_frame_count, Is.GreaterThanOrEqualTo(0));
+            Assert.That(payload.playmode_frames_advanced_last_interval, Is.GreaterThanOrEqualTo(0));
+            Assert.That(payload.playmode_liveness_warning, Is.Empty);
+        }
+
+        [Test]
+        public void PlayModeLivenessTracker_ResolvesLivenessFromStateAndFrameEvidence()
+        {
+            Assert.That(XUUnityLightMcpPlayModeLivenessTracker.ResolveLiveness("edit", false, 0), Is.EqualTo("not_playing"));
+            Assert.That(XUUnityLightMcpPlayModeLivenessTracker.ResolveLiveness("transitioning", true, 120), Is.EqualTo("not_playing"));
+            Assert.That(XUUnityLightMcpPlayModeLivenessTracker.ResolveLiveness("paused", true, 0), Is.EqualTo("paused"));
+            Assert.That(XUUnityLightMcpPlayModeLivenessTracker.ResolveLiveness("playing", false, 0), Is.EqualTo("unknown"));
+            Assert.That(XUUnityLightMcpPlayModeLivenessTracker.ResolveLiveness("playing", true, 0), Is.EqualTo("throttled"));
+            Assert.That(XUUnityLightMcpPlayModeLivenessTracker.ResolveLiveness("playing", true, 1), Is.EqualTo("throttled"));
+            Assert.That(XUUnityLightMcpPlayModeLivenessTracker.ResolveLiveness("playing", true, 2), Is.EqualTo("advancing"));
+            Assert.That(XUUnityLightMcpPlayModeLivenessTracker.ResolveLiveness("playing", true, 120), Is.EqualTo("advancing"));
+        }
+
+        [Test]
+        public void PlayModeLivenessTracker_WarnsOnlyWhenThrottledAndNamesFocusTheft()
+        {
+            Assert.That(
+                XUUnityLightMcpPlayModeLivenessTracker.ResolveWarning("throttled", false),
+                Is.EqualTo("playmode_throttled_editor_unfocused"));
+            Assert.That(
+                XUUnityLightMcpPlayModeLivenessTracker.ResolveWarning("throttled", true),
+                Is.EqualTo("playmode_throttled"));
+            Assert.That(XUUnityLightMcpPlayModeLivenessTracker.ResolveWarning("advancing", false), Is.Empty);
+            Assert.That(XUUnityLightMcpPlayModeLivenessTracker.ResolveWarning("not_playing", false), Is.Empty);
+            Assert.That(XUUnityLightMcpPlayModeLivenessTracker.ResolveWarning("unknown", false), Is.Empty);
+            Assert.That(
+                XUUnityLightMcpPlayModeLivenessTracker.ResolveRemediation("playmode_throttled_editor_unfocused"),
+                Is.EqualTo("focus_the_unity_editor_or_set_interaction_mode_to_no_throttling"));
+            Assert.That(XUUnityLightMcpPlayModeLivenessTracker.ResolveRemediation(""), Is.Empty);
         }
 
         [Test]

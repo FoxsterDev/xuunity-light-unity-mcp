@@ -21,6 +21,10 @@ namespace XUUnity.LightMcp.Editor.Operations
 
         internal static XUUnityLightMcpPlayModeStatePayload BuildPayload()
         {
+            var playmodeState = ResolvePlayModeState();
+            var liveness = XUUnityLightMcpPlayModeLivenessTracker.ResolveCurrentLiveness(playmodeState);
+            var editorFocused = XUUnityLightMcpPlayModeLivenessTracker.EditorApplicationFocused;
+            var livenessWarning = XUUnityLightMcpPlayModeLivenessTracker.ResolveWarning(liveness, editorFocused);
             return new XUUnityLightMcpPlayModeStatePayload
             {
                 project_root = XUUnityLightMcpFileIpcPaths.ProjectRootPath,
@@ -34,7 +38,14 @@ namespace XUUnity.LightMcp.Editor.Operations
                 is_playing = EditorApplication.isPlaying,
                 is_paused = EditorApplication.isPaused,
                 is_playing_or_will_change_playmode = EditorApplication.isPlayingOrWillChangePlaymode,
-                playmode_state = ResolvePlayModeState()
+                playmode_state = playmodeState,
+                playmode_frame_count = XUUnityLightMcpPlayModeLivenessTracker.CurrentFrameCount,
+                playmode_frames_advanced_last_interval = XUUnityLightMcpPlayModeLivenessTracker.FramesAdvancedLastInterval,
+                playmode_frame_sample_interval_seconds = XUUnityLightMcpPlayModeLivenessTracker.SampleIntervalSeconds,
+                editor_application_focused = editorFocused,
+                playmode_loop_liveness = liveness,
+                playmode_liveness_warning = livenessWarning,
+                playmode_liveness_remediation = XUUnityLightMcpPlayModeLivenessTracker.ResolveRemediation(livenessWarning)
             };
         }
 

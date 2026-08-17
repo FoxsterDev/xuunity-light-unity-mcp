@@ -152,6 +152,16 @@ def build_status_summary(
         "request_journal_head": str(effective.get("request_journal_head") or ""),
         "state_summary": summarize_state_for_error(effective),
     }
+    playmode_loop_liveness = str(effective.get("playmode_loop_liveness") or "")
+    if playmode_loop_liveness:
+        summary["playmode_loop_liveness"] = playmode_loop_liveness
+        summary["playmode_frame_count"] = int(effective.get("playmode_frame_count") or 0)
+        summary["playmode_frames_advanced_last_interval"] = int(effective.get("playmode_frames_advanced_last_interval") or 0)
+        summary["editor_application_focused"] = bool(effective.get("editor_application_focused"))
+        playmode_liveness_warning = str(effective.get("playmode_liveness_warning") or "")
+        if playmode_liveness_warning:
+            summary["playmode_liveness_warning"] = playmode_liveness_warning
+            summary["playmode_liveness_remediation"] = str(effective.get("playmode_liveness_remediation") or "")
     if not include_full_payload:
         summary.update(
             {

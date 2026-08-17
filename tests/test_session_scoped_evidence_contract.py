@@ -1388,6 +1388,31 @@ class CompactEnvelopeTests(unittest.TestCase):
         self.assertTrue(compact["is_playing"])
         self.assertNotIn("noise", compact)
 
+    def test_compact_playmode_keeps_the_liveness_evidence(self) -> None:
+        compact = server_bridge_payloads.compact_operation_payload(
+            {
+                "playmode_state": "playing",
+                "is_playing": True,
+                "playmode_frame_count": 4321,
+                "playmode_frames_advanced_last_interval": 0,
+                "playmode_frame_sample_interval_seconds": 2.01,
+                "editor_application_focused": False,
+                "playmode_loop_liveness": "throttled",
+                "playmode_liveness_warning": "playmode_throttled_editor_unfocused",
+                "playmode_liveness_remediation": "focus_the_unity_editor_or_set_interaction_mode_to_no_throttling",
+                "noise": list(range(100)),
+            },
+            "unity.playmode.state",
+        )
+
+        self.assertEqual("throttled", compact["playmode_loop_liveness"])
+        self.assertEqual("playmode_throttled_editor_unfocused", compact["playmode_liveness_warning"])
+        self.assertEqual(0, compact["playmode_frames_advanced_last_interval"])
+        self.assertEqual(4321, compact["playmode_frame_count"])
+        self.assertFalse(compact["editor_application_focused"])
+        self.assertIn("playmode_liveness_remediation", compact)
+        self.assertNotIn("noise", compact)
+
     def test_the_compactable_tools_expose_the_opt_out(self) -> None:
         for tool_name in (
             "unity_playmode_state",

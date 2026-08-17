@@ -18,6 +18,10 @@ namespace XUUnity.LightMcp.Editor.Operations
             var activeOperation = GetVisibleActiveOperation(request);
             var activeRequestId = GetVisibleActiveRequestId(request);
             var activeStartedUtc = GetVisibleActiveOperationStartedUtc(request);
+            var playmodeState = XUUnityLightMcpPlayModeStateOperation.ResolvePlayModeState();
+            var playmodeLiveness = XUUnityLightMcpPlayModeLivenessTracker.ResolveCurrentLiveness(playmodeState);
+            var editorFocused = XUUnityLightMcpPlayModeLivenessTracker.EditorApplicationFocused;
+            var livenessWarning = XUUnityLightMcpPlayModeLivenessTracker.ResolveWarning(playmodeLiveness, editorFocused);
             var payload = new XUUnityLightMcpStatusPayload
             {
                 project_root = XUUnityLightMcpFileIpcPaths.ProjectRootPath,
@@ -67,7 +71,14 @@ namespace XUUnity.LightMcp.Editor.Operations
                 is_paused = EditorApplication.isPaused,
                 is_updating = EditorApplication.isUpdating,
                 is_playing_or_will_change_playmode = EditorApplication.isPlayingOrWillChangePlaymode,
-                playmode_state = XUUnityLightMcpPlayModeStateOperation.ResolvePlayModeState(),
+                playmode_state = playmodeState,
+                playmode_frame_count = XUUnityLightMcpPlayModeLivenessTracker.CurrentFrameCount,
+                playmode_frames_advanced_last_interval = XUUnityLightMcpPlayModeLivenessTracker.FramesAdvancedLastInterval,
+                playmode_frame_sample_interval_seconds = XUUnityLightMcpPlayModeLivenessTracker.SampleIntervalSeconds,
+                editor_application_focused = editorFocused,
+                playmode_loop_liveness = playmodeLiveness,
+                playmode_liveness_warning = livenessWarning,
+                playmode_liveness_remediation = XUUnityLightMcpPlayModeLivenessTracker.ResolveRemediation(livenessWarning),
                 last_pump_utc = XUUnityLightMcpBridgeRuntimeState.LastPumpUtc,
                 last_processed_request_id = XUUnityLightMcpBridgeRuntimeState.LastProcessedRequestId,
                 pending_request_count = visiblePendingRequestCount,

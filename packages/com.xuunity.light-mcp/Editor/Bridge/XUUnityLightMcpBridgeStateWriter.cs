@@ -24,6 +24,9 @@ namespace XUUnity.LightMcp.Editor.Bridge
             XUUnityLightMcpFileIpcPaths.EnsureDirectories();
             var report = XUUnityLightMcpHealthProbe.EnsureCurrentReport();
             var playmodeState = XUUnityLightMcpPlayModeStateOperation.ResolvePlayModeState();
+            var playmodeLiveness = XUUnityLightMcpPlayModeLivenessTracker.ResolveCurrentLiveness(playmodeState);
+            var editorFocused = XUUnityLightMcpPlayModeLivenessTracker.EditorApplicationFocused;
+            var livenessWarning = XUUnityLightMcpPlayModeLivenessTracker.ResolveWarning(playmodeLiveness, editorFocused);
             XUUnityLightMcpTestRunState.TryLoadActive(out var activeTestRun);
 
             var state = new XUUnityLightMcpBridgeState
@@ -78,6 +81,13 @@ namespace XUUnity.LightMcp.Editor.Bridge
                 is_updating = EditorApplication.isUpdating,
                 is_playing_or_will_change_playmode = EditorApplication.isPlayingOrWillChangePlaymode,
                 playmode_state = playmodeState,
+                playmode_frame_count = XUUnityLightMcpPlayModeLivenessTracker.CurrentFrameCount,
+                playmode_frames_advanced_last_interval = XUUnityLightMcpPlayModeLivenessTracker.FramesAdvancedLastInterval,
+                playmode_frame_sample_interval_seconds = XUUnityLightMcpPlayModeLivenessTracker.SampleIntervalSeconds,
+                editor_application_focused = editorFocused,
+                playmode_loop_liveness = playmodeLiveness,
+                playmode_liveness_warning = livenessWarning,
+                playmode_liveness_remediation = XUUnityLightMcpPlayModeLivenessTracker.ResolveRemediation(livenessWarning),
                 heartbeat_utc = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ"),
                 last_pump_utc = XUUnityLightMcpBridgeRuntimeState.LastPumpUtc,
                 last_processed_request_id = XUUnityLightMcpBridgeRuntimeState.LastProcessedRequestId,

@@ -69,6 +69,13 @@ namespace XUUnity.LightMcp.Editor.Core
             public bool is_updating;
             public bool is_playing_or_will_change_playmode;
             public string playmode_state = "edit";
+            public int playmode_frame_count;
+            public int playmode_frames_advanced_last_interval;
+            public double playmode_frame_sample_interval_seconds;
+            public bool editor_application_focused;
+            public string playmode_loop_liveness = "";
+            public string playmode_liveness_warning = "";
+            public string playmode_liveness_remediation = "";
             public string heartbeat_utc = "";
             public string last_pump_utc = "";
             public string last_processed_request_id = "";
@@ -186,6 +193,13 @@ namespace XUUnity.LightMcp.Editor.Core
             public bool is_updating;
             public bool is_playing_or_will_change_playmode;
             public string playmode_state = "edit";
+            public int playmode_frame_count;
+            public int playmode_frames_advanced_last_interval;
+            public double playmode_frame_sample_interval_seconds;
+            public bool editor_application_focused;
+            public string playmode_loop_liveness = "";
+            public string playmode_liveness_warning = "";
+            public string playmode_liveness_remediation = "";
             public string last_pump_utc = "";
             public string last_processed_request_id = "";
             public int pending_request_count;

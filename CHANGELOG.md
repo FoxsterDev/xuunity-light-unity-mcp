@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+### Added
+
+- Play-mode liveness evidence. The bridge heartbeat now samples `Time.frameCount` between heartbeats and reports
+  `playmode_frame_count`, `playmode_frames_advanced_last_interval`, `playmode_frame_sample_interval_seconds`,
+  `editor_application_focused`, and a derived `playmode_loop_liveness` (`advancing` / `throttled` / `paused` /
+  `not_playing` / `unknown`) on `bridge_state.json`, `unity_playmode_state`, and `unity.status`.
+  `unity_status_summary` surfaces the same fields when the package reports them. When play mode is on but the game
+  loop is not advancing frames, the payloads carry an explicit `playmode_liveness_warning`
+  (`playmode_throttled_editor_unfocused` when the editor lost OS focus, `playmode_throttled` otherwise) with the
+  remediation `focus_the_unity_editor_or_set_interaction_mode_to_no_throttling`. An editor heartbeat is not a
+  game-loop heartbeat: previously `is_playing=true`, `health_status=healthy`, and a fresh heartbeat all stayed green
+  while the unfocused editor throttled the update loop to near zero. (2026-08-17 play-mode liveness retro, P0-1)
+
 ### Changed
 
 - `unity.scenario.run` is no longer refused at dispatch while compilation is broken. Scenarios are ordered
