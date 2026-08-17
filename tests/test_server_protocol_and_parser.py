@@ -936,6 +936,11 @@ actions:
         self.assertEqual("done", hook_summary["outcome"])
         self.assertEqual(2, hook_summary["payload_scalars"]["changed_file_count"])
         self.assertNotIn("api_token", hook_summary.get("payload_scalars", {}))
+        self.assertEqual("compact_project_action_invoke", structured["payload_mode"])
+        self.assertNotIn("scenario", structured)
+        self.assertNotIn("scenario_summary", structured)
+        self.assertTrue(structured["full_payload_available"])
+        self.assertEqual({"includeFullPayload": True}, structured["full_payload_tool_arguments"])
 
         self.assertEqual(1, len(invoke_calls))
         operation, scenario_args, timeout_ms = invoke_calls[0]
@@ -1033,6 +1038,59 @@ actions:
             "docs/operations/SMOKE_TESTS.md#4c-mutating-project-action-delta-contract",
             payload["mutation_delta_contract_doc"],
         )
+
+    def test_project_action_invocation_payload_full_mode_keeps_scenario_and_summary(self) -> None:
+        action_record = {
+            "action_id": "project.safe",
+            "hook_name": "example.project",
+            "mutation": False,
+            "mutates": [],
+            "evidence": ["changed_file_count"],
+            "validation_modes": [],
+        }
+        scenario = {"name": "S", "steps": [{"stepId": "invoke_project_action"}]}
+        summary = {
+            "status": "passed",
+            "succeeded": True,
+            "terminal": True,
+            "result_path": "/tmp/result.json",
+            "host_prerequisites": {"ready": True, "bulky": list(range(50))},
+            "state_groups": {"bulky": list(range(50))},
+        }
+
+        compact = server_project_actions.build_project_action_invocation_payload(
+            project_root=Path("/tmp/FakeProject"),
+            catalog={"catalog_path": "/tmp/project_actions.yaml"},
+            action_record=action_record,
+            requested_action="safe",
+            action_payload={},
+            scenario=scenario,
+            run_payload={"run_id": "run-1", "status": "queued"},
+            scenario_summary=summary,
+            wait_for_result=True,
+            include_full_payload=False,
+        )
+        self.assertEqual("compact_project_action_invoke", compact["payload_mode"])
+        self.assertNotIn("scenario", compact)
+        self.assertNotIn("scenario_summary", compact)
+        self.assertEqual("passed", compact["status"])
+        self.assertEqual("/tmp/result.json", compact["result_path"])
+
+        full = server_project_actions.build_project_action_invocation_payload(
+            project_root=Path("/tmp/FakeProject"),
+            catalog={"catalog_path": "/tmp/project_actions.yaml"},
+            action_record=action_record,
+            requested_action="safe",
+            action_payload={},
+            scenario=scenario,
+            run_payload={"run_id": "run-1", "status": "queued"},
+            scenario_summary=summary,
+            wait_for_result=True,
+            include_full_payload=True,
+        )
+        self.assertNotIn("payload_mode", full)
+        self.assertEqual(scenario, full["scenario"])
+        self.assertEqual(summary, full["scenario_summary"])
 
     def test_scenario_run_and_wait_expands_project_action_steps_before_unity(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

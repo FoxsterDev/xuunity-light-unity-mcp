@@ -1421,6 +1421,7 @@ class CompactEnvelopeTests(unittest.TestCase):
             "unity_scene_open",
             "unity_scene_snapshot",
             "unity_game_view_configure",
+            "unity_project_action_invoke",
         ):
             with self.subTest(tool=tool_name):
                 properties = server_specs.TOOLS[tool_name]["inputSchema"]["properties"]

@@ -2210,6 +2210,7 @@ def call_unity_project_action_invoke_tool(arguments: dict[str, Any]) -> dict[str
 
     wait_for_result = _optional_bool_arg(arguments, "waitForResult", True)
     allow_mutating = _optional_bool_arg(arguments, "allowMutating", False)
+    include_full_payload = _optional_bool_arg(arguments, "includeFullPayload", False)
     poll_interval_ms = arguments.get("pollIntervalMs", 1000)
     if not isinstance(poll_interval_ms, int):
         raise JsonRpcError(-32602, "pollIntervalMs must be an integer.")
@@ -2232,6 +2233,7 @@ def call_unity_project_action_invoke_tool(arguments: dict[str, Any]) -> dict[str
             poll_interval_ms=poll_interval_ms,
             wait_for_result=wait_for_result,
             allow_mutating=allow_mutating,
+            include_full_payload=include_full_payload,
         )
     except ToolInvocationError as exc:
         return mcp_json_result(build_tool_error_payload(exc), is_error=True)
@@ -2549,6 +2551,7 @@ def invoke_project_action_from_catalog(
     poll_interval_ms: int,
     wait_for_result: bool,
     allow_mutating: bool,
+    include_full_payload: bool = True,
 ) -> tuple[dict[str, Any], bool]:
     catalog = load_project_action_catalog(project_root, catalog_path)
     action_record = resolve_project_action(catalog, requested_action)
@@ -2611,6 +2614,7 @@ def invoke_project_action_from_catalog(
         run_payload=run_payload,
         scenario_summary=scenario_summary,
         wait_for_result=wait_for_result,
+        include_full_payload=include_full_payload,
     )
     return result, wait_for_result and not bool(result.get("succeeded"))
 

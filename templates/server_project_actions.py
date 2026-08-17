@@ -621,6 +621,13 @@ def normalize_project_action_step(
     return normalized
 
 
+def _stamp_compact_project_action_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    payload["payload_mode"] = "compact_project_action_invoke"
+    payload["full_payload_available"] = True
+    payload["full_payload_tool_arguments"] = {"includeFullPayload": True}
+    return payload
+
+
 def build_project_action_invocation_payload(
     *,
     project_root: Path,
@@ -632,6 +639,7 @@ def build_project_action_invocation_payload(
     run_payload: dict[str, Any],
     scenario_summary: dict[str, Any] | None,
     wait_for_result: bool,
+    include_full_payload: bool = True,
 ) -> dict[str, Any]:
     payload = {
         "action": "unity_project_action_invoke",
@@ -647,20 +655,29 @@ def build_project_action_invocation_payload(
         "validation_modes": list(action_record.get("validation_modes") or []),
         "payload_keys": sorted(str(key) for key in action_payload.keys()),
         "scenario_name": str(scenario.get("name") or ""),
-        "scenario": scenario,
         "wait_for_result": wait_for_result,
         "run_id": str(run_payload.get("run_id") or ""),
         "run_start_status": str(run_payload.get("status") or ""),
     }
+    if include_full_payload:
+        payload["scenario"] = scenario
     if not wait_for_result:
         payload["status"] = str(run_payload.get("status") or "")
         payload["succeeded"] = False
         payload["terminal"] = False
-        payload["run_start"] = run_payload
-        return payload
+        if include_full_payload:
+            payload["run_start"] = run_payload
+            return payload
+        payload["run_start"] = {
+            "run_id": str(run_payload.get("run_id") or ""),
+            "status": str(run_payload.get("status") or ""),
+            "scenario_name": str(run_payload.get("scenario_name") or ""),
+        }
+        return _stamp_compact_project_action_payload(payload)
 
     summary = dict(scenario_summary or {})
-    payload["scenario_summary"] = summary
+    if include_full_payload:
+        payload["scenario_summary"] = summary
     payload["status"] = str(summary.get("status") or "")
     payload["succeeded"] = bool(summary.get("succeeded"))
     payload["terminal"] = bool(summary.get("terminal"))
@@ -669,7 +686,9 @@ def build_project_action_invocation_payload(
         payload["project_defined_hook_summary"] = summary["project_defined_hook_summary"]
     if bool(action_record.get("mutation")):
         payload.update(build_project_action_mutation_verdict(summary))
-    return payload
+    if include_full_payload:
+        return payload
+    return _stamp_compact_project_action_payload(payload)
 
 
 MUTATION_DELTA_SCHEMA_VERSION = "xuunity.mutation-delta.v1"

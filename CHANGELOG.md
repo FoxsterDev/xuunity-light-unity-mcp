@@ -4,6 +4,12 @@
 
 ### Added
 
+- Compact `unity_project_action_invoke` envelope. The tool now returns the action id, outcome, catalog-declared
+  evidence scalars (`project_defined_hook_summary`), and the mutation trust verdict by default, dropping the verbatim
+  scenario echo and the nested full scenario summary that previously repeated ~8-10 KB of constant host lifecycle
+  payload per invocation. `includeFullPayload=true` (stamped in `full_payload_tool_arguments`) restores the full
+  envelope, consistent with the released compact scene/view/playmode behavior. (2026-08-17 play-mode liveness retro,
+  P1-2)
 - Play-mode liveness evidence. The bridge heartbeat now samples `Time.frameCount` between heartbeats and reports
   `playmode_frame_count`, `playmode_frames_advanced_last_interval`, `playmode_frame_sample_interval_seconds`,
   `editor_application_focused`, and a derived `playmode_loop_liveness` (`advancing` / `throttled` / `paused` /

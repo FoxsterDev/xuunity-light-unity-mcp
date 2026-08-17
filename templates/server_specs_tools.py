@@ -288,7 +288,12 @@ TOOLS: dict[str, dict[str, Any]] = {
                 },
                 "waitForResult": {"type": "boolean", "default": True},
                 "timeoutMs": {"type": "integer", "default": 600000, "minimum": 1000},
-                "pollIntervalMs": {"type": "integer", "default": 1000, "minimum": 100}
+                "pollIntervalMs": {"type": "integer", "default": 1000, "minimum": 100},
+                "includeFullPayload": {
+                    "type": "boolean",
+                    "default": False,
+                    "description": "When true, return the full invocation envelope (scenario echo and nested scenario summary) instead of the compact action-id/outcome/evidence envelope."
+                }
             },
             "required": ["projectRoot", "actionId"]
         }
