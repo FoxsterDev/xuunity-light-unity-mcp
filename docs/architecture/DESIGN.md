@@ -366,6 +366,22 @@ Without:
 Constraint:
 - the corresponding Unity platform support module must be installed on the host editor
 
+Gating boundary (compile-red fail-fast):
+- the host-side compile gate covers direct one-shot operations only:
+  `unity.tests.run_editmode`, `unity.tests.run_playmode`, and
+  `unity.playmode.set` with `action=enter`
+- the gate must never cover `unity.playmode.set` with `action=exit` (or
+  `pause`/`resume`): when the editor is in Play Mode, Unity defers the script
+  reload, so exiting Play Mode is exactly the remediation that clears a broken
+  compile state — gating it creates an out-of-band deadlock
+- `unity.scenario.run` is deliberately ungated at dispatch: scenarios are
+  ordered remediation flows (playmode exit, refresh, compile), and step-level
+  gates own correctness inside the editor — scenario test steps refuse with
+  `compile_broken` editor-side, and Unity natively refuses Play Mode entry
+  while compilation is broken
+- the direct tool and the scenario step for the same operation must agree on
+  gating, or the divergence must be recorded here as deliberate
+
 ## Capability Probe Model
 
 Version-sensitive operations are not trusted by default.

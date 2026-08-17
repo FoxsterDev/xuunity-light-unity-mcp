@@ -118,6 +118,31 @@ class BridgeRuntimeTests(unittest.TestCase):
             {"script_compilation_failed": True, "compiler_error_count": 1},
         )
 
+    def test_compile_gate_covers_direct_fail_fast_operations_only(self) -> None:
+        self.assertEqual(
+            frozenset(
+                {
+                    "unity.tests.run_editmode",
+                    "unity.tests.run_playmode",
+                    "unity.playmode.set",
+                }
+            ),
+            server_bridge_runtime.COMPILE_RED_FAIL_FAST_OPERATIONS,
+            "The host compile gate covers direct one-shot operations only. "
+            "unity.scenario.run is deliberately ungated at dispatch: scenarios are "
+            "ordered remediation flows (playmode exit, refresh, compile), and the "
+            "step-level gates own correctness editor-side (test steps refuse with "
+            "compile_broken in XUUnityLightMcpTestsUtility; Unity natively refuses "
+            "play-mode enter while compilation is broken).",
+        )
+
+    def test_compile_broken_state_does_not_block_scenario_run_dispatch(self) -> None:
+        server_bridge_runtime.fail_if_compile_broken_for_operation(
+            Path("/tmp/FakeProject"),
+            "unity.scenario.run",
+            {"script_compilation_failed": True, "compiler_error_count": 1},
+        )
+
     def test_compile_broken_state_blocks_playmode_enter_only(self) -> None:
         state = {"script_compilation_failed": True, "compiler_error_count": 1}
 

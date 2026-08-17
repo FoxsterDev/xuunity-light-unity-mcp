@@ -15,6 +15,5 @@ COMPILE_RED_FAIL_FAST_OPERATIONS = frozenset(
         "unity.tests.run_editmode",
         "unity.tests.run_playmode",
         "unity.playmode.set",
-        "unity.scenario.run",
     }
 )

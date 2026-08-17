@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Changed
+
+- `unity.scenario.run` is no longer refused at dispatch while compilation is broken. Scenarios are ordered
+  remediation flows (play-mode exit, refresh, compile), and step-level gates already own correctness inside the
+  editor: scenario test steps refuse with `compile_broken` editor-side and Unity natively refuses Play Mode entry
+  while compilation is broken. The host compile gate now covers direct one-shot operations only, and the
+  direct-tool-versus-scenario-step gating contract is recorded in `docs/architecture/DESIGN.md` and asserted by a
+  membership test. (2026-08-17 play-mode liveness retro, P0-3)
+
 ### Fixed
 
 - The host-side compile gate no longer refuses `unity.playmode.set` for `exit`, `pause`, or `resume`. Exiting play
