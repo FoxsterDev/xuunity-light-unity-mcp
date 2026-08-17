@@ -118,6 +118,36 @@ class BridgeRuntimeTests(unittest.TestCase):
             {"script_compilation_failed": True, "compiler_error_count": 1},
         )
 
+    def test_compile_broken_state_blocks_playmode_enter_only(self) -> None:
+        state = {"script_compilation_failed": True, "compiler_error_count": 1}
+
+        with self.assertRaises(server_bridge_runtime.ToolInvocationError) as raised:
+            server_bridge_runtime.fail_if_compile_broken_for_operation(
+                Path("/tmp/FakeProject"),
+                "unity.playmode.set",
+                state,
+                {"action": "enter"},
+            )
+
+        self.assertEqual("compile_broken", raised.exception.code)
+
+    def test_compile_broken_state_never_blocks_playmode_exit_pause_or_resume(self) -> None:
+        state = {"script_compilation_failed": True, "compiler_error_count": 1}
+
+        for action in ("exit", "pause", "resume", "EXIT ", ""):
+            server_bridge_runtime.fail_if_compile_broken_for_operation(
+                Path("/tmp/FakeProject"),
+                "unity.playmode.set",
+                state,
+                {"action": action},
+            )
+        server_bridge_runtime.fail_if_compile_broken_for_operation(
+            Path("/tmp/FakeProject"),
+            "unity.playmode.set",
+            state,
+            None,
+        )
+
     def test_resolve_bridge_transport_defaults_config_missing_transport_to_tcp_loopback(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             project_root = Path(tmp_dir)

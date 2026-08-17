@@ -7,6 +7,9 @@ from typing import Any
 from server_bridge_constants import COMPILE_RED_FAIL_FAST_OPERATIONS
 from server_core import ToolInvocationError
 
+COMPILE_GATED_PLAYMODE_ACTIONS = frozenset({"enter"})
+
+
 def compiler_diagnostics_from_state(state: dict[str, Any] | None) -> dict[str, Any]:
     effective = state or {}
     diagnostics = effective.get("recent_compiler_diagnostics")
@@ -24,9 +27,15 @@ def fail_if_compile_broken_for_operation(
     project_root: Path,
     operation: str,
     state: dict[str, Any] | None,
+    arguments: dict[str, Any] | None = None,
 ) -> None:
     if operation not in COMPILE_RED_FAIL_FAST_OPERATIONS:
         return
+
+    if operation == "unity.playmode.set":
+        action = str((arguments or {}).get("action") or "").strip().lower()
+        if action not in COMPILE_GATED_PLAYMODE_ACTIONS:
+            return
 
     diagnostics = compiler_diagnostics_from_state(state)
     if not diagnostics["script_compilation_failed"] and diagnostics["compiler_error_count"] <= 0:

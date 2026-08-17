@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Fixed
+
+- The host-side compile gate no longer refuses `unity.playmode.set` for `exit`, `pause`, or `resume`. Exiting play
+  mode is the remediation that lets Unity run the deferred recompile, so gating it created an in-band deadlock: a
+  compile-broken play session could not be exited through the direct tool while the same transition expressed as a
+  scenario step succeeded. Only `action=enter` remains compile-gated (fail-fast with diagnostics before Unity's own
+  native refusal). (2026-08-17 play-mode liveness retro, P0-2)
+
 ## 0.3.57
 
 Release tag: `v0.3.57`

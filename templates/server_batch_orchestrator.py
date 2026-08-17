@@ -1192,7 +1192,7 @@ def invoke_bridge(project_root_value: str, operation: str, args: dict[str, Any],
                     )
 
                 pre_idle_state = try_read_live_editor_state(project_root) or current_project_context_bridge_state(project_root)
-                fail_if_compile_broken_for_operation(project_root, operation, pre_idle_state)
+                fail_if_compile_broken_for_operation(project_root, operation, pre_idle_state, args)
 
                 if policy["wait_for_idle_before"]:
                     report_operation_progress_phase(
