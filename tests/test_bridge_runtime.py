@@ -118,6 +118,63 @@ class BridgeRuntimeTests(unittest.TestCase):
             {"script_compilation_failed": True, "compiler_error_count": 1},
         )
 
+    def test_compiler_diagnostics_carry_a_trust_class(self) -> None:
+        confirmed = server_bridge_runtime.compiler_diagnostics_from_state(
+            {
+                "script_compilation_failed": True,
+                "compiler_error_count": 1,
+                "compiler_diagnostics_source": "compilation_pipeline",
+                "playmode_state": "edit",
+            }
+        )
+        self.assertEqual("confirmed", confirmed["compiler_diagnostics_trust_class"])
+        self.assertNotIn("compiler_diagnostics_note", confirmed)
+
+        deferred = server_bridge_runtime.compiler_diagnostics_from_state(
+            {
+                "script_compilation_failed": True,
+                "compiler_error_count": 1,
+                "compiler_diagnostics_source": "compilation_pipeline",
+                "playmode_state": "playing",
+            }
+        )
+        self.assertEqual("deferred_during_playmode", deferred["compiler_diagnostics_trust_class"])
+        self.assertIn("exit Play Mode", deferred["compiler_diagnostics_note"])
+
+        flag_only = server_bridge_runtime.compiler_diagnostics_from_state(
+            {
+                "script_compilation_failed": True,
+                "compiler_error_count": 0,
+                "compiler_diagnostics_source": "script_compilation_failed_flag",
+                "playmode_state": "edit",
+            }
+        )
+        self.assertEqual("flag_only_not_verdict", flag_only["compiler_diagnostics_trust_class"])
+        self.assertIn("flag, not a verdict", flag_only["compiler_diagnostics_note"])
+
+        clean = server_bridge_runtime.compiler_diagnostics_from_state({"playmode_state": "edit"})
+        self.assertNotIn("compiler_diagnostics_trust_class", clean)
+
+    def test_compile_broken_refusal_labels_playmode_deferred_diagnostics(self) -> None:
+        state = {
+            "script_compilation_failed": True,
+            "compiler_error_count": 1,
+            "compiler_diagnostics_source": "compilation_pipeline",
+            "playmode_state": "playing",
+        }
+
+        with self.assertRaises(server_bridge_runtime.ToolInvocationError) as raised:
+            server_bridge_runtime.fail_if_compile_broken_for_operation(
+                Path("/tmp/FakeProject"),
+                "unity.tests.run_editmode",
+                state,
+            )
+
+        self.assertEqual(
+            "deferred_during_playmode",
+            raised.exception.details["compiler_diagnostics_trust_class"],
+        )
+
     def test_compile_gate_covers_direct_fail_fast_operations_only(self) -> None:
         self.assertEqual(
             frozenset(

@@ -26,6 +26,12 @@
 
 ### Fixed
 
+- Compiler diagnostics now carry provenance. Every payload built from bridge-state compiler evidence — the
+  `compile_broken` refusal details and `unity_status_summary` — stamps `compiler_diagnostics_trust_class`
+  (`confirmed` / `deferred_during_playmode` / `flag_only_not_verdict`, reusing the post-settle trust vocabulary) plus
+  a `compiler_diagnostics_note` naming the remediation. A refusal can no longer quote diagnostics that a later
+  recompile has already cleared, or a bare `script_compilation_failed` flag, as a current authoritative verdict
+  without labelling them. (2026-08-17 play-mode liveness retro, P1-1)
 - The mutation-delta warning is actionable. `passed_unverified_mutation_delta` and `passed_invalid_mutation_delta`
   verdicts now name the `xuunity.mutation-delta.v1` schema in the warning text and carry `mutation_delta_schema` plus
   `mutation_delta_contract_doc` pointing at the worked contract example

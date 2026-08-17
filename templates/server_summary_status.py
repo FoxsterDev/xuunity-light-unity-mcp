@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
-from server_bridge_runtime import build_bridge_stabilization_summary
+from server_bridge_runtime import build_bridge_stabilization_summary, compiler_diagnostics_trust_from_state
 
 
 def truncate_text(value: Any, max_length: int = 240) -> str:
@@ -131,6 +131,7 @@ def build_status_summary(
         "compiler_error_count": int(effective.get("compiler_error_count") or 0),
         "recent_compiler_diagnostics": list(effective.get("recent_compiler_diagnostics") or [])[:5],
         "compiler_diagnostics_source": str(effective.get("compiler_diagnostics_source") or ""),
+        **compiler_diagnostics_trust_from_state(effective),
         "busy_reason": busy_reason,
         "busy_reason_detail": truncate_text(effective.get("busy_reason_detail") or ""),
         "pending_request_count": int(effective.get("pending_request_count") or 0),

@@ -1685,6 +1685,29 @@ class ServerProjectHelperTests(unittest.TestCase):
             summary["playmode_liveness_remediation"],
         )
 
+    def test_status_summary_labels_flag_only_compile_diagnostics(self) -> None:
+        summary = server.build_status_summary(
+            Path("/tmp/FakeProject"),
+            {
+                "editor_pid": 123,
+                "editor_running": True,
+                "mcp_reachable": True,
+                "playmode_state": "edit",
+                "script_compilation_failed": True,
+                "compiler_error_count": 0,
+                "compiler_diagnostics_source": "script_compilation_failed_flag",
+            },
+            read_best_effort_bridge_state=lambda _: {},
+            try_read_bridge_state=lambda _: {},
+            pid_is_alive=lambda _: True,
+            heartbeat_age_seconds=lambda _: 1.0,
+            derive_busy_reason=lambda _: "",
+            summarize_state_for_error=lambda _: "edit",
+        )
+
+        self.assertEqual("flag_only_not_verdict", summary["compiler_diagnostics_trust_class"])
+        self.assertIn("flag, not a verdict", summary["compiler_diagnostics_note"])
+
     def test_status_summary_omits_playmode_liveness_for_older_packages(self) -> None:
         summary = server.build_status_summary(
             Path("/tmp/FakeProject"),

@@ -7,7 +7,11 @@ from typing import Any, Callable
 
 import server_bridge_final_status as _final_status
 
-from server_bridge_compile_gate import compiler_diagnostics_from_state, fail_if_compile_broken_for_operation
+from server_bridge_compile_gate import (
+    compiler_diagnostics_from_state,
+    compiler_diagnostics_trust_from_state,
+    fail_if_compile_broken_for_operation,
+)
 from server_bridge_constants import (
     COMPILE_RED_FAIL_FAST_OPERATIONS,
     DEFAULT_BRIDGE_TRANSPORT,
