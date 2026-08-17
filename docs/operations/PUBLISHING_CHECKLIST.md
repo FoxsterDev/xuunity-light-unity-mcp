@@ -73,11 +73,19 @@ git push origin v<next-version>
 ```
 
 The CI gate step is mandatory and sits between the master push and the tag
-push: it exits non-zero until `Integration Tests`, `Unity Package CI`, and
-`Discovery Checks` all have a completed, successful run for the release SHA.
-Do not push the tag while it is red, pending, or unable to verify. See
-`UNITY_PACKAGE_CI.md` for the workflow, license secrets, and the tag-push
-`Release Tag Gate` workflow that re-verifies the same contract in CI.
+push: it exits non-zero until every required workflow has a completed,
+successful run for the release SHA. Do not push the tag while it is red,
+pending, or unable to verify. See `UNITY_PACKAGE_CI.md` for the workflow,
+license secrets, and the tag-push `Release Tag Gate` workflow that re-verifies
+the same contract in CI.
+
+A workflow that cannot run at all may be suspended through the gate's
+`WAIVED_GATES` table rather than deleted from the required set. A waiver is an
+explicit, reported evidence gap, not a pass: the run reports
+`status=ok_with_waived_gates` with the reason and restore condition, and the
+release notes for anything cut under it must say what went unproven. Restore
+the gate as soon as the blocker clears. `Unity Package CI` is waived today —
+see `UNITY_PACKAGE_CI.md`.
 
 If the site version, install tag, listing metadata, refresh launcher install
 output, or client startup docs are stale, do not tag the release and do not

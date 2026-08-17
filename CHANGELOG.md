@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+### Changed
+
+- `Unity Package CI` is suspended in the release gate through an explicit waiver instead of being required.
+  Runner Unity license secrets do not exist yet, so the workflow cannot produce a run for any SHA and the
+  `Release Tag Gate` failed on the `v0.3.58` tag with `Unity Package CI: missing`. The gate now keeps the
+  workflow in `RELEASE_GATE_WORKFLOWS`, reports a `waived_gates` record carrying the reason, the concrete
+  evidence gap (`no CI-recorded EditMode/PlayMode proof for the release SHA`), and the restore condition, and
+  reports `status=ok_with_waived_gates` — never plain `ok` — so a waived gate cannot be read as a passed one.
+  `--require "Unity Package CI"` re-arms it for a single run. `v0.3.58` was validated locally on both Unity
+  lines instead (EditMode `121/121` ugui on `2022.3` and `6000.0`, `84/84` no-ugui, PlayMode `18` with one
+  environment skip); that evidence is not CI-recorded.
+
 ## 0.3.58
 
 Release tag: `v0.3.58`

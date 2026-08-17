@@ -24,11 +24,28 @@ from typing import Any, Callable
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_REPOSITORY = "FoxsterDev/xuunity-mcp"
-REQUIRED_WORKFLOWS = (
+RELEASE_GATE_WORKFLOWS = (
     "Integration Tests",
     "Unity Package CI",
     "Discovery Checks",
 )
+
+# A gate the maintainer has temporarily suspended because it cannot run at all, not because it passed.
+# Every entry must name why and what retires it, the gate output must carry it, and the release notes for
+# any release cut under a waiver must say so: a suspended Unity gate that quietly disappears from the
+# required set reads exactly like a green one, which is the failure this whole gate exists to prevent.
+WAIVED_GATES = {
+    "Unity Package CI": {
+        "reason": "no Unity license secrets are configured for the runners, so the workflow cannot produce a run",
+        "restore_condition": (
+            "set UNITY_LICENSE (or UNITY_EMAIL + UNITY_PASSWORD + UNITY_SERIAL), restore the workflow's "
+            "push/pull_request triggers, and drop this entry — see docs/operations/UNITY_PACKAGE_CI.md"
+        ),
+        "evidence_gap": "the shipped package carries no CI-recorded EditMode/PlayMode proof for the release SHA",
+    },
+}
+
+REQUIRED_WORKFLOWS = tuple(name for name in RELEASE_GATE_WORKFLOWS if name not in WAIVED_GATES)
 ACCEPTED_EVENTS = ("push", "workflow_dispatch")
 API_TIMEOUT_SECONDS = 30
 
@@ -143,6 +160,19 @@ def resolve_head_sha() -> str:
     return sha
 
 
+def waived_gate_records(required_workflows: tuple[str, ...]) -> list[dict[str, Any]]:
+    """Suspended gates, as data the caller cannot miss.
+
+    A waived gate is unproven, not passed. It is reported next to the evaluated gates so a green run and the
+    release notes derived from it both still carry the evidence gap.
+    """
+    return [
+        {"workflow": workflow_name, "verdict": "waived", **WAIVED_GATES[workflow_name]}
+        for workflow_name in RELEASE_GATE_WORKFLOWS
+        if workflow_name in WAIVED_GATES and workflow_name not in required_workflows
+    ]
+
+
 def check_release_ci_gates(
     repository: str,
     sha: str,
@@ -155,6 +185,7 @@ def check_release_ci_gates(
     clock: Callable[[], float] = time.monotonic,
 ) -> dict[str, Any]:
     deadline = clock() + max(wait_seconds, 0.0)
+    waived = waived_gate_records(required_workflows)
     while True:
         try:
             runs = fetcher(repository, sha, token)
@@ -171,13 +202,15 @@ def check_release_ci_gates(
                     }
                     for workflow_name in required_workflows
                 ],
+                "waived_gates": waived,
                 "error": str(error),
             }
         gates = evaluate_gates(runs, required_workflows)
         if not gates_blocked(gates):
-            return {"status": "ok", "repository": repository, "sha": sha, "gates": gates}
+            status = "ok_with_waived_gates" if waived else "ok"
+            return {"status": status, "repository": repository, "sha": sha, "gates": gates, "waived_gates": waived}
         if not gates_retryable(gates) or clock() >= deadline:
-            return {"status": "blocked", "repository": repository, "sha": sha, "gates": gates}
+            return {"status": "blocked", "repository": repository, "sha": sha, "gates": gates, "waived_gates": waived}
         sleeper(poll_interval_seconds)
 
 
@@ -220,10 +253,18 @@ def main(
     for gate in result["gates"]:
         detail = gate.get("run_url") or gate.get("remediation") or ""
         print(f"[{gate['verdict']}] {gate['workflow']} {detail}".rstrip())
+    for gate in result.get("waived_gates") or []:
+        print(f"[waived] {gate['workflow']} — {gate['reason']}", file=sys.stderr)
+        print(f"[waived] {gate['workflow']} evidence gap: {gate['evidence_gap']}", file=sys.stderr)
+        print(f"[waived] {gate['workflow']} restore: {gate['restore_condition']}", file=sys.stderr)
     print(json.dumps(result, indent=2))
-    if result["status"] != "ok":
+    if result["status"] == "blocked":
         print("release gate: blocked — do not push the release tag for this SHA.", file=sys.stderr)
         return 1
+    if result["status"] == "ok_with_waived_gates":
+        waived_names = ", ".join(gate["workflow"] for gate in result["waived_gates"])
+        print(f"release gate: required workflows are green for {sha}; waived (unproven): {waived_names}.")
+        return 0
     print(f"release gate: all required workflows are green for {sha}.")
     return 0
 

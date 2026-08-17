@@ -25,11 +25,16 @@ a platform-only failure.
    explicitly asks to retag.
 6. After pushing master and before pushing the tag, run
    `python3 scripts/testing/check_release_ci_gates.py --wait-seconds 1800`.
-   It blocks the tag until `Integration Tests`, `Unity Package CI`, and
-   `Discovery Checks` each have a completed successful `push`/`workflow_dispatch`
-   run for the release SHA. Failed, pending, missing, or unverifiable gates all
-   block; never bypass by tagging anyway. The tag-push `Release Tag Gate`
-   workflow re-verifies the same contract in CI.
+   It blocks the tag until every required workflow has a completed successful
+   `push`/`workflow_dispatch` run for the release SHA. Failed, pending, missing,
+   or unverifiable gates all block; never bypass by tagging anyway. The tag-push
+   `Release Tag Gate` workflow re-verifies the same contract in CI.
+7. A workflow that cannot run at all (no runner license, infrastructure gone)
+   may be suspended in the gate's `WAIVED_GATES` table — with a reason, the
+   evidence gap, and a restore condition — instead of being dropped from the
+   required set. The run then reports `status=ok_with_waived_gates`, and the
+   release notes must carry the gap. Never silently delete a gate.
+   `Unity Package CI` is waived today: no runner Unity license.
 
 ## Windows CI Assumptions
 

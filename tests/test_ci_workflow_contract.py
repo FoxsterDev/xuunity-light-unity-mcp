@@ -36,9 +36,10 @@ def workflow_unity_versions(text: str) -> list[str]:
 class RequiredGateNamesStayInSyncTests(unittest.TestCase):
     """Renaming a workflow silently breaks the release gate; pin the mapping."""
 
-    def test_every_required_workflow_name_matches_a_checked_in_workflow(self) -> None:
+    def test_every_release_gate_workflow_name_matches_a_checked_in_workflow(self) -> None:
+        """Waived names are pinned too: a rename during a waiver would make the restore a silent no-op."""
         display_names = {workflow_display_name(path) for path in WORKFLOWS_DIR.glob("*.yml")}
-        for required in gate.REQUIRED_WORKFLOWS:
+        for required in gate.RELEASE_GATE_WORKFLOWS:
             self.assertIn(required, display_names)
 
     def test_the_tag_gate_workflow_is_not_a_required_gate_of_itself(self) -> None:
@@ -83,16 +84,23 @@ class UnityPackageCiWorkflowContractTests(unittest.TestCase):
         self.assertIn("- master", push_block)
         self.assertNotIn("paths:", push_block)
 
-    def test_manual_only_mode_states_its_reason_and_keeps_the_release_gate(self) -> None:
-        """Dropping the automatic triggers is allowed only while the workflow says
-        why and the release gate still demands it; otherwise releases would tag
-        SHAs with no Unity evidence at all."""
+    def test_manual_only_mode_states_its_reason_and_stays_accounted_for(self) -> None:
+        """Dropping the automatic triggers is allowed only while the workflow says why
+        and the release gate still accounts for it — either by requiring it, or by an
+        explicit waiver that reports the missing Unity evidence. Manual-only plus a
+        silent disappearance from the gate is the one combination that would let a
+        release tag a SHA with no Unity evidence and still print a clean verdict."""
         text = UNITY_CI_WORKFLOW.read_text(encoding="utf-8")
         if "push:" in text:
             return
         self.assertIn("workflow_dispatch:", text)
         self.assertIn("manual-only", text)
-        self.assertIn("Unity Package CI", gate.REQUIRED_WORKFLOWS)
+        name = workflow_display_name(UNITY_CI_WORKFLOW)
+        self.assertIn(name, gate.RELEASE_GATE_WORKFLOWS)
+        self.assertTrue(
+            name in gate.REQUIRED_WORKFLOWS or name in gate.WAIVED_GATES,
+            f"{name} is manual-only and neither required nor waived: the gate would report a clean release",
+        )
 
 
 class ReleaseTagGateWorkflowContractTests(unittest.TestCase):
