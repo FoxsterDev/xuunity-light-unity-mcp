@@ -77,9 +77,22 @@ class UnityPackageCiWorkflowContractTests(unittest.TestCase):
         """A path-filtered master trigger would leave release SHAs without Unity
         evidence and the tag gate would block on missing runs."""
         text = UNITY_CI_WORKFLOW.read_text(encoding="utf-8")
+        if "push:" not in text:
+            self.skipTest("workflow is manual-only; covered by the manual-only contract test")
         push_block = text.split("pull_request:", 1)[0]
         self.assertIn("- master", push_block)
         self.assertNotIn("paths:", push_block)
+
+    def test_manual_only_mode_states_its_reason_and_keeps_the_release_gate(self) -> None:
+        """Dropping the automatic triggers is allowed only while the workflow says
+        why and the release gate still demands it; otherwise releases would tag
+        SHAs with no Unity evidence at all."""
+        text = UNITY_CI_WORKFLOW.read_text(encoding="utf-8")
+        if "push:" in text:
+            return
+        self.assertIn("workflow_dispatch:", text)
+        self.assertIn("manual-only", text)
+        self.assertIn("Unity Package CI", gate.REQUIRED_WORKFLOWS)
 
 
 class ReleaseTagGateWorkflowContractTests(unittest.TestCase):

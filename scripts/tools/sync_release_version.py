@@ -32,9 +32,12 @@ RELEASE_DOCS = (
     Path("docs") / "README.md",
     Path("docs") / "index.html",
     Path("docs") / "install.html",
+    Path("docs") / "architecture" / "ROADMAP.md",
     Path("docs") / "agents" / "AGENT_WORKFLOWS.md",
     Path("docs") / "agents" / "AI_INTEGRATION.md",
+    Path("docs") / "clients" / "codex.md",
     Path("docs") / "operations" / "BUILD_AUTOMATION.md",
+    Path("docs") / "operations" / "UNITY_PACKAGE_CI.md",
     Path("docs") / "operations" / "DEVMODE_VALIDATION.md",
     Path("docs") / "operations" / "PACKAGE_PATH_MIGRATION.md",
     Path("docs") / "operations" / "SMOKE_TESTS.md",
@@ -145,6 +148,7 @@ HISTORICAL_VERSION_CLAIMS = (
     (Path("docs") / "reference" / "STATUS.md", "full package gate"),
     (Path("docs") / "reference" / "COMPARISON.md", "superseding the"),
     (Path("docs") / "operations" / "PACKAGE_PATH_MIGRATION.md", "moved the package"),
+    (Path("docs") / "architecture" / "ROADMAP.md", "adds opt-in compact batch helper CLI output"),
 )
 
 
