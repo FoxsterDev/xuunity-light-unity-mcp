@@ -1,17 +1,23 @@
 # Unity Package CI And Release Tag Gate
 
 Date: `2026-08-14`
-Status: `current for v0.3.57-dev`
+Status: `current for v0.3.58`
 
 This document describes the automated Unity package CI gates and the release
 tag gate that blocks tag preparation on failed or missing gates.
 
 ## Unity Package CI Workflow
 
-`.github/workflows/unity-package-ci.yml` runs on every push to `master`, on
-pull requests, and on `workflow_dispatch`. The master push trigger has no path
-filter on purpose: every master SHA must carry Unity gate evidence so the
-release tag gate never reports a missing gate for a release commit.
+`.github/workflows/unity-package-ci.yml` currently runs on `workflow_dispatch`
+only, because the runner Unity license secrets are not configured yet. The
+release tag gate still requires this workflow green for the release SHA, so
+releases stay blocked until licensing is set up — that block is the intended
+behavior, not a bug to route around.
+
+Restore the `push` (branch `master`, no path filter) and `pull_request`
+triggers once the secrets exist. The master push trigger must stay path-filter
+free: every master SHA has to carry Unity gate evidence so the release tag gate
+never reports a missing gate for a release commit.
 
 The matrix compiles the package and runs its shipped EditMode and PlayMode
 self-tests on two supported Unity lines:
