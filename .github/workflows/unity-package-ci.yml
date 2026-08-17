@@ -1,12 +1,10 @@
 name: Unity Package CI
 
+# Temporarily manual-only: the runner Unity license secrets are not configured
+# yet. Restore the push/pull_request triggers once licensing is set up; the
+# release tag gate still requires this workflow green, so releases stay
+# blocked until then by design.
 on:
-  push:
-    # No path filter: every master SHA must carry Unity gate evidence so the
-    # release tag gate never reports "missing" for a release commit.
-    branches:
-      - master
-  pull_request:
   workflow_dispatch:
 
 permissions:
