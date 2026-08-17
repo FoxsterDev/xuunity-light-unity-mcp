@@ -372,6 +372,17 @@ assets or catalogs. Raw `project_action` scenario envelopes promote a reported
 delta through the hook summary, but catalog-aware missing-proof verdicts remain
 a follow-up outside the typed invoke tool.
 
+### 4d. Synchronous Rule-Assertion Hooks As A Validation Lane
+
+When gameplay rules change, prefer a project hook that drives the game's own
+API and asserts state synchronously over click-and-screenshot driving: it
+needs no rendered frames, is immune to editor throttling and focus theft, runs
+in fractions of a second, and returns decision-ready scalars through the
+catalog `evidence` contract. In its source session such a hook caught a
+same-frame duplicate-object defect (Unity's deferred `Destroy`) that the
+visual lane had missed. The hook belongs in the project's own action catalog,
+not in this package: the public surface only transports its typed evidence.
+
 ### 5. PlayMode Result Parity Smoke
 
 Use a representative direct `unity.tests.run_playmode` request and a scenario
@@ -384,6 +395,10 @@ Pass criteria:
 - both payloads report the same final value
 - for the common single-test happy path, the final value should normally be
   `edit`
+
+Precondition: any observation made while Play Mode is running is evidence only
+if `playmode_loop_liveness` is `advancing` (section 24); a play-mode
+observation without proven frame advance is no evidence.
 
 ### 5a. Portfolio Test Closeout Smoke
 
@@ -451,6 +466,9 @@ Pass criteria:
   a follow-up PlayMode request may fail for other reasons, but it must not fail
   with `tests_busy`
 - final status returns to healthy `edit`
+
+Precondition: liveness first — any in-play observation counts only while
+`playmode_loop_liveness` is `advancing` (section 24).
 
 ### 7. Lifecycle Reclassification Fault Smoke
 
@@ -808,6 +826,32 @@ Pass criteria:
   `DontDestroyOnLoad`, and its `delivered_to_path` resolves in the owning scene
 - with two same-named objects in different loaded scenes, the click refuses as
   `selector_ambiguous` rather than clicking whichever one a name lookup found first
+
+### 24. Play-Mode Liveness Assertion Smoke
+
+An editor heartbeat is not a game-loop heartbeat: an unfocused editor throttles
+its update loop while `is_playing`, `health_status`, and heartbeat freshness all
+stay green. Every play-mode smoke above must assert liveness before treating any
+in-play observation as evidence.
+
+Enter Play Mode, then move OS focus away from the editor (any other frontmost
+application) and poll `unity_playmode_state`.
+
+Pass criteria:
+
+- while the editor is frontmost and the app is running,
+  `playmode_loop_liveness` is `advancing` and
+  `playmode_frames_advanced_last_interval` is well above the throttle threshold
+- after focus moves away long enough for editor throttling to engage,
+  `playmode_loop_liveness` becomes `throttled` and the payload carries
+  `playmode_liveness_warning: playmode_throttled_editor_unfocused` with the
+  remediation `focus_the_unity_editor_or_set_interaction_mode_to_no_throttling`
+- refocusing the editor returns `playmode_loop_liveness` to `advancing`
+- `unity_status_summary` surfaces the same fields while playing
+- exiting Play Mode returns `playmode_loop_liveness` to `not_playing`
+- immediately after a domain reload or a play-state change, a single sample may
+  report `unknown`; `unknown` is not `advancing` and must not be read as
+  liveness proof
 
 ## Public Template Assets
 

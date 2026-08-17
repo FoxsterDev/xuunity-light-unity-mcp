@@ -60,7 +60,7 @@ Unity MCP implementations when the user wants safe production validation.
 | Capabilities | `unity_capabilities` | `Core` | Capability and health report used to gate version-sensitive operations. |
 | Host/license capabilities | `unity_license_capabilities` | `Host helper` | Probes batchmode support, UI fallback viability, normalized blocker code, and recommended lane. |
 | Health | `unity_health_probe` | `Core` | Re-runs Unity-side health checks and persists a fresh report. |
-| Status summary | `unity_status_summary` | `Core` | Compact polling-friendly project status summary by default; pass `includeFullPayload=true` for nested discovery, transport, state-group, timing, and artifact details. |
+| Status summary | `unity_status_summary` | `Core` | Compact polling-friendly project status summary by default; pass `includeFullPayload=true` for nested discovery, transport, state-group, timing, and artifact details. Surfaces play-mode liveness evidence (`playmode_loop_liveness`, frame advance, editor focus, throttle warning), `compiler_diagnostics_trust_class` provenance, and the `editor_launch_lane` split-log-lane notice. |
 | Final accounting | `unity_request_final_status` | `Core` | Resolves final request disposition from journal plus current bridge state. |
 | Build target | `unity_build_target_get` | `Core` | Reads active build target and target group. |
 | Build target | `unity_build_target_switch` | `Supported` | Mutates active target intentionally and waits for idle. |
@@ -75,8 +75,8 @@ Unity MCP implementations when the user wants safe production validation.
 | Scene | `unity_scene_assert` | `Core` | Asserts scene name, path, root objects, or dirty state. |
 | Tests | `unity_tests_run_editmode` | `Core` | Runs EditMode tests with normalized result accounting. |
 | Tests | `unity_tests_run_playmode` | `Supported` | Runs PlayMode tests with normalized result accounting; usefulness depends on project test coverage. |
-| Play Mode | `unity_playmode_state` | `Core` | Reads normalized Play Mode state. |
-| Play Mode | `unity_playmode_set` | `Supported` | Enters/exits Play Mode or controls pause state. |
+| Play Mode | `unity_playmode_state` | `Core` | Reads normalized Play Mode state plus game-loop liveness evidence: `playmode_loop_liveness` (`advancing`/`throttled`/`paused`/`not_playing`/`unknown`) from frame advance between heartbeats, editor focus, and the `playmode_throttled_editor_unfocused` warning with remediation. |
+| Play Mode | `unity_playmode_set` | `Supported` | Enters/exits Play Mode or controls pause state. Only `enter` is compile-gated; `exit`/`pause`/`resume` always pass the host compile gate because exiting Play Mode is the remediation that lets Unity run its deferred recompile. |
 | Game View | `unity_game_view_configure` | `Reflection-gated` | Sets active Game View fixed resolution after capability checks. Compact resolved-view envelope by default; `includeFullPayload=true` opts into the full bridge payload. |
 | Game View | `unity_game_view_screenshot` | `Reflection-gated` | Captures Unity Editor Game View screenshot evidence after capability checks. Compact capture envelope by default; base64 inlines only within `imageBudgetBytes` (default `48000`, ~66k base64 characters), otherwise the payload reports `image_omitted_reason=payload_budget` and the operator reads `file_path`. |
 | Compile | `unity_compile_player_scripts` | `Core` | Compiles player scripts for one target/options/defines combination without active target switch; compact summaries include authoritative post-settle compile fields. |
@@ -91,7 +91,7 @@ Unity MCP implementations when the user wants safe production validation.
 | Scenarios | `unity_scenario_result_latest` | `Project-dependent` | Returns latest persisted scenario result, optionally filtered by name. |
 | Scenarios | `unity_scenario_run_and_wait` | `Project-dependent` | Starts a scenario and waits for a terminal compact decision verdict with trust class, failure class, recommended next action, compact steps, and lifecycle relaunch attribution (`editor_relaunched`, previous/current editor PID, bridge generations, and cold-start reason) when applicable. |
 | Project actions | `unity_project_action_list` | `Project-dependent` | Lists catalog-backed project actions from `project_actions.yaml`. |
-| Project actions | `unity_project_action_invoke` | `Project-dependent` | Invokes a typed project action by compiling it to a one-step Unity scenario and enforcing mutation approval. |
+| Project actions | `unity_project_action_invoke` | `Project-dependent` | Invokes a typed project action by compiling it to a one-step Unity scenario and enforcing mutation approval. Compact envelope by default (action id, outcome, evidence scalars, mutation trust verdict); `includeFullPayload=true` restores the scenario echo and nested scenario summary. |
 | Artifacts | `unity_artifact_register` | `Supported` | Registers artifact metadata in the project MCP artifact registry without invoking Unity. |
 | Artifacts | `unity_artifact_write_report` | `Supported` | Writes a text report to an approved project output root and registers it. |
 | UI reference | `unity_ui_reference_register` | `Supported` | Registers a supplied design reference as a `ui-reference.v1` acceptance contract with viewport, regions, declared masks, tolerance profile, and acceptance lanes. |

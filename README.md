@@ -178,7 +178,13 @@ Agent defaults:
 6. Run `validate-setup`.
 7. Run `ensure-ready --open-editor` when Unity is not already ready and wait
    for it to finish before checking status. Record whether the result reports
-   `opened_by_host: true`.
+   `opened_by_host: true`. `ensure-ready --open-editor` is the default launch
+   path: an editor launched any other way splits the log lane for the whole
+   session — the host default Editor.log path goes stale, and every
+   `unity_console_grep` / `unity_console_tail` call then needs an explicit
+   `editorLogPath` (use the `bridge_state.editor_log_path` value).
+   `unity_status_summary` reports this up front as
+   `editor_launch_lane: not_opened_by_host`.
 8. Run the first status check:
    - use `request-status-summary` when the current client session cannot see
      newly wired MCP tools yet
@@ -895,6 +901,12 @@ fits `imageBudgetBytes` (default 48000, roughly 66k base64 characters); above
 that the image is dropped and the payload reports
 `image_omitted_reason=payload_budget` with `file_path` intact, rather than
 overflowing the result budget on a call whose useful part was one field.
+
+For prefab-only UI acceptance, prefer `unity_prefab_render` over Play Mode plus
+`unity_game_view_screenshot`: it renders the prefab in isolation in fractions of
+a second, needs no boot flow, and is immune to editor throttling while
+unfocused. Reserve play-mode screenshots for flows that genuinely need the
+running app, and trust them only while `playmode_loop_liveness` is `advancing`.
 
 UI prefab authoring is one lane, not two. `unity_prefab_mutate` covers typed
 fields, RectTransform geometry, CanvasGroup state, child structure, allow-listed

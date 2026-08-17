@@ -362,6 +362,14 @@ Current progress:
   `post_settle_compile_trust_class`, a screenshot byte budget, compact
   playmode/screenshot envelopes, and `projects_blocked` split out of
   `projects_failed`
+- unreleased source closes the 2026-08-17 play-mode liveness retro P0/P1 set:
+  frame-advance liveness evidence with the `playmode_throttled_editor_unfocused`
+  warning on playmode/status payloads, an exit-never-gated compile-gate boundary
+  with the direct-tool-versus-scenario-step divergence contract recorded in
+  DESIGN.md, `compiler_diagnostics_trust_class` provenance on every
+  compiler-evidence payload, a compact `unity_project_action_invoke` envelope,
+  the catalog `payload.action` conflict refusal, an actionable mutation-delta
+  warning, and the `editor_launch_lane` split-log-lane notice
 - remaining value in this phase is broader multi-project compact ceilings,
   broader proof, and surfacing evidence consistently across more operator flows
 

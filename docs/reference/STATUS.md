@@ -96,7 +96,22 @@ Migration note:
   execution success separate from acceptance: a completed mutating action is
   decision-ready only with a valid, non-destructive delta; missing/invalid
   proof or removals/count shrink produce an explicit mutation trust class,
-  operator verdict, warning, and review action.
+  operator verdict, warning, and review action. Non-decision-ready verdicts
+  name the schema and carry `mutation_delta_contract_doc` pointing at the
+  worked contract example.
+- Current source closes the 2026-08-17 play-mode liveness retro P0/P1 set:
+  the bridge heartbeat samples frame advance and editor focus, and
+  `unity_playmode_state` / `unity.status` / `unity_status_summary` report
+  `playmode_loop_liveness` with an explicit
+  `playmode_throttled_editor_unfocused` warning when a playing loop stops
+  advancing frames; the host compile gate covers `playmode_set` `enter` only
+  (exit is remediation and is never gated; `unity.scenario.run` dispatch is
+  deliberately ungated with step-level gates owning correctness);
+  compiler-evidence payloads stamp `compiler_diagnostics_trust_class`;
+  `unity_project_action_invoke` is compact by default; a catalog
+  `payload.action` conflict is listed and refused instead of silently
+  overridden; and `unity_status_summary` warns up front on a split log lane
+  (`editor_launch_lane: not_opened_by_host`).
 - `v0.3.38+` makes `unity_status_summary` compact by default for MCP callers,
   with `payload_mode` markers and full nested diagnostics available through
   `includeFullPayload=true`.

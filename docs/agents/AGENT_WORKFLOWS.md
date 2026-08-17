@@ -42,6 +42,13 @@ Every agent workflow should follow this contract:
 11. Report unsupported capabilities as explicit validation gaps.
 12. For substantial MCP implementation plans, update the design-plan history and
     perform a code/docs self-review before final closeout.
+13. Launch the editor through `ensure-ready --open-editor`; a self-launched
+    editor splits the log lane for the session, so every console log query then
+    needs an explicit `editorLogPath` (watch for
+    `editor_launch_lane: not_opened_by_host` on `unity_status_summary`).
+14. Treat a play-mode observation as evidence only while
+    `playmode_loop_liveness` is `advancing`; an unfocused editor throttles the
+    game loop while every editor health field stays green.
 
 Stop immediately when:
 
@@ -543,6 +550,12 @@ MCP route:
 - call `unity_game_view_screenshot`
 - call `unity_playmode_set` with `exit`
 - call `unity_request_final_status` if a request is interrupted
+
+Cheaper default for prefab-only UI acceptance: `unity_prefab_render` renders
+the prefab in isolation without Play Mode or the boot flow, in fractions of a
+second, and is immune to editor throttling. Use the play-mode route only when
+the running app itself is under test, and check `playmode_loop_liveness` is
+`advancing` before trusting a screenshot taken in Play Mode.
 
 CLI route for Play Mode state:
 

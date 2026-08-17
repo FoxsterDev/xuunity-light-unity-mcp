@@ -274,6 +274,10 @@ An integrating agent should:
 - keep the bridge disabled unless the current task actually needs Unity-aware validation
 - prefer read and validation operations before mutation
 - prefer compile before EditMode tests when changed scripts are already in play
+- prefer `unity_prefab_render` over Play Mode plus screenshots for prefab-only
+  UI acceptance; it needs no boot flow and is immune to editor throttling
+- trust play-mode observations only while `playmode_loop_liveness` is
+  `advancing`; a fresh heartbeat alone is editor liveness, not game-loop liveness
 - keep install and removal simple
 - keep validation gaps explicit when Unity is not running or the bridge is disabled
 
@@ -343,6 +347,10 @@ Important limitation:
 - if health reports a compile/Safe Mode dialog blocker, run the batch compile
   gate and fix compile errors, or open Safe Mode manually
 - use `--background-open` when the host should avoid Unity stealing focus on macOS
+- a self-launched editor (not through `ensure-ready --open-editor`) splits the
+  log lane for the whole session: pass an explicit `editorLogPath` to every
+  console log query, and expect `editor_launch_lane: not_opened_by_host` on
+  `unity_status_summary`
 
 When the host opened Unity only to run validation, prefer the paired closeout:
 

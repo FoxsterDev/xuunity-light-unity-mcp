@@ -245,6 +245,22 @@ verdict is not authoritative: asset import is deferred, so the payload carries
 `post_settle_compile_trust_class: deferred_during_playmode`. Do not read that
 green as proof.
 
+### Play-Mode Evidence Requires Frame Advance
+
+An editor heartbeat is not a game-loop heartbeat. When the editor is not the
+frontmost application it throttles its update loop: `is_playing` stays `true`,
+`health_status` stays `healthy`, and the heartbeat stays fresh while the game
+advances almost no frames — a booting app reads as frozen and the operator
+starts debugging application code that is fine.
+
+Before trusting any play-mode observation (screenshot, UI snapshot, click
+outcome, boot timing), check the liveness evidence on `unity_playmode_state`
+or `unity_status_summary`: `playmode_loop_liveness` must be `advancing`. A
+`throttled` value with `playmode_liveness_warning:
+playmode_throttled_editor_unfocused` means focus the editor (or set its
+Interaction Mode to No Throttling) and re-observe; a play-mode observation
+taken without frame advance is not evidence.
+
 ## What A New Chat Should Check First
 
 1. Unity version for the consumer project
