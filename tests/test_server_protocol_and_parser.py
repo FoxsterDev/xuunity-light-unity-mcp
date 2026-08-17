@@ -722,6 +722,56 @@ actions:
         self.assertEqual("safe", action["resolved_by_alias"])
         self.assertEqual("example.project", action["hook_name"])
 
+    def test_catalog_payload_action_conflict_is_listed_and_refused_at_invoke(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            catalog_path = Path(temp_dir) / "project_actions.yaml"
+            catalog_path.write_text(
+                """
+schemaVersion: xuunity.project-actions.v1
+project: FakeProject
+hookName: example.project
+actions:
+  project.scan:
+    payload:
+      action: scan
+    mutates: []
+  project.self_named:
+    payload:
+      action: project.self_named
+    mutates: []
+""".strip(),
+                encoding="utf-8",
+            )
+
+            catalog = server_project_actions.load_project_action_catalog(
+                Path(temp_dir) / "FakeProject",
+                str(catalog_path),
+            )
+
+        listed = server_project_actions.project_action_catalog_payload(catalog)
+        conflict_errors = [
+            error for error in listed["validation_errors"] if error["code"] == "payload_action_conflict"
+        ]
+        self.assertEqual(1, len(conflict_errors))
+        self.assertEqual("project.scan", conflict_errors[0]["action_id"])
+        self.assertIn("fully-qualified action id", conflict_errors[0]["message"])
+
+        conflicted = server_project_actions.resolve_project_action(catalog, "project.scan")
+        with self.assertRaises(server_project_actions.ToolInvocationError) as raised:
+            server_project_actions.build_project_action_scenario(
+                action_record=conflicted,
+                action_payload={},
+            )
+        self.assertEqual("project_action_catalog_payload_action_conflict", raised.exception.code)
+        self.assertEqual("scan", raised.exception.details["declared_payload_action"])
+
+        self_named = server_project_actions.resolve_project_action(catalog, "project.self_named")
+        scenario = server_project_actions.build_project_action_scenario(
+            action_record=self_named,
+            action_payload={},
+        )
+        self.assertEqual("project_defined_hook", scenario["steps"][0]["kind"])
+
     def test_project_action_list_tool_returns_catalog_without_editor_bridge(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             project_root = Path(temp_dir) / "FakeProject"

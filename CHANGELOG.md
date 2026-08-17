@@ -26,6 +26,12 @@
 
 ### Fixed
 
+- The catalog `payload.action` contradiction is resolved instead of silent. The invoker always injects the catalog
+  action id into the hook payload's `action` key; a catalog whose `payload:` block declares a different `action`
+  value is now reported as a `payload_action_conflict` validation error on `unity_project_action_list`, and invoking
+  that action refuses with `project_action_catalog_payload_action_conflict` instead of silently contradicting the
+  catalog's own declaration. The contract — hooks must accept the fully-qualified action id — is stated in the
+  README scenario section. (2026-08-17 play-mode liveness retro, P1-3)
 - Compiler diagnostics now carry provenance. Every payload built from bridge-state compiler evidence — the
   `compile_broken` refusal details and `unity_status_summary` — stamps `compiler_diagnostics_trust_class`
   (`confirmed` / `deferred_during_playmode` / `flag_only_not_verdict`, reusing the post-settle trust vocabulary) plus

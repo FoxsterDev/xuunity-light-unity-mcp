@@ -262,6 +262,19 @@ def normalize_project_action_catalog(
                 }
             )
 
+        declared_payload_action = str(dict(record["payload_schema"] or {}).get("action") or "").strip()
+        if declared_payload_action and declared_payload_action != record["action_id"]:
+            validation_errors.append(
+                {
+                    "action_id": record["action_id"],
+                    "code": "payload_action_conflict",
+                    "message": (
+                        f"payload.action='{declared_payload_action}' disagrees with the injected catalog "
+                        "action id; hooks must accept the fully-qualified action id."
+                    ),
+                }
+            )
+
     records.sort(key=lambda item: item["action_id"])
     for values in alias_conflicts.values():
         values.sort()
@@ -354,6 +367,25 @@ def resolve_project_action(catalog: dict[str, Any], requested_action: str) -> di
     )
 
 
+def fail_if_catalog_payload_action_conflicts(action_record: dict[str, Any], *, step_id: str = "") -> None:
+    action_id = str(action_record.get("action_id") or "").strip()
+    declared_action = str(dict(action_record.get("payload_schema") or {}).get("action") or "").strip()
+    if not declared_action or declared_action == action_id:
+        return
+
+    details = {"action_id": action_id, "declared_payload_action": declared_action}
+    if step_id:
+        details["step_id"] = step_id
+    raise ToolInvocationError(
+        "project_action_catalog_payload_action_conflict",
+        (
+            f"Catalog payload for '{action_id}' declares action='{declared_action}', but the invoker always "
+            "injects the catalog action id; hooks must accept the fully-qualified action id."
+        ),
+        details,
+    )
+
+
 def build_project_action_scenario(
     *,
     action_record: dict[str, Any],
@@ -368,6 +400,7 @@ def build_project_action_scenario(
             f"Project action '{action_id}' does not declare a hookName.",
             {"action_id": action_id},
         )
+    fail_if_catalog_payload_action_conflicts(action_record)
     if "action" in action_payload and str(action_payload.get("action") or "").strip() not in {"", action_id}:
         raise ToolInvocationError(
             "project_action_payload_reserved_key",
@@ -573,6 +606,7 @@ def normalize_project_action_step(
             f"Project action '{canonical_action_id}' does not declare a hookName.",
             {"step_id": step_id, "action_id": canonical_action_id},
         )
+    fail_if_catalog_payload_action_conflicts(action_record, step_id=step_id)
 
     hook_payload = dict(payload)
     hook_payload["action"] = canonical_action_id

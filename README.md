@@ -822,6 +822,11 @@ Scenario JSON may use Unity-native `project_action` steps for catalog-backed
 project actions. Unity resolves `project_actions.yaml`, enforces mutation
 approval, and executes the matching `project_defined_hook`; the host wrapper
 also performs the same normalization before dispatch as an early diagnostic.
+The invoker always injects the catalog action id into the hook payload's
+`action` key, so hooks must accept the fully-qualified action id; a catalog
+`payload.action` declaration that disagrees is reported as a
+`payload_action_conflict` validation error on `unity_project_action_list` and
+refuses that action at invoke.
 For `unity_project_action_invoke`, a mutating action's `succeeded` field means
 the Unity hook executed successfully, not that its output is safe to accept.
 Decision-ready mutating hooks should return a `mutation_delta` object using
