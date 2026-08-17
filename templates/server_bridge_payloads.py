@@ -548,6 +548,9 @@ COMPACT_OPERATION_PAYLOADS = {
     "unity.playmode.state",
     "unity.playmode.set",
     "unity.game_view.screenshot",
+    "unity.scene.open",
+    "unity.scene.snapshot",
+    "unity.game_view.configure",
 }
 
 
@@ -774,6 +777,71 @@ def _compact_screenshot_payload(payload: dict[str, Any], operation: str) -> dict
     return compact
 
 
+def _compact_scene_open_payload(payload: dict[str, Any], operation: str) -> dict[str, Any]:
+    compact = {
+        "payload_mode": "compact_operation",
+        "operation": operation,
+    }
+    _copy_if_present(
+        compact,
+        payload,
+        (
+            "status",
+            "opened",
+            "outcome",
+            "requested_scene_path",
+            "allow_dirty_scene_discard",
+            "previous_scene",
+            "active_scene",
+            "failure_reason",
+            "recommended_next_action",
+        ),
+    )
+    compact.update(_compact_post_settle_fields(payload))
+    compact.update(_artifact_ref(payload))
+    return compact
+
+
+def _compact_scene_snapshot_payload(payload: dict[str, Any], operation: str) -> dict[str, Any]:
+    compact = {
+        "payload_mode": "compact_operation",
+        "operation": operation,
+    }
+    _copy_if_present(
+        compact,
+        payload,
+        (
+            "active_scene",
+            "root_objects",
+            "result_trust_class",
+            "recommended_next_action",
+        ),
+    )
+    root_objects = payload.get("root_objects")
+    if isinstance(root_objects, list):
+        compact["root_object_count"] = len(root_objects)
+    compact.update(_artifact_ref(payload))
+    return compact
+
+
+def _compact_game_view_configure_payload(payload: dict[str, Any], operation: str) -> dict[str, Any]:
+    compact = {
+        "payload_mode": "compact_operation",
+        "operation": operation,
+    }
+    _copy_if_present(
+        compact,
+        payload,
+        (
+            "outcome",
+            "game_view",
+            "recommended_next_action",
+        ),
+    )
+    compact.update(_artifact_ref(payload))
+    return compact
+
+
 def compact_operation_payload(payload: dict[str, Any], operation: str) -> dict[str, Any]:
     if operation in {"unity.compile.player_scripts", "unity.compile.matrix"}:
         return _compact_compile_payload(payload, operation)
@@ -785,6 +853,12 @@ def compact_operation_payload(payload: dict[str, Any], operation: str) -> dict[s
         return _compact_playmode_payload(payload, operation)
     if operation == "unity.game_view.screenshot":
         return _compact_screenshot_payload(payload, operation)
+    if operation == "unity.scene.open":
+        return _compact_scene_open_payload(payload, operation)
+    if operation == "unity.scene.snapshot":
+        return _compact_scene_snapshot_payload(payload, operation)
+    if operation == "unity.game_view.configure":
+        return _compact_game_view_configure_payload(payload, operation)
     return payload
 
 

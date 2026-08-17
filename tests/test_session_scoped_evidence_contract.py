@@ -1389,11 +1389,139 @@ class CompactEnvelopeTests(unittest.TestCase):
         self.assertNotIn("noise", compact)
 
     def test_the_compactable_tools_expose_the_opt_out(self) -> None:
-        for tool_name in ("unity_playmode_state", "unity_playmode_set", "unity_game_view_screenshot"):
+        for tool_name in (
+            "unity_playmode_state",
+            "unity_playmode_set",
+            "unity_game_view_screenshot",
+            "unity_scene_open",
+            "unity_scene_snapshot",
+            "unity_game_view_configure",
+        ):
             with self.subTest(tool=tool_name):
                 properties = server_specs.TOOLS[tool_name]["inputSchema"]["properties"]
                 self.assertIn("includeFullPayload", properties)
                 self.assertFalse(properties["includeFullPayload"]["default"])
+
+    def test_scene_and_view_operations_are_compactable(self) -> None:
+        for operation in ("unity.scene.open", "unity.scene.snapshot", "unity.game_view.configure"):
+            with self.subTest(operation=operation):
+                self.assertIn(operation, server_bridge_payloads.COMPACT_OPERATION_PAYLOADS)
+
+    def test_compact_scene_open_keeps_the_scene_transition_and_drops_the_lifecycle(self) -> None:
+        payload = {
+            "status": "ok",
+            "opened": True,
+            "outcome": "scene_opened",
+            "requested_scene_path": "Assets/Scenes/Boot.unity",
+            "allow_dirty_scene_discard": False,
+            "previous_scene": {"name": "Empty", "path": ""},
+            "active_scene": {"name": "Boot", "path": "Assets/Scenes/Boot.unity"},
+            "failure_reason": "",
+            "backend_id": "xuunity.light_unity_mcp",
+            "_xuunity_lifecycle": {"idle_wait_after": {"bulk": list(range(50))}},
+        }
+
+        compact = server_bridge_payloads.compact_operation_payload(payload, "unity.scene.open")
+
+        self.assertEqual("scene_opened", compact["outcome"])
+        self.assertEqual("Boot", compact["active_scene"]["name"])
+        self.assertEqual("Empty", compact["previous_scene"]["name"])
+        self.assertNotIn("_xuunity_lifecycle", compact)
+        self.assertNotIn("backend_id", compact)
+
+    def test_compact_scene_snapshot_keeps_the_scene_content_and_counts_roots(self) -> None:
+        payload = {
+            "active_scene": {"name": "Boot", "path": "Assets/Scenes/Boot.unity", "is_dirty": False},
+            "root_objects": [{"name": "Main Camera"}, {"name": "Directional Light"}],
+            "backend_id": "xuunity.light_unity_mcp",
+            "project_root": "/tmp/Project",
+            "_xuunity_lifecycle": {"idle_wait_after": {"bulk": list(range(50))}},
+        }
+
+        compact = server_bridge_payloads.compact_operation_payload(payload, "unity.scene.snapshot")
+
+        self.assertEqual("Boot", compact["active_scene"]["name"])
+        self.assertEqual(2, compact["root_object_count"])
+        self.assertEqual("Main Camera", compact["root_objects"][0]["name"])
+        self.assertNotIn("_xuunity_lifecycle", compact)
+        self.assertNotIn("project_root", compact)
+
+    def test_compact_game_view_configure_keeps_the_resolved_view(self) -> None:
+        payload = {
+            "outcome": "game_view_configured",
+            "game_view": {"width": 1170, "height": 2532, "label": "iPhone"},
+            "backend_id": "xuunity.light_unity_mcp",
+            "_xuunity_lifecycle": {"activation": {"noise": True}},
+        }
+
+        compact = server_bridge_payloads.compact_operation_payload(payload, "unity.game_view.configure")
+
+        self.assertEqual("game_view_configured", compact["outcome"])
+        self.assertEqual(1170, compact["game_view"]["width"])
+        self.assertNotIn("_xuunity_lifecycle", compact)
+
+    def test_a_snapshot_without_root_objects_does_not_invent_a_count(self) -> None:
+        compact = server_bridge_payloads.compact_operation_payload(
+            {"active_scene": {"name": "Boot"}, "root_objects": "corrupt"},
+            "unity.scene.snapshot",
+        )
+
+        self.assertNotIn("root_object_count", compact)
+
+    def test_the_full_scene_open_payload_stays_available_behind_the_opt_in(self) -> None:
+        response = {
+            "status": "ok",
+            "payload_json": json.dumps({"outcome": "scene_opened", "opened": True}),
+            "payload_type": "unity.scene.open",
+            "_xuunity_lifecycle": {"operation": "unity.scene.open", "idle_wait_after": {"bulk": 1}},
+        }
+
+        compact_result = server_bridge_payloads.bridge_response_to_tool_result(
+            dict(response),
+            normalize_scenario_payload=lambda payload, statuses: payload,
+            scenario_terminal_statuses=set(),
+            include_full_payload=False,
+        )
+        compact_payload = compact_result["structuredContent"]
+        self.assertEqual("compact_operation", compact_payload["payload_mode"])
+        self.assertTrue(compact_payload["full_payload_available"])
+        self.assertEqual({"includeFullPayload": True}, compact_payload["full_payload_tool_arguments"])
+        self.assertNotIn("_xuunity_lifecycle", compact_payload)
+
+        full_result = server_bridge_payloads.bridge_response_to_tool_result(
+            dict(response),
+            normalize_scenario_payload=lambda payload, statuses: payload,
+            scenario_terminal_statuses=set(),
+            include_full_payload=True,
+        )
+        full_payload = full_result["structuredContent"]
+        self.assertIn("_xuunity_lifecycle", full_payload)
+        self.assertEqual("scene_opened", full_payload["outcome"])
+
+    def test_editor_open_attribution_survives_the_compact_scene_open_envelope(self) -> None:
+        response = {
+            "status": "ok",
+            "payload_json": json.dumps({"outcome": "scene_opened"}),
+            "payload_type": "unity.scene.open",
+            "_xuunity_lifecycle": {
+                "operation": "unity.scene.open",
+                "activation": {
+                    "editor_opened_by_this_call": True,
+                    "editor_open_note": "opened for scene validation",
+                },
+            },
+        }
+
+        compact_result = server_bridge_payloads.bridge_response_to_tool_result(
+            response,
+            normalize_scenario_payload=lambda payload, statuses: payload,
+            scenario_terminal_statuses=set(),
+            include_full_payload=False,
+        )
+
+        compact_payload = compact_result["structuredContent"]
+        self.assertTrue(compact_payload["editor_opened_by_this_call"])
+        self.assertEqual("opened for scene validation", compact_payload["editor_open_note"])
 
 
 class BlockedVersusFailedTests(unittest.TestCase):

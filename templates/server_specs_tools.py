@@ -1487,6 +1487,11 @@ TOOLS: dict[str, dict[str, Any]] = {
             "type": "object",
             "properties": {
                 "projectRoot": {"type": "string"},
+                "includeFullPayload": {
+                    "type": "boolean",
+                    "default": False,
+                    "description": "When true, return the full bridge payload (including host lifecycle evidence) instead of the compact scene envelope."
+                },
                 "timeoutMs": {"type": "integer", "default": 5000, "minimum": 1000}
             },
             "required": ["projectRoot"]
@@ -1507,6 +1512,11 @@ TOOLS: dict[str, dict[str, Any]] = {
                     "type": "boolean",
                     "default": False,
                     "description": "When true, allow the operation to discard unsaved changes in currently open scenes."
+                },
+                "includeFullPayload": {
+                    "type": "boolean",
+                    "default": False,
+                    "description": "When true, return the full bridge payload (including host lifecycle evidence) instead of the compact scene-open envelope."
                 },
                 "timeoutMs": {"type": "integer", "default": 10000, "minimum": 1000}
             },
@@ -1651,6 +1661,11 @@ TOOLS: dict[str, dict[str, Any]] = {
                     "type": "boolean",
                     "default": False,
                     "description": "When false, fail if the requested size is not already available in Unity Game View."
+                },
+                "includeFullPayload": {
+                    "type": "boolean",
+                    "default": False,
+                    "description": "When true, return the full bridge payload (including host lifecycle evidence) instead of the compact game-view envelope."
                 },
                 "timeoutMs": {"type": "integer", "default": 10000, "minimum": 1000}
             },
