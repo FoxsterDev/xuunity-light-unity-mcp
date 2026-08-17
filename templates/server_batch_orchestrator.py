@@ -686,6 +686,7 @@ def build_status_summary_from_context(
         summarize_state_for_error=summarize_state_for_error,
         discovery_details=current_project_context_discovery_details(project_root),
         include_full_payload=include_full_payload,
+        host_editor_session_state=try_read_host_editor_session_state(project_root),
     )
 
 

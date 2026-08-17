@@ -1685,6 +1685,52 @@ class ServerProjectHelperTests(unittest.TestCase):
             summary["playmode_liveness_remediation"],
         )
 
+    def test_status_summary_warns_when_the_editor_was_not_opened_by_the_host(self) -> None:
+        summary = server.build_status_summary(
+            Path("/tmp/FakeProject"),
+            {"editor_pid": 123, "editor_running": True, "mcp_reachable": True},
+            read_best_effort_bridge_state=lambda _: {},
+            try_read_bridge_state=lambda _: {},
+            pid_is_alive=lambda _: True,
+            heartbeat_age_seconds=lambda _: 1.0,
+            derive_busy_reason=lambda _: "",
+            summarize_state_for_error=lambda _: "idle",
+            host_editor_session_state=None,
+        )
+
+        self.assertEqual("not_opened_by_host", summary["editor_launch_lane"])
+        self.assertEqual("host_default_editor_log_path_may_be_stale", summary["editor_launch_lane_risk"])
+        self.assertIn("editorLogPath", summary["editor_launch_lane_recommended_next_action"])
+        self.assertIn("ensure-ready --open-editor", summary["editor_launch_lane_recommended_next_action"])
+
+    def test_status_summary_trusts_the_host_launch_only_for_the_same_editor_pid(self) -> None:
+        common = dict(
+            read_best_effort_bridge_state=lambda _: {},
+            try_read_bridge_state=lambda _: {},
+            pid_is_alive=lambda _: True,
+            heartbeat_age_seconds=lambda _: 1.0,
+            derive_busy_reason=lambda _: "",
+            summarize_state_for_error=lambda _: "idle",
+        )
+        payload = {"editor_pid": 123, "editor_running": True, "mcp_reachable": True}
+
+        owned = server.build_status_summary(
+            Path("/tmp/FakeProject"),
+            payload,
+            host_editor_session_state={"opened_by_host": True, "editor_pid": 123},
+            **common,
+        )
+        self.assertEqual("opened_by_host", owned["editor_launch_lane"])
+        self.assertNotIn("editor_launch_lane_risk", owned)
+
+        foreign = server.build_status_summary(
+            Path("/tmp/FakeProject"),
+            payload,
+            host_editor_session_state={"opened_by_host": True, "editor_pid": 999},
+            **common,
+        )
+        self.assertEqual("not_opened_by_host", foreign["editor_launch_lane"])
+
     def test_status_summary_labels_flag_only_compile_diagnostics(self) -> None:
         summary = server.build_status_summary(
             Path("/tmp/FakeProject"),

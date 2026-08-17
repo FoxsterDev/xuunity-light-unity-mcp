@@ -165,6 +165,7 @@ namespace XUUnity.LightMcp.Editor.Ugui
 
             var eventSystem = EventSystem.current;
             payload.event_system_present = eventSystem != null;
+            payload.event_system_scope = "eventsystem_current_at_delivery";
             var pointer = new PointerEventData(eventSystem)
             {
                 button = PointerEventData.InputButton.Left,

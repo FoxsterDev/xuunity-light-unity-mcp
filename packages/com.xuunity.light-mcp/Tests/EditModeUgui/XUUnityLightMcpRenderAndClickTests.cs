@@ -280,6 +280,7 @@ namespace XUUnity.LightMcp.Tests.EditModeUgui
             Assert.That(payload.delivered, Is.True);
             Assert.That(payload.status, Is.EqualTo("delivered"));
             Assert.That(payload.delivery_mechanism, Is.EqualTo("event_system_pointer_click_handler"));
+            Assert.That(payload.event_system_scope, Is.EqualTo("eventsystem_current_at_delivery"));
             Assert.That(_clickCount, Is.EqualTo(1), "the click must be delivered exactly once");
             Assert.That(payload.before_snapshot.signature, Is.Not.Empty);
             Assert.That(payload.after_snapshot.signature, Is.Not.Empty);

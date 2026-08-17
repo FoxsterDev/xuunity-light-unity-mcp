@@ -97,6 +97,7 @@ def build_status_summary(
     summarize_state_for_error: Callable[[dict[str, Any] | None], str],
     discovery_details: dict[str, Any] | None = None,
     include_full_payload: bool = True,
+    host_editor_session_state: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     state = read_best_effort_bridge_state(project_root) or try_read_bridge_state(project_root) or {}
     effective = dict(state)
@@ -153,6 +154,19 @@ def build_status_summary(
         "request_journal_head": str(effective.get("request_journal_head") or ""),
         "state_summary": summarize_state_for_error(effective),
     }
+    if editor_running:
+        session = dict(host_editor_session_state or {})
+        session_pid = int(session.get("editor_pid") or 0)
+        opened_by_host = bool(session.get("opened_by_host")) and session_pid in (0, editor_pid)
+        if opened_by_host:
+            summary["editor_launch_lane"] = "opened_by_host"
+        else:
+            summary["editor_launch_lane"] = "not_opened_by_host"
+            summary["editor_launch_lane_risk"] = "host_default_editor_log_path_may_be_stale"
+            summary["editor_launch_lane_recommended_next_action"] = (
+                "pass editorLogPath=<bridge_state.editor_log_path> to console log queries, or reopen the "
+                "project through ensure-ready --open-editor"
+            )
     playmode_loop_liveness = str(effective.get("playmode_loop_liveness") or "")
     if playmode_loop_liveness:
         summary["playmode_loop_liveness"] = playmode_loop_liveness

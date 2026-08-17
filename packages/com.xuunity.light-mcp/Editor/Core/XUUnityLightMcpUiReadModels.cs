@@ -294,6 +294,7 @@ namespace XUUnity.LightMcp.Editor.Core
         public XUUnityLightMcpUiNode target_node;
         public string target_component = "";
         public bool event_system_present;
+        public string event_system_scope = "";
         public bool delivered;
         public string delivered_to_path = "";
         public string delivery_mechanism = "";

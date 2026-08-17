@@ -32,6 +32,15 @@
 
 ### Fixed
 
+- `event_system_present` names its scope. The `unity_ui_click` payload now carries
+  `event_system_scope=eventsystem_current_at_delivery` next to the boolean: the value is `EventSystem.current` at
+  click-delivery time, not a project-wide or scene-file audit — a `false` no longer reads as "this project has no
+  EventSystem". (2026-08-17 play-mode liveness retro, P2-1)
+- `unity_status_summary` warns up front about a split log lane. When the running editor was not opened through the
+  host wrapper (or the recorded host launch is a different editor pid), the summary carries
+  `editor_launch_lane=not_opened_by_host` with the risk (`host_default_editor_log_path_may_be_stale`) and the
+  remediation (pass `editorLogPath`, or reopen through `ensure-ready --open-editor`) — instead of every later log
+  query discovering the stale lane on its own. (2026-08-17 play-mode liveness retro, P2-2)
 - The catalog `payload.action` contradiction is resolved instead of silent. The invoker always injects the catalog
   action id into the hook payload's `action` key; a catalog whose `payload:` block declares a different `action`
   value is now reported as a `payload_action_conflict` validation error on `unity_project_action_list`, and invoking
