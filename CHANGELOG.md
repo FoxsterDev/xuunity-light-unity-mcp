@@ -26,6 +26,11 @@
 
 ### Fixed
 
+- The mutation-delta warning is actionable. `passed_unverified_mutation_delta` and `passed_invalid_mutation_delta`
+  verdicts now name the `xuunity.mutation-delta.v1` schema in the warning text and carry `mutation_delta_schema` plus
+  `mutation_delta_contract_doc` pointing at the worked contract example
+  (`docs/operations/SMOKE_TESTS.md#4c-mutating-project-action-delta-contract`), so a hook author no longer has to
+  already know the shape the warning asks for. (2026-08-17 play-mode liveness retro, P1-4)
 - The host-side compile gate no longer refuses `unity.playmode.set` for `exit`, `pause`, or `resume`. Exiting play
   mode is the remediation that lets Unity run the deferred recompile, so gating it created an in-band deadlock: a
   compile-broken play session could not be exited through the direct tool while the same transition expressed as a

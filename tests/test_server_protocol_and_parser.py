@@ -977,6 +977,12 @@ actions:
         self.assertEqual("unverified_mutation", payload["mutation_trust_class"])
         self.assertFalse(payload["mutation_decision_ready"])
         self.assertIn("mutation_delta", payload["mutation_warning"])
+        self.assertIn("xuunity.mutation-delta.v1", payload["mutation_warning"])
+        self.assertEqual("xuunity.mutation-delta.v1", payload["mutation_delta_schema"])
+        self.assertEqual(
+            "docs/operations/SMOKE_TESTS.md#4c-mutating-project-action-delta-contract",
+            payload["mutation_delta_contract_doc"],
+        )
 
     def test_scenario_run_and_wait_expands_project_action_steps_before_unity(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

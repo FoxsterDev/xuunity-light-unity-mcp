@@ -638,6 +638,10 @@ def build_project_action_invocation_payload(
     return payload
 
 
+MUTATION_DELTA_SCHEMA_VERSION = "xuunity.mutation-delta.v1"
+MUTATION_DELTA_CONTRACT_DOC = "docs/operations/SMOKE_TESTS.md#4c-mutating-project-action-delta-contract"
+
+
 def build_project_action_mutation_verdict(scenario_summary: dict[str, Any]) -> dict[str, Any]:
     if not bool(scenario_summary.get("succeeded")):
         return {
@@ -664,7 +668,12 @@ def build_project_action_mutation_verdict(scenario_summary: dict[str, Any]) -> d
             "mutation_trust_class": "unverified_mutation",
             "mutation_decision_ready": False,
             "destructive_drop_detected": False,
-            "mutation_warning": "The mutating action passed but did not report a standardized mutation_delta.",
+            "mutation_warning": (
+                "The mutating action passed but did not report a standardized mutation_delta "
+                f"({MUTATION_DELTA_SCHEMA_VERSION})."
+            ),
+            "mutation_delta_schema": MUTATION_DELTA_SCHEMA_VERSION,
+            "mutation_delta_contract_doc": MUTATION_DELTA_CONTRACT_DOC,
             "recommended_next_action": "inspect_git_diff_and_update_hook_to_emit_mutation_delta",
         }
 
@@ -676,7 +685,12 @@ def build_project_action_mutation_verdict(scenario_summary: dict[str, Any]) -> d
             "mutation_decision_ready": False,
             "destructive_drop_detected": bool(delta.get("destructive_drop_detected")),
             "mutation_delta": delta,
-            "mutation_warning": "The mutating action passed but its mutation_delta does not satisfy the v1 contract.",
+            "mutation_warning": (
+                "The mutating action passed but its mutation_delta does not satisfy the "
+                f"{MUTATION_DELTA_SCHEMA_VERSION} contract."
+            ),
+            "mutation_delta_schema": MUTATION_DELTA_SCHEMA_VERSION,
+            "mutation_delta_contract_doc": MUTATION_DELTA_CONTRACT_DOC,
             "recommended_next_action": "fix_mutation_delta_contract_and_inspect_git_diff",
         }
 
