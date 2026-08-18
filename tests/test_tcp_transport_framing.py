@@ -14,6 +14,7 @@ TEMPLATES_DIR = Path(__file__).resolve().parents[1] / "templates"
 if str(TEMPLATES_DIR) not in sys.path:
     sys.path.insert(0, str(TEMPLATES_DIR))
 
+import server_bridge_final_status
 import server_bridge_transport
 from server_bridge_journal import write_host_request_journal_event
 from server_bridge_paths import response_path
@@ -367,7 +368,118 @@ class TcpTransportFramingTests(unittest.TestCase):
                 self.assertEqual("request_lifecycle_reset", ctx.exception.code)
                 self.assertEqual(expected_retryable, ctx.exception.details.get("retryable"))
                 self.assertEqual(request_started, ctx.exception.details.get("request_processed"))
-                self.assertLess(elapsed, 0.65, "recovery timeout budget must not be consumed twice")
+                self.assertLess(elapsed, 5.0, "the reset path must not hang")
+
+    def test_post_reset_recovery_polls_against_the_original_request_deadline(self) -> None:
+        """A late reset must not hand the request a second full budget.
+
+        The sibling test above cannot see this: its bridge answers immediately, so the original
+        deadline and a freshly derived one are milliseconds apart. Here the bridge answers only
+        after most of the budget is gone, which separates the two by the time already spent, and
+        the assertion reads the deadline the transport passes into the recovery poll instead of
+        measuring wall-clock time on the runner.
+        """
+        request_timeout_ms = 300
+        reply_delay_seconds = 0.2
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            project_root = Path(tmp_dir)
+            listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            listener.bind(("127.0.0.1", 0))
+            listener.listen(1)
+            port = int(listener.getsockname()[1])
+
+            def serve() -> None:
+                connection, _ = listener.accept()
+                with connection:
+                    request = read_request(connection)
+                    time.sleep(reply_delay_seconds)
+                    connection.sendall(
+                        (
+                            json.dumps(
+                                {
+                                    "request_id": str(request["request_id"]),
+                                    "status": "error",
+                                    "error": {"code": "transport_restarting", "message": "bridge restarting"},
+                                },
+                                separators=(",", ":"),
+                            )
+                            + "\n"
+                        ).encode("utf-8")
+                    )
+
+            thread = threading.Thread(target=serve, daemon=True)
+            thread.start()
+            state = healthy_tcp_state(port)
+            recovery_deadlines: list[float] = []
+            real_resolve = server_bridge_transport.resolve_post_reset_recovery_timeout_ms
+
+            def recording_resolve(request_deadline_unix: float, cap_ms: int) -> int:
+                recovery_deadlines.append(request_deadline_unix)
+                return real_resolve(request_deadline_unix, cap_ms)
+
+            try:
+                with (
+                    mock.patch.object(server_bridge_transport, "try_read_bridge_state", return_value=state),
+                    mock.patch.object(server_bridge_transport, "read_best_effort_bridge_state", return_value=state),
+                    mock.patch.object(
+                        server_bridge_transport,
+                        "resolve_post_reset_recovery_timeout_ms",
+                        recording_resolve,
+                    ),
+                ):
+                    submitted_at_unix = time.time()
+                    with self.assertRaises(ToolInvocationError):
+                        server_bridge_transport.TcpLoopbackBridgeTransport().invoke(
+                            project_root,
+                            "unity.status",
+                            {},
+                            timeout_ms=request_timeout_ms,
+                        )
+            finally:
+                listener.close()
+                thread.join(timeout=5.0)
+
+            self.assertTrue(recovery_deadlines, "the post-reset recovery path did not run")
+            budget_seconds = request_timeout_ms / 1000.0
+            for recovery_deadline in recovery_deadlines:
+                self.assertLessEqual(
+                    recovery_deadline - submitted_at_unix,
+                    budget_seconds + (reply_delay_seconds / 2.0),
+                    "recovery polled against a fresh budget instead of the original request deadline",
+                )
+
+
+class PostResetRecoveryBudgetTests(unittest.TestCase):
+    """The budget arithmetic itself, with no sockets and no runner-speed sensitivity."""
+
+    def test_remaining_budget_wins_over_a_larger_cap(self) -> None:
+        with mock.patch.object(server_bridge_final_status.time, "time", return_value=1_000.0):
+            self.assertEqual(
+                250,
+                server_bridge_final_status.resolve_post_reset_recovery_timeout_ms(1_000.25, 5_000),
+            )
+
+    def test_cap_wins_over_a_larger_remaining_budget(self) -> None:
+        with mock.patch.object(server_bridge_final_status.time, "time", return_value=1_000.0):
+            self.assertEqual(
+                250,
+                server_bridge_final_status.resolve_post_reset_recovery_timeout_ms(1_010.0, 250),
+            )
+
+    def test_an_expired_deadline_grants_no_recovery_budget(self) -> None:
+        with mock.patch.object(server_bridge_final_status.time, "time", return_value=1_000.0):
+            self.assertEqual(
+                0,
+                server_bridge_final_status.resolve_post_reset_recovery_timeout_ms(999.5, 5_000),
+            )
+
+    def test_no_cap_falls_back_to_the_remaining_budget(self) -> None:
+        with mock.patch.object(server_bridge_final_status.time, "time", return_value=1_000.0):
+            self.assertEqual(
+                125,
+                server_bridge_final_status.resolve_post_reset_recovery_timeout_ms(1_000.125, 0),
+            )
 
 
 class UnityTransportSourceContractTests(unittest.TestCase):
