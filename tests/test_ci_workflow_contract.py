@@ -26,6 +26,33 @@ def workflow_display_name(path: Path) -> str:
     return ""
 
 
+def workflow_path_for_display_name(name: str) -> Path | None:
+    for path in sorted(WORKFLOWS_DIR.glob("*.yml")):
+        if workflow_display_name(path) == name:
+            return path
+    return None
+
+
+def workflow_trigger_block(text: str, trigger: str) -> list[str]:
+    """Lines of one trigger's mapping under `on:`, by indentation.
+
+    Splitting on a sibling key does not work here: trigger order differs per workflow, and a
+    `pull_request:` filter can precede `push:`.
+    """
+    lines = text.splitlines()
+    block: list[str] = []
+    inside = False
+    for line in lines:
+        if not inside:
+            if line.rstrip() == f"  {trigger}:":
+                inside = True
+            continue
+        if line.strip() and not line.startswith("    "):
+            break
+        block.append(line)
+    return block
+
+
 def workflow_unity_versions(text: str) -> list[str]:
     match = re.search(r"unity-version:\s*\[([^\]]+)\]", text)
     if not match:
@@ -41,6 +68,28 @@ class RequiredGateNamesStayInSyncTests(unittest.TestCase):
         display_names = {workflow_display_name(path) for path in WORKFLOWS_DIR.glob("*.yml")}
         for required in gate.RELEASE_GATE_WORKFLOWS:
             self.assertIn(required, display_names)
+
+    def test_no_release_gate_workflow_path_filters_its_master_push(self) -> None:
+        """The gate demands a run per release SHA, so a filtered master trigger is unsatisfiable.
+
+        A commit outside the filter produces no run at all, the gate reads `missing`, and it then
+        polls its whole `--wait-seconds` budget for evidence that can never appear before failing.
+        This is not hypothetical: `Discovery Checks` filtered its master pushes, and the tag gate
+        for a test-only commit spun for its full budget because that commit touched no filtered
+        path. Earlier releases passed only because they happened to touch `docs/` or `templates/`.
+        """
+        for name in gate.RELEASE_GATE_WORKFLOWS:
+            path = workflow_path_for_display_name(name)
+            self.assertIsNotNone(path, f"no checked-in workflow is named {name}")
+            text = path.read_text(encoding="utf-8")
+            push_block = "\n".join(workflow_trigger_block(text, "push"))
+            if not push_block.strip():
+                continue
+            self.assertNotIn(
+                "paths:",
+                push_block,
+                f"{name} path-filters its master push; release SHAs outside the filter get no run",
+            )
 
     def test_the_tag_gate_workflow_is_not_a_required_gate_of_itself(self) -> None:
         self.assertNotIn(workflow_display_name(TAG_GATE_WORKFLOW), gate.REQUIRED_WORKFLOWS)
@@ -80,7 +129,7 @@ class UnityPackageCiWorkflowContractTests(unittest.TestCase):
         text = UNITY_CI_WORKFLOW.read_text(encoding="utf-8")
         if "push:" not in text:
             self.skipTest("workflow is manual-only; covered by the manual-only contract test")
-        push_block = text.split("pull_request:", 1)[0]
+        push_block = "\n".join(workflow_trigger_block(text, "push"))
         self.assertIn("- master", push_block)
         self.assertNotIn("paths:", push_block)
 

@@ -79,6 +79,12 @@ pending, or unable to verify. See `UNITY_PACKAGE_CI.md` for the workflow,
 license secrets, and the tag-push `Release Tag Gate` workflow that re-verifies
 the same contract in CI.
 
+Required gate workflows must not path-filter their master push trigger. The
+gate needs one run per release SHA, so a filtered trigger is unsatisfiable for
+any commit outside the filter: no run is created, the gate reads `missing`, and
+it polls its whole `--wait-seconds` budget before failing.
+`tests/test_ci_workflow_contract.py` enforces this for every gate workflow.
+
 A workflow that cannot run at all may be suspended through the gate's
 `WAIVED_GATES` table rather than deleted from the required set. A waiver is an
 explicit, reported evidence gap, not a pass: the run reports

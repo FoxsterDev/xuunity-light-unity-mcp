@@ -13,6 +13,15 @@
   `--require "Unity Package CI"` re-arms it for a single run. `v0.3.58` was validated locally on both Unity
   lines instead (EditMode `121/121` ugui on `2022.3` and `6000.0`, `84/84` no-ugui, PlayMode `18` with one
   environment skip); that evidence is not CI-recorded.
+- `Discovery Checks` no longer path-filters its master push trigger. The release gate requires a run per
+  release SHA, so the filter made the gate unsatisfiable for any commit outside it: the tag gate for a
+  test-only commit polled its full 30-minute budget waiting for a run that could never be created, and
+  earlier releases passed only because they happened to touch `docs/` or `templates/`. The contract test now
+  enforces the no-filter rule for every workflow in the gate's set, not just `Unity Package CI`.
+- The post-reset recovery budget is covered by the deadline handed to the recovery poll and by direct unit
+  tests of `resolve_post_reset_recovery_timeout_ms`, instead of a wall-clock bound that failed on a slow
+  Windows runner (`0.735s` against `0.65s`) while the logical behavior was correct — and that a fresh-budget
+  mutation passed unnoticed.
 
 ## 0.3.58
 

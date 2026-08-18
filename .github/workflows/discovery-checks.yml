@@ -17,22 +17,12 @@ on:
       - "scripts/tools/sync_release_version.py"
       - "templates/**"
   push:
+    # No paths filter: the release gate needs a Discovery Checks run for every
+    # master SHA, and a filtered trigger leaves release commits with no run at
+    # all — the gate then polls its whole budget for evidence that can never
+    # appear.
     branches:
       - master
-    paths:
-      - "CHANGELOG.md"
-      - "README.md"
-      - "INSTALL.md"
-      - "SECURITY.md"
-      - "docs/**"
-      - "llms.txt"
-      - "mcp-server.json"
-      - "packages/com.xuunity.light-mcp/package.json"
-      - "scripts/testing/check_release_version_consistency.py"
-      - "scripts/testing/check_release_docs_freshness.py"
-      - "scripts/testing/check_public_release_safety.py"
-      - "scripts/tools/sync_release_version.py"
-      - "templates/**"
   workflow_dispatch:
 
 permissions:
