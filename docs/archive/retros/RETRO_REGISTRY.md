@@ -1,8 +1,8 @@
 # XUUnity Light Unity MCP Public Retro Registry
 
 Status: active public registry
-Last triage: 2026-08-14 (re-evaluated against released source line `v0.3.56` and current `master` at `b13cb69`, which commits the test-result accounting slice and the balanced product portfolio design)
-Current released source line: `v0.3.56`
+Last triage: 2026-08-20 (re-evaluated against released source line `v0.3.58` and current `master` at `a8db49f`, before the uncommitted readiness-verdict slice)
+Current released source line: `v0.3.58`
 
 Update this file whenever a public-safe MCP retro is added, moved, renamed, or
 deleted. Host-private and project-specific retros belong in the host's single
@@ -25,6 +25,27 @@ host-local registry.
 - `Completed Public History` is the place to find reusable lessons already
   implemented, applied, superseded, or retained only for history.
 - Prompt templates are listed separately and are not backlog items.
+
+## Re-Evaluation 2026-08-20
+
+- `master` and `origin/master` align at `a8db49f`; the latest release is
+  `v0.3.58` at `de7c160`. The decision-verdict envelope, authoritative
+  post-settle truth, UI/path proof, infrastructure/product failure split, and
+  the 2026-08-17 liveness/compile-gate cluster are implemented. Release notes
+  record local Unity 2022 and 6000 package regression for the latter, so its
+  stale active row moves to completed history; CI-recorded Unity proof remains
+  a release-infrastructure waiver, not unfinished retro implementation.
+- Current uncommitted source closes the 2026-08-20 readiness P0 and both P1
+  items. Log observations no longer assert an unmeasured compile failure;
+  transient attach/import/identity churn keeps polling and uses non-destructive
+  recovery; persistent failures carry condition-specific codes,
+  `compile_state=unmeasured`, and a consistent blocking readiness prerequisite.
+  Focused host tests and live Unity 2022 package plus Unity 6000 full consumer
+  regression pass. The heuristic-confidence/API-updater and batch-close notice
+  P2 items remain open.
+- The 2026-08-19 anchored truncation finding remains open and is now the highest
+  bounded false-negative/verdict-quality candidate. SDK orchestration remains a
+  broader P1; token-efficiency and live Windows/Linux proof remain P2.
 
 ## Re-Evaluation 2026-08-11
 
@@ -316,11 +337,12 @@ the entire Windows install root-cause set (python3 delegation, UTF-8 BOM,
 
 | Date | File | Scope | Registry Status | Why It Is Not Completed History |
 | --- | --- | --- | --- | --- |
+| 2026-08-20 | `2026-08-20_readiness_verdict_false_positive_retro.md` | Readiness gate: `interactive_compile_block_detected` asserted a compile fact nothing measured, represented several unrelated transient states, contradicted its own `host_prerequisites` block, and recommended destructive recovery | **P0 + both P1 items implemented and live-validated in current source; two P2 residuals open** | Current source uses condition-specific readiness codes, stamps `compile_state=unmeasured`, keeps polling transient attach/import/identity conditions, maps recovery to non-destructive status polling, and aligns the blocking prerequisite with the top-level result. Focused host tests cover every condition plus the stale-log/next-poll bridge-attach race. Unity 2022 package EditMode/PlayMode and Unity 6000 compile/scenario/contract/lifecycle/churn/project-action regression pass; the Unity 6000 lane reproduced and cleared the race. Remaining P2: mark log diagnoses as heuristic/suppress the `-accept-apiupdate` inversion, and echo batch editor-close side effects. |
+| 2026-08-19 | `2026-08-19_anchored_scope_truncation_and_verdict_field_ranking_retro.md` | Console-lane verdict ranking: a truncated search scope that reports zero matches as a negative, and an anchored scope whose `max_chars` cut keeps the tail rather than the anchor-adjacent head | **open; two P1 items, no product change yet** | Boot-time evidence was missed twice on a 1.79 MB anchored scope while `EDITOR_LOG_GREP_MAX_CHARS = 500000` searched only its last 500 KB. The truncation arithmetic itself is already correct and tested (see the 2026-08-04 editor-log reliability history) — the gap is semantic: `scope_truncated: true` alongside `match_count: 0` is inconclusive, not negative, and is not stated in the field an operator reads as the answer. P1a: rank a truncated zero-match as inconclusive with a remedy, as `anchor_log_mismatch` already does. P1b: keep the window at the anchor when an anchored scope exceeds the cap, or state the direction. P2: expose the window on the tool/CLI surface and document the ceiling; mark sources changed on disk since the last import on compile/test results. P3: downgrade the benign post-settle `stale_risk` that appears on nearly every refresh. Two of the session's three findings were operator errors against guidance the tool had already volunteered, which is the argument for P1a. |
 | 2026-05-14 | `2026-05-14_sdk_rollout_mcp_portfolio_retro.md` | SDK/EDM4U rollout validation lane: typed resolver preconditions, package restore, generated-Gradle diff guard, GUI process pool + quit-and-wait closeout, portfolio SDK summary | **generated-diff + typed resolver/package-restore P0 complete in current source; orchestration remains P1** | `v0.3.45`-`v0.3.48` shipped and hardened generated-diff plus callback-backed Android resolution. Current source adds fail-closed closed-project `unity.sdk.package_restore` with an idle-stable registered package graph, atomic package/dependency receipt, and proven process exit. Still open: GUI process pool, batch resolve, closeout orchestration, and portfolio summary. Device lanes remain ROADMAP Wave 5. |
 | 2026-06-02 | `2026-06-02_token_efficiency_response_envelope_retro.md` | Response-envelope token efficiency: compact-by-default across MCP tool surfaces | mostly implemented; P2 residual | Compact-by-default shipped `v0.3.32`-`v0.3.44` for scenario, refresh, compile, build-config compile, test, `unity_status_summary`, `ensure-ready`, and batch CLI, each with `includeFullPayload`/`--output` opt-in (STATUS.md "Compact MCP envelopes"). Remaining (ROADMAP.md "Phase 2" residual): broader multi-project compact ceilings, a token ledger, and fast-path profiles. |
 | 2026-06-11 | `2026-06-11_token_accounting_and_fast_path_retro.md` | Token-accounting ledger, one-shot package-pin verifier, fast-path prompt profile | partial; P2 | The biggest win (compact output) shipped through `v0.3.40`/`v0.3.44`, and the fast path is documented in `docs/agents/PACKAGE_BUMP_FAST_PATH.md`, but no token-accounting ledger, one-shot verify-package-pin verifier, or runner token-budget hints exist in source or ROADMAP/STATUS. Overlaps the response-envelope row above as the token-efficiency tail. |
 | 2026-06-17 | `2026-06-17_windows_setup_failure_retro.md` | Native Windows setup failure postmortem; residual = live Windows/Linux host proof | Windows root causes fixed + CI-exercised in `v0.3.43`; live-host proof still open (P2) | The concrete Windows helper failures (path-with-spaces, ExecutionPolicy, `python3` delegation, PID liveness, discovery) are fixed and CI-exercised end to end. STATUS.md still marks a live Windows/Linux host session with a real Unity editor as needing execution proof (ROADMAP Phase 3 breadth). This row now tracks that single remaining cross-platform proof item; the Windows install root-cause retros (2026-06-09 v1/v2, 2026-06-10) are completed history. |
-| 2026-08-17 | `2026-08-17_playmode_liveness_and_compile_gate_deadlock_retro.md` | Play-mode liveness blindness (editor throttling while unfocused reads as healthy play mode); compile-gate divergence between the direct `playmode_set exit` tool and the ungated scenario step; diagnostic provenance, `project_action_invoke` compact envelope, catalog `action` override; plus a promotion candidate for synchronous rule-assertion hooks as a validation lane | **P0-1..P2-2 implemented in current source 2026-08-17; live Unity regression pending** | All nine priority items shipped in one pass: frame-advance liveness with the `playmode_throttled_editor_unfocused` warning (P0-1); the compile gate covers `playmode_set enter` only and `unity.scenario.run` dispatch is deliberately ungated, with the divergence matrix in DESIGN.md plus a membership test (P0-2/P0-3); `compiler_diagnostics_trust_class` provenance (P1-1); compact `unity_project_action_invoke` (P1-2); catalog `payload.action` conflict listed and refused (P1-3); mutation-delta schema pointer (P1-4); `event_system_scope` (P2-1); `editor_launch_lane` split-log-lane notice (P2-2). Section-10 promotions applied to CONTINUATION/SMOKE_TESTS/README/agent docs/DESIGN/ROADMAP. Still open: live Unity 2022/6000 package regression for the bridge changes (Unity Package CI is temporarily manual-only pending runner license setup), then release. |
 
 > Re-confirmed 2026-07-15 against `v0.3.45` plus current source: the response-envelope /
 > token-efficiency backlog is no longer a blanket compile/refresh/test/status
@@ -335,6 +357,7 @@ the entire Windows install root-cause set (python3 delegation, UTF-8 BOM,
 
 | Date | File | Scope | Registry Status | Notes |
 | --- | --- | --- | --- | --- |
+| 2026-08-17 | `2026-08-17_playmode_liveness_and_compile_gate_deadlock_retro.md` | Play-mode liveness, compile-gate ownership, diagnostic provenance, compact project-action envelopes, and catalog-action consistency | implemented, locally Unity-validated, and released in `v0.3.58` | All nine P0-P2 items shipped. `CHANGELOG.md` records local Unity 2022/6000 uGUI and no-uGUI package proof for the release. Unity Package CI remains explicitly waived until runner license secrets exist; that evidence gap is release infrastructure, not unfinished retro work. |
 | 2026-08-06 | `2026-08-06_structural_compile_diagnostics_retro.md` | Structural `.asmdef` and assembly-resolution failures hidden behind stale C# diagnostics | implemented and live-validated in current source | Refresh, compile, and direct-test post-settle envelopes scan only the current bridge-generation log scope, prioritize typed structural errors, preserve them in compact output, refuse stale/unscoped promotion, and direct operators to inspect `.asmdef` evidence before cache cleanup. Unity `2022.3.62f3` duplicate-reference injection and green recovery passed. |
 | 2026-08-03 | `2026-08-03_multi_scene_ui_targeting_and_session_scoped_evidence_retro.md` | Interactive-lane evidence gaps: UI target scope, session-scoped log queries, live-editor verdict buckets, play-mode-aware errors, screenshot budget | implemented and released through `v0.3.55` | All seven priority items shipped. `unity_status` compact was deliberately dropped because `unity_status_summary` already owns that projection; changing `unity_status` would silently alter the default for existing callers. Host contracts and live additive-scene proof pass. |
 | 2026-07-31 | `2026-07-31_shipped_ui_acceptance_toolchain_first_run_retro.md` | First post-release consumer run of the `v0.3.49` reference-driven UI acceptance slice | reusable residuals released in `v0.3.51`; generic runtime-interaction proof added in current source | All nine priority improvements shipped. Current source adds a uGUI-gated PlayMode guarded-click test proving receipt, exactly-once delivery, semantic state change, and refusal on Unity `2022.3` and `6000.0`. Consumer-specific fixtures/interactions and independent vision judges remain host-private adoption work. |

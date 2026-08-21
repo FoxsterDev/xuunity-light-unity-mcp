@@ -45,6 +45,15 @@ Pass criteria:
 - `unity.status` reachable
 - `unity.health.probe` reports supported operations without infrastructure failure
 - compact status output should expose whether the bridge is already stabilized enough for retry
+- a readiness timeout/error derived from log markers reports
+  `compile_state=unmeasured`; it must not claim that a compile failed
+- transient bridge-attach/import/identity conditions keep polling, so stale
+  log markers cannot preempt a bridge that becomes healthy inside the budget
+- bridge-not-attached and import/compile-busy readiness conditions recommend a
+  status poll, not editor restart/recovery
+- a blocking readiness condition must set `host_prerequisites.ready=false`,
+  include its code in `blocking_codes`, and expose the matching
+  `checks.readiness_gate` row
 
 ### 1a. Closeout Truth Smoke
 

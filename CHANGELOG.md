@@ -23,6 +23,17 @@
   Windows runner (`0.735s` against `0.65s`) while the logical behavior was correct — and that a fresh-budget
   mutation passed unnoticed.
 
+### Fixed
+
+- Readiness fail-fast no longer reports `interactive_compile_block_detected` as though a compile ran when its
+  only evidence is compiler-diagnostic text in `Editor.log`. The top-level error now names the observed live
+  condition (`editor_not_ready_bridge_not_attached`, `editor_identity_changed`, `editor_busy_compiling`,
+  `editor_busy_importing`, or a log-only startup observation), stamps `compile_state=unmeasured`, and reserves
+  compile truth for the compile surfaces. Transient attach/import/identity conditions keep polling and are only
+  returned if readiness never settles; their recovery is a non-destructive status poll instead of editor recovery.
+  Enriched errors also add the condition to the readiness gate, so `host_prerequisites.ready=true` with empty
+  blocking codes cannot contradict a blocking readiness result.
+
 ## 0.3.58
 
 Release tag: `v0.3.58`

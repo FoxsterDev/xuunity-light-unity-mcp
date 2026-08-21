@@ -86,6 +86,10 @@ Already implemented:
 - compile validation without active platform switch
 - authoritative post-settle refresh, compile, and test verdict fields in
   compact MCP operation summaries
+- condition-specific readiness failures that keep log observations separate
+  from compile truth, mark unmeasured compile state explicitly, prefer
+  non-destructive polling during bridge attach/import churn, and keep the
+  readiness prerequisite verdict consistent with the top-level condition
 - session-scoped structural assembly-definition diagnostics in refresh,
   compile, and direct-test post-settle envelopes, with stale-log refusal and a
   no-cache-cleanup recovery action

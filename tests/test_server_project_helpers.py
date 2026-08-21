@@ -40,6 +40,165 @@ def make_unity_project(root: Path) -> Path:
 
 
 class ServerProjectHelperTests(unittest.TestCase):
+    def _wait_for_ready_compile_marker_error(
+        self,
+        *,
+        state: dict,
+        live_editor_pids: list[int],
+    ) -> ToolInvocationError:
+        fake_time = types.SimpleNamespace(
+            time=mock.Mock(side_effect=[0.0, 0.0, 2.0]),
+            sleep=mock.Mock(),
+        )
+        with (
+            mock.patch.object(server_editor_host, "time", fake_time),
+            mock.patch.object(server_editor_host, "bridge_enabled", return_value=True),
+            mock.patch.object(server_editor_host, "try_read_bridge_state", return_value=state),
+            mock.patch.object(server_editor_host, "bridge_state_is_ready", return_value=False),
+            mock.patch.object(server_editor_host, "read_recent_editor_log", return_value="error CS1002"),
+            mock.patch.object(
+                server_editor_host,
+                "classify_editor_log",
+                return_value=(
+                    "interactive_compile_block_detected",
+                    "Compilation errors were detected during interactive startup.",
+                ),
+            ),
+            mock.patch.object(
+                server_editor_host,
+                "find_running_unity_editors_for_project",
+                return_value=[{"pid": pid} for pid in live_editor_pids],
+            ),
+            mock.patch.object(
+                server_editor_host,
+                "pid_is_alive",
+                side_effect=lambda pid: pid in live_editor_pids,
+            ),
+        ):
+            with self.assertRaises(ToolInvocationError) as ctx:
+                server_editor_host.wait_for_ready(
+                    Path("/tmp/FakeProject"),
+                    timeout_ms=1000,
+                    heartbeat_max_age_seconds=10,
+                    startup_policy="fail_fast_on_interactive_compile_block",
+                    editor_log_path=Path("/tmp/editor.log"),
+                )
+        return ctx.exception
+
+    def test_wait_for_ready_keeps_polling_when_bridge_attaches_after_log_markers(self) -> None:
+        ready_state = {
+            "editor_pid": 222,
+            "bridge_bootstrap_attached": True,
+            "health_status": "healthy",
+        }
+        fake_time = types.SimpleNamespace(
+            time=mock.Mock(side_effect=[0.0, 0.0, 0.5]),
+            sleep=mock.Mock(),
+        )
+        with (
+            mock.patch.object(server_editor_host, "time", fake_time),
+            mock.patch.object(server_editor_host, "bridge_enabled", return_value=True),
+            mock.patch.object(server_editor_host, "try_read_bridge_state", side_effect=[{}, ready_state]),
+            mock.patch.object(server_editor_host, "bridge_state_is_ready", side_effect=[False, True]),
+            mock.patch.object(server_editor_host, "read_recent_editor_log", return_value="error CS1002"),
+            mock.patch.object(
+                server_editor_host,
+                "classify_editor_log",
+                return_value=(
+                    "interactive_compile_block_detected",
+                    "Compilation errors were detected during interactive startup.",
+                ),
+            ),
+            mock.patch.object(
+                server_editor_host,
+                "find_running_unity_editors_for_project",
+                return_value=[{"pid": 222}],
+            ),
+            mock.patch.object(server_editor_host, "pid_is_alive", return_value=True),
+            mock.patch.object(server_editor_host, "heartbeat_age_seconds", return_value=1.0),
+        ):
+            result = server_editor_host.wait_for_ready(
+                Path("/tmp/FakeProject"),
+                timeout_ms=1000,
+                heartbeat_max_age_seconds=10,
+                startup_policy="fail_fast_on_interactive_compile_block",
+                editor_log_path=Path("/tmp/editor.log"),
+            )
+
+        self.assertEqual(222, result["editor_pid"])
+        self.assertEqual("fail_fast_on_interactive_compile_block", result["startup_policy"])
+        fake_time.sleep.assert_called_once_with(1.0)
+
+    def test_wait_for_ready_fails_fast_on_explicit_safe_mode_dialog(self) -> None:
+        fake_time = types.SimpleNamespace(
+            time=mock.Mock(side_effect=[0.0, 0.0]),
+            sleep=mock.Mock(),
+        )
+        with (
+            mock.patch.object(server_editor_host, "time", fake_time),
+            mock.patch.object(server_editor_host, "bridge_enabled", return_value=True),
+            mock.patch.object(server_editor_host, "try_read_bridge_state", return_value={}),
+            mock.patch.object(server_editor_host, "bridge_state_is_ready", return_value=False),
+            mock.patch.object(server_editor_host, "read_recent_editor_log", return_value="error CS1002\nSafe Mode"),
+            mock.patch.object(
+                server_editor_host,
+                "classify_editor_log",
+                return_value=(
+                    "interactive_compile_block_with_safe_mode_dialog",
+                    "Safe Mode dialog observed.",
+                ),
+            ),
+            mock.patch.object(
+                server_editor_host,
+                "find_running_unity_editors_for_project",
+                return_value=[{"pid": 222}],
+            ),
+            mock.patch.object(server_editor_host, "pid_is_alive", return_value=True),
+        ):
+            with self.assertRaises(ToolInvocationError) as ctx:
+                server_editor_host.wait_for_ready(
+                    Path("/tmp/FakeProject"),
+                    timeout_ms=1000,
+                    heartbeat_max_age_seconds=10,
+                    startup_policy="fail_fast_on_interactive_compile_block",
+                    editor_log_path=Path("/tmp/editor.log"),
+                )
+
+        self.assertEqual("startup_safe_mode_dialog_observed", ctx.exception.code)
+        self.assertEqual("unmeasured", ctx.exception.details["compile_state"])
+        fake_time.sleep.assert_not_called()
+
+    def test_wait_for_ready_names_bridge_not_attached_without_claiming_compile_truth(self) -> None:
+        exc = self._wait_for_ready_compile_marker_error(
+            state={},
+            live_editor_pids=[222],
+        )
+
+        self.assertEqual("editor_not_ready_bridge_not_attached", exc.code)
+        self.assertEqual("unmeasured", exc.details["compile_state"])
+        self.assertEqual("poll_bridge_bootstrap_attached_then_retry", exc.details["recommended_next_action"])
+        self.assertNotIn("Compilation errors were detected", exc.message)
+
+    def test_wait_for_ready_names_editor_identity_change_without_restarting(self) -> None:
+        exc = self._wait_for_ready_compile_marker_error(
+            state={"editor_pid": 111, "bridge_bootstrap_attached": True},
+            live_editor_pids=[222],
+        )
+
+        self.assertEqual("editor_identity_changed", exc.code)
+        self.assertEqual("refresh_host_session_if_needed", exc.details["recommended_next_action"])
+        self.assertEqual([222], exc.details["observed_live_editor_pids"])
+
+    def test_wait_for_ready_names_import_churn_without_claiming_compile_truth(self) -> None:
+        exc = self._wait_for_ready_compile_marker_error(
+            state={"editor_pid": 222, "bridge_bootstrap_attached": True, "is_updating": True},
+            live_editor_pids=[222],
+        )
+
+        self.assertEqual("editor_busy_importing", exc.code)
+        self.assertEqual("wait_for_editor_idle_then_retry", exc.details["recommended_next_action"])
+        self.assertTrue(exc.details["is_updating"])
+
     def test_host_platform_process_report_exposes_listing_failure(self) -> None:
         completed = mock.Mock(returncode=1, stdout="", stderr="operation not permitted")
         adapter = HostPlatformAdapter(platform_kind="macos")
@@ -1027,6 +1186,45 @@ class ServerProjectHelperTests(unittest.TestCase):
         self.assertEqual("enable_bridge_and_retry", details["recommended_next_action"])
         self.assertIn("init_xuunity_light_unity_mcp.sh", details["recommended_recovery_command"])
         self.assertEqual(["bridge_disabled"], details["host_prerequisites"]["blocking_codes"])
+
+    def test_enrich_error_details_aligns_readiness_error_with_host_prerequisites(self) -> None:
+        context = types.SimpleNamespace(
+            discovery_details={
+                "host_health_classification": "fresh",
+                "host_health_recommended_next_action": "none",
+                "host_prerequisites": {
+                    "lane": "same_host_editor",
+                    "ready": True,
+                    "blocking_codes": [],
+                    "warning_codes": [],
+                    "checks": {},
+                },
+            }
+        )
+        registry = types.SimpleNamespace(refresh_context=lambda _: context)
+
+        with mock.patch.object(server, "_BRIDGE_REGISTRY", registry):
+            details = server.enrich_error_details_with_discovery(
+                Path("/tmp/FakeProject"),
+                {
+                    "readiness_condition": "editor_not_ready_bridge_not_attached",
+                    "readiness_summary": "Bridge has not attached.",
+                    "compile_state": "unmeasured",
+                    "recommended_next_action": "poll_bridge_bootstrap_attached_then_retry",
+                },
+            )
+
+        prerequisites = details["host_prerequisites"]
+        self.assertFalse(prerequisites["ready"])
+        self.assertEqual(
+            ["editor_not_ready_bridge_not_attached"],
+            prerequisites["blocking_codes"],
+        )
+        self.assertEqual(
+            "unmeasured",
+            prerequisites["checks"]["readiness_gate"]["compile_state"],
+        )
+        self.assertIn("request-status-summary", details["recommended_recovery_command"])
 
     def test_enrich_error_details_replaces_stale_final_status_command_with_ensure_ready(self) -> None:
         context = types.SimpleNamespace(

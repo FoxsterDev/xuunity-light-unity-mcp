@@ -831,6 +831,115 @@ def restore_host_opened_editor_state(
     return restoration
 
 
+def _readiness_error_from_log_observation(
+    project_root: Path,
+    state: dict[str, Any] | None,
+    classification: tuple[str, str],
+) -> ToolInvocationError:
+    """Turn a startup-log observation into a condition-shaped readiness error.
+
+    Editor.log is not an authoritative compile result. A file whose mtime moved
+    during this wait can still retain older compiler diagnostics in its tail.
+    Preserve the observation for a condition-specific timeout (while an
+    explicit Safe Mode dialog remains immediately actionable), and mark compile
+    truth as unmeasured.
+    """
+
+    observed_state = dict(state or {})
+    log_code, log_summary = classification
+    live_editor_pids = sorted(
+        {
+            int(editor.get("pid") or 0)
+            for editor in find_running_unity_editors_for_project(project_root)
+            if int(editor.get("pid") or 0) > 0
+        }
+    )
+    bridge_pid = int(observed_state.get("editor_pid") or 0)
+    bridge_pid_alive = bridge_pid > 0 and pid_is_alive(bridge_pid)
+
+    details: dict[str, Any] = {
+        "compile_state": "unmeasured",
+        "compile_measurement_source": "none",
+        "editor_log_observation_code": log_code,
+        "editor_log_observation_summary": log_summary,
+        "observed_bridge_pid": bridge_pid,
+        "observed_bridge_pid_alive": bridge_pid_alive,
+        "observed_live_editor_pids": live_editor_pids,
+        "bridge_bootstrap_attached": observed_state.get("bridge_bootstrap_attached"),
+        "is_compiling": bool(observed_state.get("is_compiling")),
+        "is_updating": bool(observed_state.get("is_updating")),
+        "asset_import_in_progress": bool(observed_state.get("asset_import_in_progress")),
+        "domain_reload_in_progress": bool(observed_state.get("domain_reload_in_progress")),
+        "package_operation_in_progress": bool(observed_state.get("package_operation_in_progress")),
+    }
+
+    if log_code == "interactive_compile_block_with_safe_mode_dialog":
+        code = "startup_safe_mode_dialog_observed"
+        summary = (
+            "Editor.log contains Safe Mode dialog and compiler-diagnostic markers written during the readiness "
+            "wait. Handle the dialog explicitly; this is a log observation, not an authoritative compile verdict."
+        )
+        next_action = "open_safe_mode_manually"
+    elif bridge_pid > 0 and live_editor_pids and bridge_pid not in live_editor_pids:
+        code = "editor_identity_changed"
+        summary = (
+            "The persisted bridge state belongs to a different editor pid than the live editor for this project. "
+            "Refresh host/session state before retrying; no compile result was measured."
+        )
+        next_action = "refresh_host_session_if_needed"
+    elif bridge_pid_alive and bool(observed_state.get("is_compiling")):
+        code = "editor_busy_compiling"
+        summary = (
+            "The live editor is compiling and has not reached readiness yet. Wait for editor idle, then retry; "
+            "no compile verdict was measured by this readiness wait."
+        )
+        next_action = "wait_for_editor_idle_then_retry"
+    elif bridge_pid_alive and any(
+        bool(observed_state.get(key))
+        for key in (
+            "is_updating",
+            "asset_import_in_progress",
+            "domain_reload_in_progress",
+            "package_operation_in_progress",
+            "script_reload_pending",
+        )
+    ):
+        code = "editor_busy_importing"
+        summary = (
+            "The live editor is still importing or reloading and has not reached readiness yet. Wait for editor "
+            "idle, then retry; no compile result was measured."
+        )
+        next_action = "wait_for_editor_idle_then_retry"
+    elif live_editor_pids and (
+        not observed_state
+        or bridge_pid <= 0
+        or not bridge_pid_alive
+        or observed_state.get("bridge_bootstrap_attached") is False
+    ):
+        code = "editor_not_ready_bridge_not_attached"
+        summary = (
+            "A matching Unity editor is live, but a current bridge has not attached yet. Poll bridge readiness, "
+            "then retry; do not restart the editor based on this observation. No compile result was measured."
+        )
+        next_action = "poll_bridge_bootstrap_attached_then_retry"
+    else:
+        code = "startup_log_compile_markers_observed"
+        summary = (
+            "Editor.log contains compiler-diagnostic markers written during the readiness wait. Use the batch "
+            "compile gate to establish current compile truth; this readiness check did not run a compile."
+        )
+        next_action = (
+            "open_safe_mode_manually"
+            if log_code == "safe_mode_manual_required"
+            else "run_batch_compile_gate_and_fix_errors"
+        )
+
+    details["readiness_condition"] = code
+    details["readiness_summary"] = summary
+    details["recommended_next_action"] = next_action
+    return ToolInvocationError(code, summary, details)
+
+
 def wait_for_ready(
     project_root: Path,
     timeout_ms: int,
@@ -854,6 +963,7 @@ def wait_for_ready(
     started_at = time.time()
     deadline = started_at + (timeout_ms / 1000.0)
     state: dict[str, Any] | None = None
+    last_readiness_error: ToolInvocationError | None = None
     while time.time() < deadline:
         state = try_read_bridge_state(project_root)
         if bridge_state_is_ready(state, heartbeat_max_age_seconds):
@@ -866,9 +976,27 @@ def wait_for_ready(
         classification = classify_editor_log(read_recent_editor_log(editor_log_path, started_at), startup_policy)
         if classification:
             code, message = classification
+            if code in {
+                "interactive_compile_block_detected",
+                "interactive_compile_block_with_safe_mode_dialog",
+                "safe_mode_manual_required",
+            }:
+                readiness_error = _readiness_error_from_log_observation(project_root, state, classification)
+                if readiness_error.code == "startup_safe_mode_dialog_observed":
+                    raise readiness_error
+                # A bridge can attach or finish import immediately after the log
+                # moves. Do not turn that normal startup race into a blocking
+                # verdict; retain the typed condition for the timeout path and
+                # keep polling for authoritative bridge readiness.
+                last_readiness_error = readiness_error
+                time.sleep(1.0)
+                continue
             raise ToolInvocationError(code, message)
 
         time.sleep(1.0)
+
+    if last_readiness_error is not None:
+        raise last_readiness_error
 
     raise ToolInvocationError(
         "editor_ready_timeout",

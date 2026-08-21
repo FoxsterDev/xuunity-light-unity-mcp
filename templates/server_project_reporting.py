@@ -257,6 +257,29 @@ def enrich_error_details_with_discovery_data(
     if "state_groups" not in enriched and "state_groups" in discovery:
         enriched["state_groups"] = dict(discovery.get("state_groups") or {})
 
+    readiness_condition = str(enriched.get("readiness_condition") or "").strip()
+    if readiness_condition:
+        host_prerequisites = dict(enriched.get("host_prerequisites") or {})
+        checks = dict(host_prerequisites.get("checks") or {})
+        blocking_codes = list(host_prerequisites.get("blocking_codes") or [])
+        if readiness_condition not in blocking_codes:
+            blocking_codes.append(readiness_condition)
+        checks["readiness_gate"] = {
+            "ready": False,
+            "status": "blocked",
+            "code": readiness_condition,
+            "summary": str(enriched.get("readiness_summary") or "Readiness did not settle."),
+            "compile_state": str(enriched.get("compile_state") or "unmeasured"),
+        }
+        host_prerequisites.update(
+            {
+                "ready": False,
+                "blocking_codes": blocking_codes,
+                "checks": checks,
+            }
+        )
+        enriched["host_prerequisites"] = host_prerequisites
+
     current_next_action = str(enriched.get("recommended_next_action") or "")
     preferred_next_action = str(
         discovery.get("host_health_recommended_next_action")

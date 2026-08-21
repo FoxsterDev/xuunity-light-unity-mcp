@@ -420,6 +420,8 @@ DISCOVERY_NEXT_ACTION_COMMANDS = {
     "inspect_editor_log": "{launcher} project-discovery-report --project-root {project_root}",
     "inspect_editor_log_and_observe": "{launcher} project-discovery-report --project-root {project_root}",
     "inspect_editor_log_and_consider_graceful_restart": "{launcher} ensure-ready --project-root {project_root} --open-editor",
+    "poll_bridge_bootstrap_attached_then_retry": "{launcher} request-status-summary --project-root {project_root} --timeout-ms 5000",
+    "wait_for_editor_idle_then_retry": "{launcher} request-status-summary --project-root {project_root} --timeout-ms 5000",
     "run_batch_compile_gate_and_fix_errors": "{launcher} batch-build-config-compile-matrix --project-root {project_root}",
     "open_safe_mode_manually": "Open the Unity project manually and enter Safe Mode; do not use automated dialog clicking.",
     "relaunch_noninteractive_accept_apiupdate": "Unity -batchmode -quit -accept-apiupdate -projectPath {project_root} -logFile {unity_apiupdate_log}",

@@ -112,6 +112,14 @@ Migration note:
   `payload.action` conflict is listed and refused instead of silently
   overridden; and `unity_status_summary` warns up front on a split log lane
   (`editor_launch_lane: not_opened_by_host`).
+- Current source separates readiness observations from compile verdicts.
+  Compiler-diagnostic text seen while waiting for the bridge is retained as an
+  observation while transient bridge attach, editor identity, and
+  compile/import busy states keep polling. If readiness never settles, the
+  top-level result names the live condition or log-only observation and reports
+  `compile_state=unmeasured`. Recovery stays non-destructive, and the embedded
+  readiness prerequisite becomes blocking with the same code instead of
+  simultaneously claiming `ready=true`.
 - `v0.3.38+` makes `unity_status_summary` compact by default for MCP callers,
   with `payload_mode` markers and full nested diagnostics available through
   `includeFullPayload=true`.

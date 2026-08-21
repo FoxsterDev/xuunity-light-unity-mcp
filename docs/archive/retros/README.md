@@ -1,6 +1,6 @@
 # XUUnity Light Unity MCP Retros
 
-Date: `2026-05-23`
+Date: `2026-08-20`
 Status: `active public retro index`
 
 This folder holds public-safe retrospectives, lessons reports, and retro action
@@ -38,23 +38,25 @@ write or update a post-retro note that states:
 - what validation proved
 - what follow-up remains
 
-See `RETRO_REGISTRY.md` for the full triage, per-file status, and the
-`2026-07-12` re-evaluation. The lists below mirror that registry; the registry
-is authoritative.
+See `RETRO_REGISTRY.md` for the full triage and per-file status. The lists below
+mirror its `2026-08-20` re-evaluation; the registry is authoritative.
 
 ## Active Backlog / Needs Triage
 
-Only three open themes remain after the `2026-07-12` re-triage against released
-`v0.3.44` (SDK rollout lane, token-efficiency tail, cross-platform live-host
-proof):
+The active public backlog after re-triage against released `v0.3.58` is:
 
-- `2026-05-14_sdk_rollout_mcp_portfolio_retro.md` (P1 - highest open ROI)
+- `2026-08-19_anchored_scope_truncation_and_verdict_field_ranking_retro.md`
+  (P1 - highest open verdict-quality risk)
+- `2026-08-20_readiness_verdict_false_positive_retro.md` (P0/P1 implemented;
+  P2 heuristic/side-effect residuals)
+- `2026-05-14_sdk_rollout_mcp_portfolio_retro.md` (P1 orchestration residual)
 - `2026-06-02_token_efficiency_response_envelope_retro.md` (P2 residual)
 - `2026-06-11_token_accounting_and_fast_path_retro.md` (P2)
 - `2026-06-17_windows_setup_failure_retro.md` (P2 - live-host proof only)
 
 ## Completed Public History
 
+- `2026-08-17_playmode_liveness_and_compile_gate_deadlock_retro.md`
 - `2026-05-07_token_stability_and_summary_first_recovery_retro.md`
 - `2026-05-09_cleanup_and_regression_lessons.md`
 - `2026-05-11_chat_retro_playmode_lifecycle_reset.md`
