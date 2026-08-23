@@ -1399,7 +1399,8 @@ TOOLS: dict[str, dict[str, Any]] = {
             "Return compact Unity console items or path-backed Editor.log lines whose message, and optionally "
             "stack trace, matches a string or regex pattern. Build-pipeline progress chatter (CopyFiles, "
             "[n/m ...]) is suppressed by default because it matches whatever feature name the compile job "
-            "carries; the suppressed count is always reported."
+            "carries; the suppressed count is always reported. Anchored Editor.log searches keep the fixed "
+            "window adjacent to the anchor; a zero-match from a truncated scope is explicitly inconclusive."
         ),
         "inputSchema": {
             "type": "object",
@@ -1445,7 +1446,9 @@ TOOLS: dict[str, dict[str, Any]] = {
                         "offset the editor recorded in that request's journal entry and also needs "
                         "sinceRequestId. The resolved anchor and searched_from_line are echoed back in "
                         "since_anchor, and an anchor that cannot be trusted is refused by name rather than "
-                        "silently widened."
+                        "silently widened. If the anchored scope exceeds the fixed search ceiling, grep keeps "
+                        "the anchor-adjacent head, reports search_window_direction/scope_truncated, and ranks "
+                        "a zero-match search_verdict as inconclusive rather than proof of absence."
                     )
                 },
                 "sinceRequestId": {

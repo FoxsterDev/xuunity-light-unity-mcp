@@ -1,7 +1,7 @@
 # XUUnity Light Unity MCP Public Retro Registry
 
 Status: active public registry
-Last triage: 2026-08-20 (re-evaluated against released source line `v0.3.58` and current `master` at `a8db49f`, before the uncommitted readiness-verdict slice)
+Last triage: 2026-08-23 (re-evaluated against released source line `v0.3.58` and current `master` at `8825610`, before the uncommitted anchored-grep verdict slice)
 Current released source line: `v0.3.58`
 
 Update this file whenever a public-safe MCP retro is added, moved, renamed, or
@@ -25,6 +25,31 @@ host-local registry.
 - `Completed Public History` is the place to find reusable lessons already
   implemented, applied, superseded, or retained only for history.
 - Prompt templates are listed separately and are not backlog items.
+
+## Re-Evaluation 2026-08-23
+
+- After fetching, `master` and `origin/master` align at `8825610`; the latest
+  release remains `v0.3.58` at `de7c160`. The 2026-08-20 readiness P0/P1 slice
+  is committed at the current tip, so its former "uncommitted" status was
+  stale. The decision-verdict, authoritative post-settle, UI/path,
+  infrastructure classification, liveness, and readiness clusters remain
+  implemented.
+- Current uncommitted source closes both 2026-08-19 anchored-grep P1 items.
+  Grep keeps the fixed window adjacent to the resolved anchor, promotes an
+  explicit search verdict/window direction, and treats a partial zero-match as
+  inconclusive with recovery. Complete anchored zero-matches remain real
+  negatives, truncation-boundary regex safety is preserved, and console tail
+  retains recent-tail behavior.
+- Regression evidence for this slice is green: 213 focused host tests; the
+  Unity 2022.3.62f3 package lane (14/14 EditMode and 5/5 PlayMode); and the
+  Unity 6000.0.58f2 real-consumer post-change suite, including 6/6 compile
+  matrix lanes, 10/10 acceptance steps, contract, lifecycle, churn, and
+  project-action consistency. The full host suite ran 932 tests; its only six
+  errors were sandbox-denied loopback binds in the TCP framing fixture, outside
+  the changed Editor.log surface.
+- The retro remains active only for its P2 window-control/import-freshness and
+  P3 benign-settle-warning residuals. SDK GUI/batch/portfolio orchestration is
+  still a broader P1; token-efficiency and live Windows/Linux proof remain P2.
 
 ## Re-Evaluation 2026-08-20
 
@@ -338,7 +363,7 @@ the entire Windows install root-cause set (python3 delegation, UTF-8 BOM,
 | Date | File | Scope | Registry Status | Why It Is Not Completed History |
 | --- | --- | --- | --- | --- |
 | 2026-08-20 | `2026-08-20_readiness_verdict_false_positive_retro.md` | Readiness gate: `interactive_compile_block_detected` asserted a compile fact nothing measured, represented several unrelated transient states, contradicted its own `host_prerequisites` block, and recommended destructive recovery | **P0 + both P1 items implemented and live-validated in current source; two P2 residuals open** | Current source uses condition-specific readiness codes, stamps `compile_state=unmeasured`, keeps polling transient attach/import/identity conditions, maps recovery to non-destructive status polling, and aligns the blocking prerequisite with the top-level result. Focused host tests cover every condition plus the stale-log/next-poll bridge-attach race. Unity 2022 package EditMode/PlayMode and Unity 6000 compile/scenario/contract/lifecycle/churn/project-action regression pass; the Unity 6000 lane reproduced and cleared the race. Remaining P2: mark log diagnoses as heuristic/suppress the `-accept-apiupdate` inversion, and echo batch editor-close side effects. |
-| 2026-08-19 | `2026-08-19_anchored_scope_truncation_and_verdict_field_ranking_retro.md` | Console-lane verdict ranking: a truncated search scope that reports zero matches as a negative, and an anchored scope whose `max_chars` cut keeps the tail rather than the anchor-adjacent head | **open; two P1 items, no product change yet** | Boot-time evidence was missed twice on a 1.79 MB anchored scope while `EDITOR_LOG_GREP_MAX_CHARS = 500000` searched only its last 500 KB. The truncation arithmetic itself is already correct and tested (see the 2026-08-04 editor-log reliability history) — the gap is semantic: `scope_truncated: true` alongside `match_count: 0` is inconclusive, not negative, and is not stated in the field an operator reads as the answer. P1a: rank a truncated zero-match as inconclusive with a remedy, as `anchor_log_mismatch` already does. P1b: keep the window at the anchor when an anchored scope exceeds the cap, or state the direction. P2: expose the window on the tool/CLI surface and document the ceiling; mark sources changed on disk since the last import on compile/test results. P3: downgrade the benign post-settle `stale_risk` that appears on nearly every refresh. Two of the session's three findings were operator errors against guidance the tool had already volunteered, which is the argument for P1a. |
+| 2026-08-19 | `2026-08-19_anchored_scope_truncation_and_verdict_field_ranking_retro.md` | Console-lane verdict ranking: a truncated search scope that reports zero matches as a negative, and an anchored scope whose fixed cut kept the tail rather than the anchor-adjacent head | **both P1 items implemented in current source; P2/P3 residuals open** | Current source keeps anchored grep windows beside the anchor, exposes `search_verdict`/reason, direction and truncation at the top level, and makes partial zero-matches explicitly inconclusive with a recovery action and partial-scope trust class. Complete anchored zero-matches remain `not_matched`; console tail keeps recent-tail behavior. Focused regression owns early-boot recovery, boundary safety, absolute numbering, negative/inconclusive ranking, and tail compatibility. Remaining: P2 user-controlled window/import-freshness hints and P3 benign settle-warning downgrade. |
 | 2026-05-14 | `2026-05-14_sdk_rollout_mcp_portfolio_retro.md` | SDK/EDM4U rollout validation lane: typed resolver preconditions, package restore, generated-Gradle diff guard, GUI process pool + quit-and-wait closeout, portfolio SDK summary | **generated-diff + typed resolver/package-restore P0 complete in current source; orchestration remains P1** | `v0.3.45`-`v0.3.48` shipped and hardened generated-diff plus callback-backed Android resolution. Current source adds fail-closed closed-project `unity.sdk.package_restore` with an idle-stable registered package graph, atomic package/dependency receipt, and proven process exit. Still open: GUI process pool, batch resolve, closeout orchestration, and portfolio summary. Device lanes remain ROADMAP Wave 5. |
 | 2026-06-02 | `2026-06-02_token_efficiency_response_envelope_retro.md` | Response-envelope token efficiency: compact-by-default across MCP tool surfaces | mostly implemented; P2 residual | Compact-by-default shipped `v0.3.32`-`v0.3.44` for scenario, refresh, compile, build-config compile, test, `unity_status_summary`, `ensure-ready`, and batch CLI, each with `includeFullPayload`/`--output` opt-in (STATUS.md "Compact MCP envelopes"). Remaining (ROADMAP.md "Phase 2" residual): broader multi-project compact ceilings, a token ledger, and fast-path profiles. |
 | 2026-06-11 | `2026-06-11_token_accounting_and_fast_path_retro.md` | Token-accounting ledger, one-shot package-pin verifier, fast-path prompt profile | partial; P2 | The biggest win (compact output) shipped through `v0.3.40`/`v0.3.44`, and the fast path is documented in `docs/agents/PACKAGE_BUMP_FAST_PATH.md`, but no token-accounting ledger, one-shot verify-package-pin verifier, or runner token-budget hints exist in source or ROADMAP/STATUS. Overlaps the response-envelope row above as the token-efficiency tail. |

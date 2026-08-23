@@ -227,30 +227,32 @@ def case_real_anchor_and_truncation(outcome: Outcome, project_root: Path, state:
         anchor.get("resolved") == "playmode_start" and anchor.get("anchored") is True,
         f"resolved={anchor.get('resolved')} offset={anchor.get('start_offset_bytes')} scope_bytes={scope_bytes}",
     )
+    truncated = bool(anchor.get("scope_truncated"))
+    expected_trust = (
+        "session_scoped_editor_log_partial_scope" if truncated else "session_scoped_editor_log"
+    )
     outcome.check(
-        "an anchored result is labelled session scoped",
-        payload.get("result_trust_class") == "session_scoped_editor_log"
-        and not payload.get("stale_match_caveat"),
-        f"trust={payload.get('result_trust_class')}",
+        "an anchored result is labelled with its full or partial session scope",
+        payload.get("result_trust_class") == expected_trust and not payload.get("stale_match_caveat"),
+        f"trust={payload.get('result_trust_class')} truncated={truncated}",
     )
 
-    truncated = bool(anchor.get("scope_truncated"))
     if not truncated:
         outcome.skip(
             "truncation boundary",
-            f"scope is {scope_bytes} bytes, under the {payload.get('searched_tail_chars')} char budget",
+            f"scope is {scope_bytes} bytes, under the {payload.get('searched_window_chars')} char budget",
         )
     else:
         outcome.check(
-            "a truncated window drops its leading fragment",
-            anchor.get("partial_leading_line_dropped") is True,
-            "partial_leading_line_dropped=True (the fragment a pattern could match falsely)",
+            "an anchored grep keeps the anchor-adjacent head",
+            payload.get("search_window_direction") == "anchor_adjacent_head",
+            f"direction={payload.get('search_window_direction')}",
         )
         outcome.check(
-            "a truncated window numbers relative to itself and keeps the anchor line apart",
-            payload.get("line_numbering_basis") == "anchored_scope_relative"
-            and payload.get("searched_from_line") == 1
-            and int(anchor.get("anchor_line") or 0) > 1,
+            "an anchor-adjacent window preserves absolute line numbers",
+            payload.get("line_numbering_basis") == "editor_log_absolute"
+            and int(payload.get("searched_from_line") or 0) > 0
+            and "anchor_line" not in anchor,
             f"basis={payload.get('line_numbering_basis')} from_line={payload.get('searched_from_line')} "
             f"anchor_line={anchor.get('anchor_line')}",
         )
@@ -262,6 +264,30 @@ def case_real_anchor_and_truncation(outcome: Outcome, project_root: Path, state:
                 text in _scope_lines(log_path, offset),
                 f"first item is a complete log line ({len(text)} chars)",
             )
+
+        absent = run_wrapper(
+            [
+                "request-console-grep",
+                "--project-root", str(project_root),
+                "--editor-log-path", stamped,
+                "--pattern", "__XUUNITY_MCP_ANCHORED_SCOPE_ABSENCE_PROBE_9F1834__",
+                "--since", "playmode_start",
+                "--limit", "3",
+            ]
+        )
+        outcome.check(
+            "a partial zero-match is inconclusive rather than negative",
+            absent.get("match_count") == 0
+            and absent.get("search_verdict") == "inconclusive"
+            and absent.get("scope_truncated") is True,
+            f"matches={absent.get('match_count')} verdict={absent.get('search_verdict')} "
+            f"reason={absent.get('search_verdict_reason')}",
+        )
+        outcome.check(
+            "the inconclusive result names recovery",
+            bool(absent.get("recommended_next_action")),
+            f"recommended_next_action={absent.get('recommended_next_action')}",
+        )
 
 
 def _scope_lines(log_path: Path, offset: int) -> set[str]:

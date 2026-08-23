@@ -100,9 +100,24 @@ class EditorLogSinceAnchorTests(unittest.TestCase):
 
         self.assertEqual(2, payload["match_count"])
         self.assertEqual("session_scoped_editor_log", payload["result_trust_class"])
+        self.assertEqual("matched", payload["search_verdict"])
         self.assertEqual("", payload["stale_match_caveat"])
         self.assertEqual("playmode_start", payload["since_anchor"]["resolved"])
         self.assertEqual(self.offset, payload["since_anchor"]["start_offset_bytes"])
+
+    def test_a_complete_anchored_zero_match_is_a_real_negative(self) -> None:
+        payload = server_health.grep_editor_log_payload(
+            self.root,
+            self.log,
+            pattern="ABSENT",
+            since="playmode_start",
+            bridge_state=self.bridge_state,
+        )
+
+        self.assertFalse(payload["scope_truncated"])
+        self.assertEqual("not_matched", payload["search_verdict"])
+        self.assertEqual("complete_anchored_scope_searched", payload["search_verdict_reason"])
+        self.assertNotIn("recommended_next_action", payload)
 
     def test_anchored_line_numbers_stay_absolute_in_the_editor_log(self) -> None:
         payload = server_health.grep_editor_log_payload(
@@ -379,10 +394,8 @@ class EditorLogSinceAnchorTests(unittest.TestCase):
         self.assertNotIn("partial_leading_line_dropped", payload["since_anchor"])
         self.assertEqual([3, 5], [item["line"] for item in payload["items"]])
 
-    def test_a_truncated_scope_does_not_mix_absolute_and_relative_line_numbers(self) -> None:
-        """read_editor_log_scope keeps the TAIL of the scope, so the window no longer starts at the anchor.
-        Reporting searched_from_line as the anchor's absolute line next to window-relative item numbers was
-        self-contradictory. The anchor line keeps its own key instead."""
+    def test_a_truncated_grep_scope_keeps_anchor_adjacent_absolute_line_numbers(self) -> None:
+        """An anchored grep keeps the head of its scope, so its first line is still the anchor's absolute line."""
 
         log = self.root / "big.log"
         write_log(log, "".join(f"line{n:05d} " + "x" * 38 + "\n" for n in range(1, 2001)))
@@ -399,9 +412,10 @@ class EditorLogSinceAnchorTests(unittest.TestCase):
         anchor = payload["since_anchor"]
 
         self.assertTrue(anchor["scope_truncated"])
-        self.assertEqual("anchored_scope_relative", payload["line_numbering_basis"])
-        self.assertEqual(1, payload["searched_from_line"], "relative basis must start its own numbering at 1")
-        self.assertGreater(anchor["anchor_line"], 1, "the absolute anchor line keeps its own key")
+        self.assertEqual("anchor_adjacent_head", payload["search_window_direction"])
+        self.assertEqual("editor_log_absolute", payload["line_numbering_basis"])
+        self.assertGreater(payload["searched_from_line"], 1)
+        self.assertNotIn("anchor_line", anchor)
 
     def test_tail_honours_the_same_anchor(self) -> None:
         payload = server_health.tail_editor_log_payload(
@@ -415,6 +429,26 @@ class EditorLogSinceAnchorTests(unittest.TestCase):
         self.assertEqual(2, payload["tail_count"])
         self.assertEqual(4, payload["items"][0]["line"])
         self.assertEqual("session_scoped_editor_log", payload["result_trust_class"])
+
+    def test_a_truncated_tail_keeps_the_recent_end_of_the_anchored_scope(self) -> None:
+        log = self.root / "big-tail.log"
+        prefix = "previous session\n"
+        scope = "early MARKER\n" + "noise\n" * 100 + "late MARKER\n"
+        write_log(log, prefix + scope)
+
+        payload = server_health.tail_editor_log_payload(
+            self.root,
+            log,
+            limit=10,
+            max_chars=100,
+            since="playmode_start",
+            bridge_state={"editor_log_offset_at_playmode_start": len(prefix), "editor_log_path": str(log)},
+        )
+
+        self.assertEqual("scope_tail", payload["since_anchor"]["search_window_direction"])
+        self.assertEqual("anchored_scope_relative", payload["line_numbering_basis"])
+        self.assertIn("late MARKER", [item["message"] for item in payload["items"]])
+        self.assertNotIn("early MARKER", [item["message"] for item in payload["items"]])
 
     def test_both_console_tools_expose_the_anchor(self) -> None:
         for tool_name in ("unity_console_grep", "unity_console_tail"):
@@ -736,72 +770,80 @@ class AnchorTrustBoundaryTests(unittest.TestCase):
     def tearDown(self) -> None:
         self._temp.cleanup()
 
-    def _truncating_log(self, max_chars: int, *, cut_inside_the_word: bool) -> tuple[Path, int]:
-        """A log whose anchored scope exceeds max_chars, with the truncation cut placed deliberately.
-
-        read_editor_log_scope keeps the *tail* of the scope, so the returned window starts at
-        len(scope) - max_chars. Landing that cut four characters into "xxNOMARKER" leaves "MARKER" as the
-        window's first line -- a fragment a grep for MARKER reports as a hit on a line that says NOMARKER.
-        """
+    def test_an_anchor_adjacent_cut_cannot_fabricate_a_regex_match(self) -> None:
+        """Cutting `ERRORDETAIL` after `ERROR` must not make an `ERROR$` regex match a line that never ended."""
 
         log = self.root / "Editor.log"
         prefix = "previous session\n"
-        trap = "xxNOMARKER\n"
-        filler = "".join(f"noise {index:04d}\n" for index in range(30))
-        offset_into_trap = 4 if cut_inside_the_word else 0
-        tail_length = max_chars + offset_into_trap - len(trap)
-        tail = "x" * (tail_length - 1) + "\n"
-        scope = filler + trap + tail
-        cut = len(scope) - max_chars
-        expected = "MARKER" if cut_inside_the_word else "xxNOMARKER"
-        self.assertEqual(
-            expected,
-            scope[cut : cut + len(expected)],
-            "fixture no longer places the truncation cut where the case needs it",
-        )
+        complete = "early complete\n"
+        scope = complete + "ERRORDETAIL\nlate line\n"
+        max_chars = len(complete + "ERROR")
         write_log(log, prefix + scope)
-        return log, len(prefix.encode("utf-8"))
-
-    def test_a_truncated_window_cannot_fabricate_a_match(self) -> None:
-        """The partial-line drop was gated on the *anchor* landing mid-line, so the max_chars cut -- the other
-        boundary that can split a line -- reopened the fabricated match through a second entrypoint."""
-
-        max_chars = 500
-        log, offset = self._truncating_log(max_chars, cut_inside_the_word=True)
 
         payload = server_health.grep_editor_log_payload(
             self.root,
             log,
-            pattern="MARKER",
+            pattern="ERROR$",
+            regex=True,
             since="playmode_start",
             max_chars=max_chars,
-            bridge_state={"editor_log_offset_at_playmode_start": offset, "editor_log_path": str(log)},
+            bridge_state={"editor_log_offset_at_playmode_start": len(prefix), "editor_log_path": str(log)},
         )
 
         self.assertTrue(payload["since_anchor"]["scope_truncated"])
         self.assertFalse(payload["since_anchor"]["starts_mid_line"], "the anchor itself is on a line boundary")
-        self.assertTrue(payload["since_anchor"]["partial_leading_line_dropped"])
+        self.assertTrue(payload["since_anchor"]["partial_trailing_line_dropped"])
         self.assertEqual(0, payload["match_count"])
         self.assertEqual([], [item["message"] for item in payload["items"]])
 
-    def test_a_truncated_window_on_a_line_boundary_keeps_its_first_line(self) -> None:
-        """Dropping unconditionally would silently lose a legitimate line, so the drop must be evidence-based."""
+    def test_anchor_adjacent_window_finds_an_early_boot_marker(self) -> None:
+        """The fixed window belongs at the anchor: boot evidence must not be displaced by a long later scope."""
 
-        max_chars = 500
-        log, offset = self._truncating_log(max_chars, cut_inside_the_word=False)
+        log = self.root / "Editor.log"
+        prefix = "previous session\n"
+        early = "BOOT MARKER\n"
+        scope = early + "noise\n" * 200 + "late line\n"
+        max_chars = len(early + "noise\n" * 3)
+        write_log(log, prefix + scope)
 
         payload = server_health.grep_editor_log_payload(
             self.root,
             log,
-            pattern="NOMARKER",
+            pattern="BOOT MARKER",
             since="playmode_start",
             max_chars=max_chars,
-            bridge_state={"editor_log_offset_at_playmode_start": offset, "editor_log_path": str(log)},
+            bridge_state={"editor_log_offset_at_playmode_start": len(prefix), "editor_log_path": str(log)},
         )
 
         self.assertTrue(payload["since_anchor"]["scope_truncated"])
-        self.assertNotIn("partial_leading_line_dropped", payload["since_anchor"])
-        self.assertEqual(["xxNOMARKER"], [item["message"] for item in payload["items"]])
+        self.assertEqual("anchor_adjacent_head", payload["search_window_direction"])
+        self.assertEqual("matched", payload["search_verdict"])
+        self.assertEqual(["BOOT MARKER"], [item["message"] for item in payload["items"]])
+
+    def test_a_partial_zero_match_is_explicitly_inconclusive(self) -> None:
+        log = self.root / "Editor.log"
+        prefix = "previous session\n"
+        scope = "early line\n" + "noise\n" * 200 + "LATE MARKER\n"
+        write_log(log, prefix + scope)
+
+        payload = server_health.grep_editor_log_payload(
+            self.root,
+            log,
+            pattern="LATE MARKER",
+            since="playmode_start",
+            max_chars=100,
+            bridge_state={"editor_log_offset_at_playmode_start": len(prefix), "editor_log_path": str(log)},
+        )
+
+        self.assertEqual(0, payload["match_count"])
+        self.assertTrue(payload["scope_truncated"])
+        self.assertEqual("inconclusive", payload["search_verdict"])
+        self.assertEqual("anchored_scope_truncated_before_full_search", payload["search_verdict_reason"])
+        self.assertEqual("session_scoped_editor_log_partial_scope", payload["result_trust_class"])
+        self.assertEqual(
+            server_health.EDITOR_LOG_PARTIAL_SCOPE_RECOVERY_ACTION,
+            payload["recommended_next_action"],
+        )
 
     def test_the_truncation_flag_is_the_readers_own_verdict_not_a_byte_estimate(self) -> None:
         """`scoped_bytes_available > max_chars` compared bytes against a char budget, so a multi-byte scope

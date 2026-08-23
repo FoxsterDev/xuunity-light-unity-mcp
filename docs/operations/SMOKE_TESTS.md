@@ -1,7 +1,7 @@
 # XUUnity Light Unity MCP Smoke Tests
 
 Date: `2026-07-15`
-Status: `current source after v0.3.58`
+Status: `current source after v0.3.59`
 
 This file defines the public reusable smoke-test contract for the lightweight
 Unity MCP lane.
@@ -798,6 +798,24 @@ Pass criteria:
 - against an editor that never recorded the anchor, the call still answers but
   reports `since_anchor.resolved = anchor_unavailable` and
   `since_anchor_degraded = true` rather than silently widening to the full tail
+
+For the truncation branch, generate more than the fixed grep window of log text
+after the anchor, with one marker near the anchor and another after the window.
+
+Pass criteria:
+
+- the early marker is found with `search_window_direction =
+  anchor_adjacent_head`, `scope_truncated = true`, and `search_verdict = matched`
+- a zero-match for the marker outside that partial window reports
+  `search_verdict = inconclusive`, `search_verdict_reason =
+  anchored_scope_truncated_before_full_search`, and
+  `result_trust_class = session_scoped_editor_log_partial_scope`
+- the inconclusive payload names a `recommended_next_action`; it never presents
+  `match_count = 0` as proof of absence
+- a small complete anchored scope with no marker reports
+  `search_verdict = not_matched`
+- `unity_console_tail` still keeps the recent end of a truncated anchored scope
+  and reports `search_window_direction = scope_tail`
 
 Shell wait loops must use the same discipline. Capture the line count first, then
 poll only the tail beyond it:

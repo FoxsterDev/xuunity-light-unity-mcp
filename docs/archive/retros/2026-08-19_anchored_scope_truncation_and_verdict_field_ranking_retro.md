@@ -1,7 +1,7 @@
 # XUUnity Light Unity MCP Chat Retro — Anchored Scope Truncation and Verdict-Field Ranking
 
 Date: `2026-08-19`
-Status: `active public retro; one P1 product change proposed`
+Status: `P1 anchored-window and verdict-ranking slice implemented in current source; P2/P3 residuals open`
 Lane: interactive chat, boot-time authenticated payload capture in a consumer project
 
 ## 1. Executive Summary
@@ -174,3 +174,30 @@ The product was right about everything it was asked and wrong about nothing it c
 occupy the shape of a complete one, twice, and that is the fixable part. Two of the three findings were operator errors
 against guidance the tool had already volunteered — which is itself the strongest argument for the P1 ranking change:
 a classification an operator skips is functionally the same as a classification that was never computed.
+
+## 12. Implementation Closeout — 2026-08-23
+
+Current source closes both P1 items as one anchored-grep verdict slice:
+
+- bounded anchored greps keep the anchor-adjacent head rather than the scope
+  tail, preserving early boot/init evidence
+- the payload promotes `search_verdict`, `search_verdict_reason`,
+  `scope_truncated`, `search_window_direction`, and `searched_window_chars`
+- a partial zero-match is explicitly `inconclusive`, carries
+  `session_scoped_editor_log_partial_scope`, and names recovery; only a
+  complete anchored zero-match is `not_matched`
+- a partial trailing line at the head-window boundary is dropped before regex
+  matching, so the new cut cannot fabricate an end-anchored match
+- `unity_console_tail` retains its separate recent-tail behavior
+
+Focused host regression covers early-marker recovery, partial-zero verdicts,
+complete-scope negatives, truncation-boundary regex safety, absolute line
+numbering, and tail compatibility. The focused host surface is green across
+213 tests. Live regression is also green in Unity 2022.3.62f3 (14/14 package
+EditMode and 5/5 PlayMode tests) and Unity 6000.0.58f2 (6/6 compile lanes,
+10/10 acceptance steps, contract, lifecycle, churn, and project-action
+consistency). The full host suite ran 932 tests; its only six errors were
+sandbox-denied TCP loopback binds, unrelated to the Editor.log path.
+
+Remaining scope is intentionally deferred: P2 window-size control and
+source-on-disk import freshness, plus the P3 benign settle-warning downgrade.

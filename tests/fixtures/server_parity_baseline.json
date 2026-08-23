@@ -202,7 +202,7 @@
     ]
   },
   "mcp_tools_list": {
-    "sha256": "403537e713c66391f9a6817a9874c3dbcd205f59521670c3adb0ecbb1a617639",
+    "sha256": "0cbca24c51783016065fc054400a485cdbaa34c6921cc2b5a9d08cb0ae19a7e1",
     "tool_count": 65,
     "tool_names": [
       "xuunity_setup_plan",

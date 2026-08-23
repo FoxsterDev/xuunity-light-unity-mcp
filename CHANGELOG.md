@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+## 0.3.59
+
+Release tag: `v0.3.59`
+
+Current Git UPM install URL:
+
+```text
+https://github.com/FoxsterDev/xuunity-mcp.git?path=/packages/com.xuunity.light-mcp#v0.3.59
+```
+
+### Changed
+
+- Released `v0.3.59` package metadata, server metadata, package manifests, and Git UPM examples.
+
 ### Changed
 
 - `Unity Package CI` is suspended in the release gate through an explicit waiver instead of being required.
@@ -25,6 +39,13 @@
 
 ### Fixed
 
+- Anchored `unity_console_grep source=editor_log` searches keep the fixed-size window beside the anchor instead
+  of keeping the end of a long anchored scope, so early boot/init evidence is no longer displaced by later log
+  volume. The payload now promotes `search_verdict`, `search_verdict_reason`, `scope_truncated`, and
+  `search_window_direction`; a zero-match from any partial scope is `inconclusive`, carries a recovery action,
+  and uses `session_scoped_editor_log_partial_scope` instead of looking like proof of absence. Complete anchored
+  zero-match searches remain `not_matched`. The existing recent-tail behavior of `unity_console_tail` is
+  unchanged. (2026-08-19 anchored-scope truncation retro, P1)
 - Readiness fail-fast no longer reports `interactive_compile_block_detected` as though a compile ran when its
   only evidence is compiler-diagnostic text in `Editor.log`. The top-level error now names the observed live
   condition (`editor_not_ready_bridge_not_attached`, `editor_identity_changed`, `editor_busy_compiling`,

@@ -45,6 +45,9 @@ CONSOLE_TAIL_TRUNCATION_RECOVERY_HINT = (
 CONSOLE_TAIL_FULL_PAYLOAD_RECOVERY_HINT = (
     "Re-run unity_console_tail with maxPayloadBytes=-1 for the unbounded raw tail; raise limit for more items."
 )
+EDITOR_LOG_PARTIAL_SCOPE_RECOVERY_ACTION = (
+    "retry_with_since_request_id_near_the_expected_event_or_search_editor_log_from_since_anchor_start_offset_bytes"
+)
 SINCE_ANCHORS = ("playmode_start", "bridge_generation", "request_id")
 SINCE_ANCHOR_STATE_KEYS = {
     "playmode_start": "editor_log_offset_at_playmode_start",
@@ -590,6 +593,8 @@ def _read_editor_log_since_anchor(
     log_path: Path,
     anchor: dict[str, Any],
     max_chars: int,
+    *,
+    prefer_anchor_adjacent_window: bool = False,
 ) -> tuple[str, int]:
     """Return (text, first_line_number) for the anchored scope, falling back to the plain tail."""
 
@@ -601,6 +606,7 @@ def _read_editor_log_since_anchor(
         log_path,
         session_start_offset_bytes=int(anchor.get("start_offset_bytes") or 0),
         max_chars=max_chars,
+        prefer_anchor_adjacent_window=prefer_anchor_adjacent_window,
     )
     if scope.get("fallback_used"):
         anchor["resolved"] = "anchor_unusable"
@@ -610,22 +616,31 @@ def _read_editor_log_since_anchor(
     truncated = bool(scope.get("truncated_to_max_chars"))
     anchor["scope_truncated"] = truncated
     first_line = max(1, int(anchor.get("searched_from_line") or 1))
+    window_direction = str(scope.get("search_window_direction") or "full_anchored_scope")
+    anchor["search_window_direction"] = window_direction
+    anchor["searched_window_chars"] = int(scope.get("searched_window_chars") or len(text))
+    anchor["unsearched_scope_chars"] = int(scope.get("unsearched_scope_chars") or 0)
 
-    # A window that does not begin at a line start lets a pattern match text the real line does not contain:
-    # a boundary splitting "xxNOMARKER" leaves "MARKER", which a grep for MARKER reports as a hit on a line that
-    # literally says NOMARKER. Two boundaries can split a line — the recorded offset, which is a byte length
-    # captured while Unity was writing, and the max_chars cut that keeps only the tail of the scope.
-    starts_mid_line = bool(anchor.get("starts_mid_line")) if not truncated else bool(
-        scope.get("truncated_window_starts_mid_line")
-    )
+    # A window boundary inside a line lets a pattern match text the real line does not contain. A leading cut
+    # that splits "xxNOMARKER" leaves "MARKER"; a trailing cut after "ERROR" in "ERRORDETAIL" fabricates an
+    # `ERROR$` regex match. The recorded offset can split the leading line, and max_chars can split either the
+    # leading edge of a tail window or the trailing edge of an anchor-adjacent head window.
+    starts_mid_line = bool(anchor.get("starts_mid_line"))
+    if truncated and window_direction == "scope_tail":
+        starts_mid_line = bool(scope.get("truncated_window_starts_mid_line"))
     if starts_mid_line:
         newline_at = text.find("\n")
         text = "" if newline_at < 0 else text[newline_at + 1 :]
         anchor["partial_leading_line_dropped"] = True
-        if not truncated:
+        if not truncated or window_direction == "anchor_adjacent_head":
             first_line += 1
 
-    if truncated:
+    if truncated and window_direction == "anchor_adjacent_head" and scope.get("truncated_window_ends_mid_line"):
+        newline_at = text.rfind("\n")
+        text = "" if newline_at < 0 else text[: newline_at + 1]
+        anchor["partial_trailing_line_dropped"] = True
+
+    if truncated and window_direction == "scope_tail":
         # The window no longer starts at the anchor, so absolute numbering is unrecoverable without a second
         # full read. Numbering goes relative to the window; keep the anchor's own line under a separate key so
         # the two are not confused.
@@ -818,7 +833,12 @@ def grep_editor_log_payload(
         explicit_path_requested=explicit_path_requested,
         editor_is_live=bridge_state_is_live,
     )
-    text, first_line_number = _read_editor_log_since_anchor(log_path, anchor, max_chars)
+    text, first_line_number = _read_editor_log_since_anchor(
+        log_path,
+        anchor,
+        max_chars,
+        prefer_anchor_adjacent_window=True,
+    )
     matches: list[dict[str, Any]] = []
     excluded_count = 0
     build_pipeline_suppressed_count = 0
@@ -845,7 +865,26 @@ def grep_editor_log_payload(
     limit = max(1, int(limit or 20))
     truncated = len(matches) > limit
     visible_matches = matches[-limit:] if truncated else matches
-    return {
+    scope_truncated = bool(anchor.get("scope_truncated"))
+    lane_is_stale = lane.get("lane") == "stale_not_written_by_live_editor"
+    if matches:
+        search_verdict = "matched"
+        search_verdict_reason = "pattern_found_in_searched_window"
+    elif anchor.get("anchored") and not scope_truncated and not lane_is_stale:
+        search_verdict = "not_matched"
+        search_verdict_reason = "complete_anchored_scope_searched"
+    else:
+        search_verdict = "inconclusive"
+        if scope_truncated:
+            search_verdict_reason = "anchored_scope_truncated_before_full_search"
+        elif lane_is_stale:
+            search_verdict_reason = "searched_log_not_written_by_live_editor"
+        elif since and not anchor.get("anchored"):
+            search_verdict_reason = "requested_anchor_not_available"
+        else:
+            search_verdict_reason = "unanchored_editor_log_window_does_not_prove_absence"
+
+    payload = {
         "backend_id": "xuunity.light_unity_mcp",
         "project_root": str(project_root),
         "source": "editor_log",
@@ -861,13 +900,24 @@ def grep_editor_log_payload(
         "items": visible_matches,
         "truncated": truncated,
         "searched_tail_chars": max_chars,
+        "searched_window_chars": int(anchor.get("searched_window_chars") or len(text)),
+        "search_window_direction": str(anchor.get("search_window_direction") or "scope_tail"),
+        "scope_truncated": scope_truncated,
+        "search_verdict": search_verdict,
+        "search_verdict_reason": search_verdict_reason,
         "since_anchor": anchor,
         "searched_from_line": first_line_number,
         "line_numbering_basis": (
-            "anchored_scope_relative" if anchor.get("scope_truncated") else "editor_log_absolute"
+            "anchored_scope_relative"
+            if scope_truncated and anchor.get("search_window_direction") == "scope_tail"
+            else "editor_log_absolute"
         ),
         "result_trust_class": (
-            "session_scoped_editor_log" if anchor.get("anchored") else "editor_log_spans_multiple_sessions"
+            "session_scoped_editor_log_partial_scope"
+            if anchor.get("anchored") and scope_truncated
+            else "session_scoped_editor_log"
+            if anchor.get("anchored")
+            else "editor_log_spans_multiple_sessions"
         ),
         "log_lane": lane,
         "log_lane_caveat": ("" if lane.get("lane") != "stale_not_written_by_live_editor" else STALE_LOG_LANE_CAVEAT),
@@ -876,6 +926,9 @@ def grep_editor_log_payload(
         "since_anchor_degraded": bool(since) and not anchor.get("anchored"),
         "validation_evidence": "unity_editor_log",
     }
+    if search_verdict == "inconclusive" and scope_truncated:
+        payload["recommended_next_action"] = EDITOR_LOG_PARTIAL_SCOPE_RECOVERY_ACTION
+    return payload
 
 
 def tail_editor_log_payload(
@@ -1099,6 +1152,7 @@ def read_editor_log_scope(
     session_start_offset_bytes: int | None = None,
     session_start_mtime: float | None = None,
     max_chars: int = DEFAULT_LOG_TAIL_MAX_CHARS,
+    prefer_anchor_adjacent_window: bool = False,
 ) -> tuple[str, dict[str, Any]]:
     scope = {
         "source": "tail_fallback",
@@ -1140,21 +1194,35 @@ def read_editor_log_scope(
         except OSError:
             scoped_text = ""
         if scoped_text:
+            scoped_chars_available = len(scoped_text)
             scope.update(
                 {
                     "source": "host_opened_editor_session",
                     "start_offset_bytes": start_offset,
                     "fallback_used": False,
                     "scoped_bytes_available": max(0, file_size - start_offset),
+                    "scoped_chars_available": scoped_chars_available,
                     "truncated_to_max_chars": False,
                     "truncated_window_starts_mid_line": False,
+                    "truncated_window_ends_mid_line": False,
+                    "search_window_direction": "full_anchored_scope",
+                    "searched_window_chars": scoped_chars_available,
+                    "unsearched_scope_chars": 0,
                 }
             )
             if len(scoped_text) > max_chars:
-                cut = len(scoped_text) - max_chars
                 scope["truncated_to_max_chars"] = True
-                scope["truncated_window_starts_mid_line"] = scoped_text[cut - 1] != "\n"
-                scoped_text = scoped_text[cut:]
+                scope["searched_window_chars"] = max_chars
+                scope["unsearched_scope_chars"] = max(0, scoped_chars_available - max_chars)
+                if prefer_anchor_adjacent_window:
+                    scope["search_window_direction"] = "anchor_adjacent_head"
+                    scope["truncated_window_ends_mid_line"] = scoped_text[max_chars - 1] != "\n"
+                    scoped_text = scoped_text[:max_chars]
+                else:
+                    cut = len(scoped_text) - max_chars
+                    scope["search_window_direction"] = "scope_tail"
+                    scope["truncated_window_starts_mid_line"] = scoped_text[cut - 1] != "\n"
+                    scoped_text = scoped_text[cut:]
             return scoped_text, scope
         scope["scoped_bytes_available"] = max(0, file_size - start_offset)
         scope["scoped_text_empty"] = True

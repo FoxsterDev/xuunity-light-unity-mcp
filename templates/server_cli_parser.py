@@ -224,7 +224,13 @@ def build_parser() -> argparse.ArgumentParser:
     scene_open_cmd.add_argument("--timeout-ms", type=int, default=10000)
     scene_open_cmd.set_defaults(func_name="cmd_request_scene_open")
 
-    console_grep_cmd = sub.add_parser("request-console-grep", help="Search recent Unity console messages or the path-backed Editor.log tail.")
+    console_grep_cmd = sub.add_parser(
+        "request-console-grep",
+        help=(
+            "Search recent Unity console messages or Editor.log. Anchored searches keep the window adjacent "
+            "to the anchor and classify a truncated zero-match as inconclusive."
+        ),
+    )
     console_grep_cmd.add_argument("--project-root", required=True)
     console_grep_cmd.add_argument("--pattern", required=True)
     console_grep_cmd.add_argument("--source", choices=["console", "editor_log"], default="editor_log")

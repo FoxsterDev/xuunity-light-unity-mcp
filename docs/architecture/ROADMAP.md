@@ -66,7 +66,7 @@ survival and more about:
 
 Already implemented:
 
-- standalone public repository and current `v0.3.58` Git UPM package path under
+- standalone public repository and current `v0.3.59` Git UPM package path under
   `packages/com.xuunity.light-mcp`
 - bridge enable/disable lifecycle
 - status and capability probing
@@ -162,7 +162,7 @@ This is enough for:
 - controlled screenshot capture
 - early automation experiments
 - repeatable same-host multi-project routing and recovery
-- production Git UPM consumption through `v0.3.58`
+- production Git UPM consumption through `v0.3.59`
 
 This is not yet enough for:
 
@@ -246,7 +246,7 @@ Most valuable next milestone:
 
 Why this is next:
 
-- `v0.3.12` moved the package to the registry-native path and `v0.3.58` is the
+- `v0.3.12` moved the package to the registry-native path and `v0.3.59` is the
   current public Git UPM line
 - macOS validation is strong enough for current same-host use
 - Linux and Windows claims should remain conservative until executed on those hosts
@@ -366,6 +366,11 @@ Current progress:
   `post_settle_compile_trust_class`, a screenshot byte budget, compact
   playmode/screenshot envelopes, and `projects_blocked` split out of
   `projects_failed`
+- current source closes the 2026-08-19 anchored-grep false-negative P1 slice:
+  truncated Editor.log grep scopes keep the anchor-adjacent head, publish the
+  searched direction, and rank zero matches from partial scopes as
+  `inconclusive` with a recovery action; complete anchored scopes retain a real
+  `not_matched` verdict and console tail keeps its recent-tail contract
 - unreleased source closes the 2026-08-17 play-mode liveness retro P0/P1 set:
   frame-advance liveness evidence with the `playmode_throttled_editor_unfocused`
   warning on playmode/status payloads, an exit-never-gated compile-gate boundary
