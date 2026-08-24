@@ -54,6 +54,10 @@ Release is blocked until all of the following are true:
 - `docs/install.html` shows the current Git UPM tag
 - `docs/reference/LISTING_KIT.md` shows the current Git UPM tag
 - the top `CHANGELOG.md` section describes the release and current package URL
+- the changelog and GitHub Release draft follow
+  `RELEASE_NOTES_STYLE.md`: developer pain, concrete change, practical benefit,
+  exact validation, and every known limitation are stated in language a junior
+  Unity developer can follow
 - `python3 scripts/testing/check_release_ci_gates.py` reports every required
   CI gate green for the release SHA after the master push
 
@@ -70,6 +74,11 @@ scripts/testing/run_site_ui_checks.sh
 git push origin master
 python3 scripts/testing/check_release_ci_gates.py --wait-seconds 1800
 git push origin v<next-version>
+gh run watch --repo FoxsterDev/xuunity-mcp <release-tag-gate-run-id> --exit-status
+gh release create v<next-version> --repo FoxsterDev/xuunity-mcp --verify-tag \
+  --title "v<next-version> — <developer outcome>" --notes-file <release-notes.md>
+gh release view v<next-version> --repo FoxsterDev/xuunity-mcp \
+  --json name,tagName,isDraft,isPrerelease,publishedAt,url
 ```
 
 The CI gate step is mandatory and sits between the master push and the tag
@@ -84,6 +93,18 @@ gate needs one run per release SHA, so a filtered trigger is unsatisfiable for
 any commit outside the filter: no run is created, the gate reads `missing`, and
 it polls its whole `--wait-seconds` budget before failing.
 `tests/test_ci_workflow_contract.py` enforces this for every gate workflow.
+
+The GitHub Release is a separate required object. Pushing an annotated tag does
+not publish the developer-facing release page or its notes. After the tag push,
+find the `Release Tag Gate` run for that tag, wait for it to pass, create the
+release from the existing tag, and verify that it is published, not a draft or
+prerelease. Do not create the release before the tag gate finishes.
+
+Host automation may add private downstream closeout after the public release:
+consumer package-pin updates and an external product-site sync. Those steps
+must use the exact published tag, preserve unrelated working-tree changes, and
+report any project that could not be updated. Do not commit host paths or
+consumer names to this public repository.
 
 A workflow that cannot run at all may be suspended through the gate's
 `WAIVED_GATES` table rather than deleted from the required set. A waiver is an

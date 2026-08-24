@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Changed
+
+- The release closeout now requires a published GitHub Release after the tag
+  gate, not only a Git tag. Release notes follow a fact-locked, junior-friendly
+  structure that explains the developer pain, the concrete behavior change,
+  the practical benefit, exact validation, and every known gap. Host automation
+  may then update private consumer pins and the external product site without
+  putting private paths or project names in this public repository.
+
 ## 0.3.59
 
 Release tag: `v0.3.59`

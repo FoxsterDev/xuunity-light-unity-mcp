@@ -35,6 +35,21 @@ a platform-only failure.
    required set. The run then reports `status=ok_with_waived_gates`, and the
    release notes must carry the gap. Never silently delete a gate.
    `Unity Package CI` is waived today: no runner Unity license.
+8. Write the changelog and GitHub Release notes with
+   `docs/operations/RELEASE_NOTES_STYLE.md`. Run the fact review before the
+   language review. The notes must explain the developer pain, the concrete
+   behavior change, the practical benefit, exact validation, and every waiver.
+9. After the annotated tag is pushed, wait for the tag-triggered
+   `Release Tag Gate` to finish successfully. Then create a non-draft,
+   non-prerelease GitHub Release for the existing tag with `gh release create
+   --verify-tag`. Verify the published object with `gh release view`; a Git tag
+   without a GitHub Release is not a completed public release.
+10. Complete every host-declared downstream closeout after the GitHub Release:
+    update consumer package pins, resolve and validate their package locks, and
+    sync the external product site. Keep private project names and filesystem
+    paths in host automation only, never in this public skill or release notes.
+    A downstream failure does not rewrite release history; report the exact
+    incomplete lane and recovery step.
 
 ## Windows CI Assumptions
 
