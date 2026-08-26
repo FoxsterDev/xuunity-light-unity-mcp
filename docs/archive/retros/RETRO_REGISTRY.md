@@ -1,8 +1,8 @@
 # XUUnity Light Unity MCP Public Retro Registry
 
 Status: active public registry
-Last triage: 2026-08-23 (re-evaluated against released source line `v0.3.58` and current `master` at `8825610`, before the uncommitted anchored-grep verdict slice)
-Current released source line: `v0.3.58`
+Last triage: 2026-08-26 (re-evaluated against released source line `v0.3.59` and current `master` at `22b7641`, before the import-worker bridge-ownership slice)
+Current released source line: `v0.3.59`
 
 Update this file whenever a public-safe MCP retro is added, moved, renamed, or
 deleted. Host-private and project-specific retros belong in the host's single
@@ -25,6 +25,25 @@ host-local registry.
 - `Completed Public History` is the place to find reusable lessons already
   implemented, applied, superseded, or retained only for history.
 - Prompt templates are listed separately and are not backlog items.
+
+## Re-Evaluation 2026-08-26
+
+- Fetched `origin/master` and confirmed it matches clean local `master` at
+  `22b7641`; `v0.3.59` is the current published release. The decision-verdict,
+  authoritative post-settle, UI semantic/path, infrastructure/product failure,
+  liveness, readiness, and anchored-grep clusters remain implemented.
+- A host-private August 12 incident exposed a higher-priority false-green than
+  the remaining SDK orchestration and token-efficiency work: a Unity Asset
+  Import Worker wrote bridge state that looked healthy while the main editor's
+  compile state was different. Current source closes the public-safe P0 cluster
+  as one bridge-ownership slice: workers refuse bootstrap before side effects;
+  state and journal records carry writer provenance; the host rejects live
+  non-main writers, refuses runtime dispatch, and reports their compile health
+  as unknown rather than clean.
+- The source retro's UI selector truncation, click-causality, package-removal,
+  readiness-log, and operator-contention follow-ups remain separate P1/P2 work.
+  SDK GUI/batch/portfolio orchestration remains open but broader; no unrelated
+  candidate was pulled into this slice.
 
 ## Re-Evaluation 2026-08-23
 
@@ -382,6 +401,7 @@ the entire Windows install root-cause set (python3 delegation, UTF-8 BOM,
 
 | Date | File | Scope | Registry Status | Notes |
 | --- | --- | --- | --- | --- |
+| 2026-08-26 | `2026-08-26_import_worker_bridge_ownership_retro.md` | Unity Asset Import Worker bridge ownership, compile-health provenance, and bootstrap journal attribution | P0 cluster implemented in current source | Import workers exit before bridge initialization; the host refuses explicit, log-inferred, or process-table-proven non-main writers and will not turn their compile fields into a green verdict. Bootstrap journal entries identify pid, process class, and log path. Focused host tests pass; live Unity validation is tracked in the release closeout. |
 | 2026-08-17 | `2026-08-17_playmode_liveness_and_compile_gate_deadlock_retro.md` | Play-mode liveness, compile-gate ownership, diagnostic provenance, compact project-action envelopes, and catalog-action consistency | implemented, locally Unity-validated, and released in `v0.3.58` | All nine P0-P2 items shipped. `CHANGELOG.md` records local Unity 2022/6000 uGUI and no-uGUI package proof for the release. Unity Package CI remains explicitly waived until runner license secrets exist; that evidence gap is release infrastructure, not unfinished retro work. |
 | 2026-08-06 | `2026-08-06_structural_compile_diagnostics_retro.md` | Structural `.asmdef` and assembly-resolution failures hidden behind stale C# diagnostics | implemented and live-validated in current source | Refresh, compile, and direct-test post-settle envelopes scan only the current bridge-generation log scope, prioritize typed structural errors, preserve them in compact output, refuse stale/unscoped promotion, and direct operators to inspect `.asmdef` evidence before cache cleanup. Unity `2022.3.62f3` duplicate-reference injection and green recovery passed. |
 | 2026-08-03 | `2026-08-03_multi_scene_ui_targeting_and_session_scoped_evidence_retro.md` | Interactive-lane evidence gaps: UI target scope, session-scoped log queries, live-editor verdict buckets, play-mode-aware errors, screenshot budget | implemented and released through `v0.3.55` | All seven priority items shipped. `unity_status` compact was deliberately dropped because `unity_status_summary` already owns that projection; changing `unity_status` would silently alter the default for existing callers. Host contracts and live additive-scene proof pass. |

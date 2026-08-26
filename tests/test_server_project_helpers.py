@@ -1952,6 +1952,42 @@ class ServerProjectHelperTests(unittest.TestCase):
         self.assertEqual("flag_only_not_verdict", summary["compiler_diagnostics_trust_class"])
         self.assertIn("flag, not a verdict", summary["compiler_diagnostics_note"])
 
+    def test_status_summary_refuses_compile_zeros_from_a_non_main_writer(self) -> None:
+        summary = server.build_status_summary(
+            Path("/tmp/FakeProject"),
+            {
+                "editor_pid": 909,
+                "editor_running": True,
+                "mcp_reachable": True,
+                "health_status": "healthy",
+                "script_compilation_failed": False,
+                "compiler_error_count": 0,
+                "recent_compiler_diagnostics": [],
+            },
+            read_best_effort_bridge_state=lambda _: {},
+            try_read_bridge_state=lambda _: {},
+            pid_is_alive=lambda _: True,
+            heartbeat_age_seconds=lambda _: 1.0,
+            derive_busy_reason=lambda _: "",
+            summarize_state_for_error=lambda _: "worker-owned state",
+            discovery_details={
+                "bridge_owned_by_non_main_process": True,
+                "bridge_process_class": "import_worker",
+                "bridge_process_class_source": "host_process_table",
+                "bridge_state_writer_trust_class": "untrusted_non_main_process",
+                "runtime_execution_allowed": False,
+            },
+        )
+
+        self.assertEqual("bridge_owned_by_non_main_process", summary["health_status"])
+        self.assertFalse(summary["runtime_execution_allowed"])
+        self.assertFalse(summary["mcp_reachable"])
+        self.assertIsNone(summary["script_compilation_failed"])
+        self.assertIsNone(summary["compiler_error_count"])
+        self.assertIsNone(summary["recent_compiler_diagnostics"])
+        self.assertEqual("unknown_non_main_process", summary["compiler_diagnostics_trust_class"])
+        self.assertFalse(summary["safe_to_retry"])
+
     def test_status_summary_omits_playmode_liveness_for_older_packages(self) -> None:
         summary = server.build_status_summary(
             Path("/tmp/FakeProject"),

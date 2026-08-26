@@ -23,6 +23,39 @@ def write_json(path: Path, payload: dict) -> None:
 
 
 class BridgeRuntimeTests(unittest.TestCase):
+    def test_live_state_reader_refuses_declared_and_legacy_import_worker_state(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project_root = Path(temp_dir)
+            state_path = project_root / "Library" / "XUUnityLightMcp" / "state" / "bridge_state.json"
+
+            for state in (
+                {
+                    "editor_pid": 909,
+                    "bridge_process_class": "import_worker",
+                    "health_status": "healthy",
+                },
+                {
+                    "editor_pid": 909,
+                    "editor_log_path": "/tmp/Project/Logs/AssetImportWorker7.log",
+                    "health_status": "healthy",
+                },
+            ):
+                with self.subTest(state=state):
+                    write_json(state_path, state)
+                    with mock.patch.object(server_bridge_state, "pid_is_alive", return_value=True):
+                        self.assertIsNone(server_bridge_state.try_read_live_editor_state(project_root))
+                        self.assertIsNone(server_bridge_state.read_best_effort_bridge_state(project_root))
+
+    def test_main_editor_and_legacy_unclassified_state_remain_compatible(self) -> None:
+        for state, expected_trust in (
+            ({"bridge_process_class": "main_editor"}, "main_editor_declared"),
+            ({}, "legacy_unclassified"),
+        ):
+            with self.subTest(state=state):
+                identity = server_bridge_state.inspect_bridge_state_writer_identity(state)
+                self.assertTrue(identity["runtime_execution_allowed"])
+                self.assertEqual(expected_trust, identity["bridge_state_writer_trust_class"])
+
     def test_build_bridge_stabilization_summary_healthy(self) -> None:
         summary = server_bridge_runtime.build_bridge_stabilization_summary(
             {
@@ -84,6 +117,22 @@ class BridgeRuntimeTests(unittest.TestCase):
         self.assertEqual("usable", summary["request_flow_state"])
         self.assertTrue(summary["transport_ready_for_requests"])
         self.assertNotIn("transport_listener_not_ready", summary["blocking_reasons"])
+
+    def test_build_bridge_stabilization_summary_refuses_non_main_writer(self) -> None:
+        summary = server_bridge_runtime.build_bridge_stabilization_summary(
+            {
+                "bridge_process_class": "import_worker",
+                "transport": "tcp_loopback",
+                "transport_listener_state": "listening",
+                "health_status": "healthy",
+            }
+        )
+
+        self.assertEqual("bridge_owned_by_non_main_process", summary["health_status"])
+        self.assertFalse(summary["runtime_execution_allowed"])
+        self.assertFalse(summary["transport_ready_for_requests"])
+        self.assertFalse(summary["safe_to_retry"])
+        self.assertIn("bridge_owned_by_non_main_process", summary["blocking_reasons"])
 
     def test_compile_broken_state_blocks_test_and_play_operations(self) -> None:
         state = {

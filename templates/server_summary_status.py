@@ -191,6 +191,7 @@ def build_status_summary(
             if key in payload:
                 summary[key] = payload.get(key)
     discovery = dict(discovery_details or {})
+    bridge_owned_by_non_main_process = bool(discovery.get("bridge_owned_by_non_main_process"))
     if discovery:
         host_prerequisites = dict(discovery.get("host_prerequisites") or {})
         editor_log_identity = dict(discovery.get("editor_log_identity") or {})
@@ -212,6 +213,11 @@ def build_status_summary(
                 "process_visibility_available": bool(discovery.get("process_visibility_available", True)),
                 "process_visibility_error_code": str(discovery.get("process_visibility_error_code") or ""),
                 "process_visibility_restricted": bool(discovery.get("process_visibility_restricted")),
+                "bridge_owned_by_non_main_process": bridge_owned_by_non_main_process,
+                "bridge_process_class": str(discovery.get("bridge_process_class") or effective.get("bridge_process_class") or ""),
+                "bridge_process_class_source": str(discovery.get("bridge_process_class_source") or ""),
+                "bridge_state_writer_trust_class": str(discovery.get("bridge_state_writer_trust_class") or ""),
+                "runtime_execution_allowed": bool(discovery.get("runtime_execution_allowed")),
                 "host_prerequisites_ready": bool(host_prerequisites.get("ready", False)),
                 "host_prerequisite_blocking_codes": list(host_prerequisites.get("blocking_codes") or []),
                 "host_prerequisite_warning_codes": list(host_prerequisites.get("warning_codes") or []),
@@ -256,6 +262,30 @@ def build_status_summary(
             mcp_reachable=bool(payload.get("mcp_reachable", True)),
         )
     )
+    if bridge_owned_by_non_main_process:
+        summary.update(
+            {
+                "health_status": "bridge_owned_by_non_main_process",
+                "mcp_reachable": False,
+                "runtime_execution_allowed": False,
+                "script_compilation_failed": None,
+                "compiler_error_count": None,
+                "recent_compiler_diagnostics": None,
+                "compiler_diagnostics_source": "untrusted_non_main_process",
+                "compiler_diagnostics_process_class": str(discovery.get("bridge_process_class") or "non_main_process"),
+                "compiler_diagnostics_trust_class": "unknown_non_main_process",
+                "compiler_diagnostics_note": (
+                    "Compile health is unknown because the recorded state was not written by the main Unity editor."
+                ),
+                "stabilized": False,
+                "safe_to_retry": False,
+                "transport_ready_for_requests": False,
+                "request_flow_state": "not_ready",
+                "blocking_reasons": sorted(
+                    set(list(summary.get("blocking_reasons") or []) + ["bridge_owned_by_non_main_process"])
+                ),
+            }
+        )
     return summary
 
 

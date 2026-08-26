@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.IO;
 using UnityEngine;
 using XUUnity.LightMcp.Editor.Core;
@@ -7,12 +8,16 @@ namespace XUUnity.LightMcp.Editor.Bridge
 {
     internal static class XUUnityLightMcpRequestJournal
     {
-        public static void WriteBootstrapAttached()
+        public static void WriteBootstrapAttached(string processClass)
         {
+            using var process = Process.GetCurrentProcess();
             WriteEvent(new XUUnityLightMcpRequestJournalEvent
             {
                 event_type = "bridge_bootstrap_attached",
                 event_at_utc = UtcNow(),
+                editor_pid = process.Id,
+                process_class = processClass ?? "",
+                editor_log_path = XUUnityLightMcpEditorLogAnchors.CurrentEditorLogPath(),
             });
         }
 

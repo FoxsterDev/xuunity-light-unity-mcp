@@ -1,10 +1,70 @@
 using System;
 using UnityEditor;
+using UnityEngine;
 using XUUnity.LightMcp.Editor.Helpers;
 using XUUnity.LightMcp.Editor.Operations;
 
 namespace XUUnity.LightMcp.Editor.Bridge
 {
+    internal static class XUUnityLightMcpBridgeProcessIdentity
+    {
+        internal const string MainEditorProcessClass = "main_editor";
+        internal const string ImportWorkerProcessClass = "import_worker";
+        internal const string BatchProcessClass = "batch";
+
+        internal static bool CommandLineLooksLikeImportWorker(string[] arguments)
+        {
+            if (arguments == null)
+            {
+                return false;
+            }
+
+            for (var index = 0; index < arguments.Length; index += 1)
+            {
+                var argument = arguments[index] ?? "";
+                if (string.Equals(argument, "-assetImportWorker", StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+
+                if (
+                    string.Equals(argument, "-name", StringComparison.OrdinalIgnoreCase)
+                    && index + 1 < arguments.Length
+                    && (arguments[index + 1] ?? "").StartsWith("AssetImportWorker", StringComparison.OrdinalIgnoreCase)
+                )
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        internal static string ClassifyProcess(string[] arguments, bool assetDatabaseReportsImportWorker, bool isBatchMode)
+        {
+            if (assetDatabaseReportsImportWorker || CommandLineLooksLikeImportWorker(arguments))
+            {
+                return ImportWorkerProcessClass;
+            }
+
+            return isBatchMode ? BatchProcessClass : MainEditorProcessClass;
+        }
+
+        internal static string ResolveCurrentProcessClass()
+        {
+            var isImportWorker = false;
+            try
+            {
+                isImportWorker = AssetDatabase.IsAssetImportWorkerProcess();
+            }
+            catch
+            {
+            }
+
+            return ClassifyProcess(Environment.GetCommandLineArgs(), isImportWorker, Application.isBatchMode);
+        }
+    }
+
     [InitializeOnLoad]
     internal static class XUUnityLightMcpBridgeBootstrap
     {
@@ -15,6 +75,12 @@ namespace XUUnity.LightMcp.Editor.Bridge
 
         static XUUnityLightMcpBridgeBootstrap()
         {
+            var processClass = XUUnityLightMcpBridgeProcessIdentity.ResolveCurrentProcessClass();
+            if (processClass == XUUnityLightMcpBridgeProcessIdentity.ImportWorkerProcessClass)
+            {
+                return;
+            }
+
             if (!XUUnityLightMcpBridgeActivation.IsEnabled())
             {
                 return;
@@ -27,7 +93,7 @@ namespace XUUnity.LightMcp.Editor.Bridge
             XUUnityLightMcpBridgeRuntimeState.InitializeBridgeSession();
             XUUnityLightMcpBridgeTransportRuntime.Initialize(config);
             XUUnityLightMcpLifecycleMonitor.InitializeIfNeeded();
-            XUUnityLightMcpRequestJournal.WriteBootstrapAttached();
+            XUUnityLightMcpRequestJournal.WriteBootstrapAttached(processClass);
             XUUnityLightMcpConsoleBuffer.EnsureStarted();
             if (config.auto_probe_on_startup)
             {

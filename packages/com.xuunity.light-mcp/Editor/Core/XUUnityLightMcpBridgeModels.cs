@@ -21,6 +21,8 @@ namespace XUUnity.LightMcp.Editor.Core
             public int bridge_version = 9;
             public string project_root = "";
             public int editor_pid;
+            public string bridge_process_class = "";
+            public bool runtime_execution_allowed;
             public string unity_version = "";
             public string transport_requested = "tcp_loopback";
             public string transport = "tcp_loopback";
@@ -64,6 +66,7 @@ namespace XUUnity.LightMcp.Editor.Core
             public int compiler_error_count;
             public List<XUUnityLightMcpCompileErrorItem> recent_compiler_diagnostics = new();
             public string compiler_diagnostics_source = "";
+            public string compiler_diagnostics_process_class = "";
             public bool is_playing;
             public bool is_paused;
             public bool is_updating;
@@ -246,6 +249,8 @@ namespace XUUnity.LightMcp.Editor.Core
             public string event_source = "unity_bridge";
             public string event_at_utc = "";
             public string project_root = "";
+            public int editor_pid;
+            public string process_class = "";
             public string bridge_session_id = "";
             public int bridge_generation;
             public string request_id = "";

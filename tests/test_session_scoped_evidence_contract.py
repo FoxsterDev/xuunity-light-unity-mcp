@@ -243,6 +243,23 @@ class EditorLogSinceAnchorTests(unittest.TestCase):
             "one stat per started request; never a second call site",
         )
 
+    def test_bridge_bootstrap_refuses_import_workers_and_journals_main_writer_identity(self) -> None:
+        package = REPO_ROOT / "packages" / "com.xuunity.light-mcp" / "Editor"
+        bootstrap = (package / "Bridge" / "XUUnityLightMcpBridgeBootstrap.cs").read_text(encoding="utf-8")
+        journal = (package / "Bridge" / "XUUnityLightMcpRequestJournal.cs").read_text(encoding="utf-8")
+        models = (package / "Core" / "XUUnityLightMcpBridgeModels.cs").read_text(encoding="utf-8")
+
+        guard = bootstrap.index("processClass == XUUnityLightMcpBridgeProcessIdentity.ImportWorkerProcessClass")
+        initialize = bootstrap.index("XUUnityLightMcpBridgeRuntimeState.InitializeBridgeSession()")
+        self.assertLess(guard, initialize, "the import-worker refusal must run before any bridge state or transport setup")
+        self.assertIn("AssetDatabase.IsAssetImportWorkerProcess()", bootstrap)
+        self.assertIn('event_type = "bridge_bootstrap_attached"', journal)
+        self.assertIn("editor_pid = process.Id", journal)
+        self.assertIn("process_class = processClass", journal)
+        self.assertIn("editor_log_path = XUUnityLightMcpEditorLogAnchors.CurrentEditorLogPath()", journal)
+        self.assertIn("public string bridge_process_class = \"\";", models)
+        self.assertIn("public bool runtime_execution_allowed;", models)
+
     def test_both_console_tools_accept_the_request_id_argument(self) -> None:
         for tool_name in ("unity_console_grep", "unity_console_tail"):
             with self.subTest(tool=tool_name):

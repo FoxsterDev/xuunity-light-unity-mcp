@@ -20,6 +20,7 @@ from server_bridge_runtime import (
     host_editor_session_state_path,
     logs_dir,
     pid_is_alive,
+    inspect_bridge_state_writer_identity,
     try_read_bridge_state,
     try_read_live_editor_state,
 )
@@ -230,6 +231,8 @@ def terminate_project_hub_launchers(project_root: Path, timeout_ms: int) -> list
 
 def bridge_state_is_ready(state: dict[str, Any] | None, heartbeat_max_age_seconds: int) -> bool:
     if not isinstance(state, dict):
+        return False
+    if not inspect_bridge_state_writer_identity(state)["runtime_execution_allowed"]:
         return False
 
     pid = int(state.get("editor_pid") or 0)

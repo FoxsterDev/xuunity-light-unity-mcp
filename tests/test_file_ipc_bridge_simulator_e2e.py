@@ -17,6 +17,7 @@ the Unity side. These tests close that gap without Unity:
 """
 
 import json
+import os
 import re
 import subprocess
 import sys
@@ -47,6 +48,11 @@ from test_mcp_stdio_e2e import (
 )
 
 SIMULATOR_PATH = TESTS_DIR / "bridge_ipc_simulator.py"
+SIMULATED_UNITY_EXECUTABLE = (
+    r"C:\Program Files\Unity\Hub\Editor\2021.3.58f1\Editor\Unity.exe"
+    if os.name == "nt"
+    else "/Applications/Unity/Hub/Editor/2021.3.58f1/Unity.app/Contents/MacOS/Unity"
+)
 
 
 def start_simulator(
@@ -56,7 +62,19 @@ def start_simulator(
     mode: str = "simulate",
 ) -> subprocess.Popen:
     return subprocess.Popen(
-        [sys.executable, str(SIMULATOR_PATH), mode, str(project_root), str(deadline_seconds)],
+        [
+            sys.executable,
+            str(SIMULATOR_PATH),
+            mode,
+            str(project_root),
+            str(deadline_seconds),
+            # The separate Python process intentionally advertises the same
+            # executable and -projectPath shape that production discovery
+            # requires before trusting a bridge-state writer.
+            SIMULATED_UNITY_EXECUTABLE,
+            "-projectPath",
+            str(project_root),
+        ],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,

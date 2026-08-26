@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Callable
 
+from server_bridge_state import inspect_bridge_state_writer_identity
 from server_core import render_launcher_cli
 
 TRANSPORT_METADATA_KEYS = (
@@ -123,6 +124,10 @@ def _state_groups(
             "bridge_generation": int(bridge_state.get("bridge_generation") or 0),
             "bridge_session_id": str(bridge_state.get("bridge_session_id") or ""),
             "bridge_bootstrap_attached": bool(bridge_state.get("bridge_bootstrap_attached")),
+            "bridge_process_class": str(discovery.get("bridge_process_class") or ""),
+            "bridge_process_class_source": str(discovery.get("bridge_process_class_source") or ""),
+            "bridge_state_writer_trust_class": str(discovery.get("bridge_state_writer_trust_class") or ""),
+            "runtime_execution_allowed": bool(discovery.get("runtime_execution_allowed")),
         },
         "process_identity": {
             "bridge_pid": int(discovery.get("bridge_pid") or 0),
@@ -142,7 +147,12 @@ def _state_groups(
         },
         "transport": dict(transport_state or {}),
         "health": {
-            "bridge_health_status": str(bridge_state.get("health_status") or ""),
+            "bridge_health_status": (
+                "bridge_owned_by_non_main_process"
+                if bool(discovery.get("bridge_owned_by_non_main_process"))
+                else str(bridge_state.get("health_status") or "")
+            ),
+            "bridge_health_status_recorded": str(bridge_state.get("health_status") or ""),
             "host_health_classification": str(discovery.get("host_health_classification") or ""),
             "host_health_reason": str(discovery.get("host_health_reason") or ""),
             "host_health_recommended_next_action": str(discovery.get("host_health_recommended_next_action") or ""),
@@ -211,6 +221,7 @@ def _build_host_prerequisites(
     stale_requests = dict(stale_request_artifacts or {})
     stale_request_count = int(stale_requests.get("candidate_count") or 0)
 
+    bridge_owned_by_non_main_process = bool(discovery.get("bridge_owned_by_non_main_process"))
     checks: dict[str, dict[str, Any]] = {
         "bridge_enabled": {
             "ready": bool(discovery.get("bridge_enabled")),
@@ -268,6 +279,18 @@ def _build_host_prerequisites(
             "detected_worker_pids": list(discovery.get("detected_worker_pids") or []),
             "process_visibility_available": process_visibility_available,
             "process_visibility_error_code": str(discovery.get("process_visibility_error_code") or ""),
+        },
+        "bridge_ownership": {
+            "ready": not bridge_owned_by_non_main_process,
+            "status": "missing" if bridge_owned_by_non_main_process else "ready",
+            "code": "bridge_owned_by_non_main_process" if bridge_owned_by_non_main_process else "none",
+            "summary": (
+                "The recorded bridge state was written by a Unity worker or another non-main process; runtime facts are refused."
+                if bridge_owned_by_non_main_process
+                else "No non-main bridge-state writer was detected."
+            ),
+            "bridge_process_class": str(discovery.get("bridge_process_class") or ""),
+            "bridge_state_writer_trust_class": str(discovery.get("bridge_state_writer_trust_class") or ""),
         },
         "transport_ready": {
             "ready": transport_ready,
@@ -333,9 +356,18 @@ def _reconciliation_summary(
     bridge_currently_enabled: bool,
     detected_editor_pids: list[int],
     process_visibility_restricted: bool,
+    bridge_owned_by_non_main_process: bool,
 ) -> dict[str, str]:
     bridge_pid = int(bridge_state.get("editor_pid") or 0)
     host_session_pid = int(host_editor_session_state.get("editor_pid") or 0)
+
+    if bridge_owned_by_non_main_process:
+        return {
+            "case": "bridge_owned_by_non_main_process",
+            "status": "degraded",
+            "reason": "bridge_state_writer_is_not_the_main_editor",
+            "recommended_next_action": "wait_for_main_editor_bridge",
+        }
 
     if bridge_state_live:
         if host_session_pid > 0 and not host_session_live:
@@ -472,17 +504,48 @@ def discover_project_context_state(
             if int(worker.get("pid") or 0) > 0
         }
     )
+    detected_worker_pid_set = set(detected_worker_pids)
 
     bridge_pid = int(bridge_state.get("editor_pid") or 0)
     host_session_pid = int(host_editor_session_state.get("editor_pid") or 0)
     bridge_pid_alive = pid_is_alive(bridge_pid) if bridge_pid > 0 else False
     host_session_pid_alive = pid_is_alive(host_session_pid) if host_session_pid > 0 else False
 
+    writer_identity = inspect_bridge_state_writer_identity(bridge_state)
+    bridge_owned_by_non_main_process = bool(bridge_state) and (
+        not bool(writer_identity.get("runtime_execution_allowed"))
+        or bridge_pid in detected_worker_pid_set
+        or (
+            bool(process_visibility.get("process_visibility_available", True))
+            and bridge_pid_alive
+            and bridge_pid not in detected_editor_pid_set
+        )
+    )
+    if bridge_owned_by_non_main_process:
+        if bridge_pid in detected_worker_pid_set:
+            writer_identity = {
+                "bridge_process_class": "import_worker",
+                "bridge_process_class_source": "host_process_table",
+                "bridge_state_writer_trust_class": "untrusted_non_main_process",
+                "runtime_execution_allowed": False,
+            }
+        elif bool(writer_identity.get("runtime_execution_allowed")):
+            writer_identity = {
+                "bridge_process_class": "non_main_process",
+                "bridge_process_class_source": "host_process_table",
+                "bridge_state_writer_trust_class": "untrusted_non_main_process",
+                "runtime_execution_allowed": False,
+            }
+
     # Empty or unavailable process discovery is absence of identity evidence,
     # not proof that an arbitrary alive PID belongs to this Unity project.
     # Persisted bridge/session files can outlive their process and their PID can
     # be reused, so require a positive executable + -projectPath table match.
-    bridge_pid_matches_project = bridge_pid_alive and bridge_pid in detected_editor_pid_set
+    bridge_pid_matches_project = (
+        bridge_pid_alive
+        and bridge_pid in detected_editor_pid_set
+        and not bridge_owned_by_non_main_process
+    )
     host_session_pid_matches_project = host_session_pid_alive and host_session_pid in detected_editor_pid_set
 
     bridge_state_live = bool(bridge_state) and bridge_pid_matches_project
@@ -498,6 +561,7 @@ def discover_project_context_state(
         bridge_currently_enabled=bridge_currently_enabled,
         detected_editor_pids=detected_editor_pids,
         process_visibility_restricted=process_visibility_restricted,
+        bridge_owned_by_non_main_process=bridge_owned_by_non_main_process,
     )
 
     routed_editor_pid = 0
@@ -505,7 +569,11 @@ def discover_project_context_state(
     discovery_classification = ""
     discovery_reason = ""
 
-    if bridge_state_live:
+    if bridge_owned_by_non_main_process:
+        authoritative_state_source = "host_process_table"
+        discovery_classification = "bridge_owned_by_non_main_process"
+        discovery_reason = "bridge_state_writer_is_not_the_main_editor"
+    elif bridge_state_live:
         routed_editor_pid = bridge_pid
         authoritative_state_source = "bridge_state"
         discovery_classification = "bridge_live"
@@ -558,6 +626,11 @@ def discover_project_context_state(
         "bridge_state_live": bridge_state_live,
         "host_session_live": host_session_live,
         "bridge_enabled": bridge_currently_enabled,
+        "bridge_owned_by_non_main_process": bridge_owned_by_non_main_process,
+        "bridge_process_class": str(writer_identity.get("bridge_process_class") or ""),
+        "bridge_process_class_source": str(writer_identity.get("bridge_process_class_source") or ""),
+        "bridge_state_writer_trust_class": str(writer_identity.get("bridge_state_writer_trust_class") or ""),
+        "runtime_execution_allowed": bool(bridge_state_live and writer_identity.get("runtime_execution_allowed")),
         "authoritative_state_source": authoritative_state_source,
         "discovery_classification": discovery_classification,
         "discovery_reason": discovery_reason,

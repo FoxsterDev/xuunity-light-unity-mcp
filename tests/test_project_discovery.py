@@ -87,6 +87,38 @@ class ProjectDiscoveryTests(unittest.TestCase):
         self.assertEqual(1, live_editor["detected_worker_count"])
         self.assertEqual("missing", live_editor["status"])
 
+    def test_worker_owned_bridge_state_is_refused_even_when_the_main_editor_is_live(self) -> None:
+        project_root = Path("/tmp/ProjectA")
+        result = discover_project_context_state(
+            project_root,
+            try_read_bridge_state=lambda _: {
+                "editor_pid": 909,
+                "bridge_process_class": "import_worker",
+                "health_status": "healthy",
+                "script_compilation_failed": False,
+                "compiler_error_count": 0,
+                "transport": "tcp_loopback",
+                "transport_listener_state": "listening",
+            },
+            try_read_host_editor_session_state=lambda _: {"editor_pid": 101},
+            find_running_unity_editors_for_project=lambda _: [{"pid": 101}],
+            find_running_unity_worker_processes_for_project=lambda _: [{"pid": 909}],
+            pid_is_alive=lambda pid: pid in {101, 909},
+            bridge_enabled=lambda _: True,
+        )
+
+        self.assertTrue(result["bridge_owned_by_non_main_process"])
+        self.assertEqual("import_worker", result["bridge_process_class"])
+        self.assertEqual("host_process_table", result["bridge_process_class_source"])
+        self.assertEqual("untrusted_non_main_process", result["bridge_state_writer_trust_class"])
+        self.assertFalse(result["runtime_execution_allowed"])
+        self.assertFalse(result["bridge_state_live"])
+        self.assertEqual("bridge_owned_by_non_main_process", result["discovery_classification"])
+        self.assertEqual("bridge_owned_by_non_main_process", result["reconciliation_case"])
+        self.assertEqual("wait_for_main_editor_bridge", result["reconciliation_recommended_next_action"])
+        self.assertIn("bridge_owned_by_non_main_process", result["host_prerequisites"]["blocking_codes"])
+        self.assertFalse(result["transport_state"]["ready"])
+
     def test_discovery_classifies_stale_state_without_live_process(self) -> None:
         project_root = Path("/tmp/ProjectA")
         result = discover_project_context_state(
@@ -99,6 +131,8 @@ class ProjectDiscoveryTests(unittest.TestCase):
         )
 
         self.assertEqual("stale_state", result["discovery_classification"])
+        self.assertFalse(result["runtime_execution_allowed"])
+        self.assertEqual("legacy_unclassified", result["bridge_state_writer_trust_class"])
         self.assertEqual("state_files", result["authoritative_state_source"])
         self.assertFalse(result["bridge_state_live"])
         self.assertEqual("stale_bridge_state", result["reconciliation_case"])
@@ -126,7 +160,9 @@ class ProjectDiscoveryTests(unittest.TestCase):
         self.assertFalse(result["bridge_state_live"])
         self.assertFalse(result["host_session_live"])
         self.assertEqual([], result["detected_editor_pids"])
-        self.assertEqual("stale_state", result["discovery_classification"])
+        self.assertEqual("bridge_owned_by_non_main_process", result["discovery_classification"])
+        self.assertFalse(result["runtime_execution_allowed"])
+        self.assertEqual("untrusted_non_main_process", result["bridge_state_writer_trust_class"])
 
     def test_discovery_classifies_disabled_bridge_without_live_editor(self) -> None:
         project_root = Path("/tmp/ProjectA")

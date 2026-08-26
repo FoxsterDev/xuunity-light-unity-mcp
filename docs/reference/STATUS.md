@@ -1,10 +1,10 @@
 # Status
 
-Date: `2026-08-23`
+Date: `2026-08-26`
 Status: `active public status snapshot`
 
 XUUnity Light Unity MCP is a working same-host Unity Editor automation service
-for MCP-capable AI agents. The current released source line is `v0.3.59`.
+for MCP-capable AI agents. The current released source line is `v0.3.60`.
 
 ## Current Package
 
@@ -17,7 +17,7 @@ com.xuunity.light-mcp
 Current Git UPM URL:
 
 ```text
-https://github.com/FoxsterDev/xuunity-mcp.git?path=/packages/com.xuunity.light-mcp#v0.3.59
+https://github.com/FoxsterDev/xuunity-mcp.git?path=/packages/com.xuunity.light-mcp#v0.3.60
 ```
 
 Current package path:
@@ -127,6 +127,13 @@ Migration note:
   `compile_state=unmeasured`. Recovery stays non-destructive, and the embedded
   readiness prerequisite becomes blocking with the same code instead of
   simultaneously claiming `ready=true`.
+- Current source prevents Unity Asset Import Workers from attaching the MCP
+  bridge before any session, transport, heartbeat, or journal file is created.
+  Host discovery also rejects older worker-owned state as
+  `bridge_owned_by_non_main_process`, sets `runtime_execution_allowed=false`,
+  and reports compile failure, error count, and diagnostics as unknown rather
+  than accepting a worker's green state as main-editor truth. Bootstrap journal
+  events now record writer pid, process class, and editor-log path.
 - `v0.3.38+` makes `unity_status_summary` compact by default for MCP callers,
   with `payload_mode` markers and full nested diagnostics available through
   `includeFullPayload=true`.
@@ -316,26 +323,26 @@ Implemented host-side MCP tools and helpers:
 
 ## Current Validation Evidence
 
-Latest release and current-source validation for `v0.3.59`:
+Latest release and current-source validation for `v0.3.60`:
 
 | Area | Evidence | Result |
 | --- | --- | --- |
-| Package metadata | `packages/com.xuunity.light-mcp/package.json` | `name=com.xuunity.light-mcp`, `version=0.3.59`, `unity=2021.3`, no hard Test Framework dependency |
-| Host Python tests | `scripts/testing/run_host_python_tests.sh` (release checks plus full discovery) | Full discovery passed `912` tests with `14` expected platform skips. |
-| `v0.3.59` package lanes on both Unity lines | Clean scaffolded consumer projects (`scripts/testing/scaffold_unity_ci_project.py`) driven through the closed-project batch EditMode lane | Unity `2022.3` and `6000.0` each pass package EditMode `121/121` in the `ugui` lane; the `no-ugui` lane passes `84/84`, proving the package and its core test assemblies compile and pass without uGUI. Package PlayMode passes `18` with one expected environment skip on the `6000.0` `ugui` lane. |
-| `v0.3.59` play-mode liveness | Interactive MCP observation of an unfocused editor in Play Mode | With `playmode_state=playing` and `health_status=healthy`, the payload reports `playmode_loop_liveness=throttled`, `playmode_frames_advanced_last_interval=0`, `editor_application_focused=false`, `playmode_liveness_warning=playmode_throttled_editor_unfocused`, and the focus/no-throttling remediation; `unity_status_summary` carries the same fields. |
+| Package metadata | `packages/com.xuunity.light-mcp/package.json` | `name=com.xuunity.light-mcp`, `version=0.3.60`, `unity=2021.3`, no hard Test Framework dependency |
+| Host Python tests | `scripts/testing/run_host_python_tests.sh` (release checks plus full discovery) | Full discovery passed `938` tests with `14` expected platform skips. The separate-process file-IPC ownership and delivery lane passes `3/3`. |
+| `v0.3.60` package lanes on both Unity lines | Clean devmode projects driven through the public package self-test and contract matrix | Unity `2022.3.62f3` and `6000.0.58f2` each pass package EditMode `86/86`, dependency-free PlayMode `5/5`, acceptance, refresh, and compile contracts with authoritative post-settle compile green. |
+| `v0.3.60` play-mode liveness | Interactive MCP observation of an unfocused editor in Play Mode | With `playmode_state=playing` and `health_status=healthy`, the payload reports `playmode_loop_liveness=throttled`, `playmode_frames_advanced_last_interval=0`, `editor_application_focused=false`, `playmode_liveness_warning=playmode_throttled_editor_unfocused`, and the focus/no-throttling remediation; `unity_status_summary` carries the same fields. |
 | Current-source structural compile diagnostics | Focused host contract plus a live duplicate-reference fault injection on Unity `2022.3.62f3` | Focused refresh/compile/test envelope coverage passes `129/129`. A real duplicate `.asmdef` reference produced `assembly_definition_error` with session-scoped `Editor.log` evidence and recovered to authoritative compile green after probe removal. Package tests passed EditMode `68/68` and PlayMode `18` passed with one expected skip; the editor was closed and consumer manifest/lock bytes were restored. |
 | Compact MCP envelopes | Changelog and regression coverage for `0.3.32`-`0.3.53` | Scenario decision verdicts, compact operation/readiness/status summaries, authoritative post-settle compile/test/refresh fields, editor-log identity, scenario step-payload opt-ins, PlayMode already-playing stale-risk summaries, deterministic scene-open setup, opt-in compact batch helper output, safer `Editor.log` console grep/tail defaults, compact transport/idle timeout errors, compile-first post-change validation, lane-agnostic GUI-fallback compile evidence, and requested-filter zero-match verdicts are documented with full-payload recovery. |
 | `v0.3.53` release package tests | Clean devmode projects on installed Unity editors | Unity `2022.3.62f3` and `6000.0.58f2` each pass EditMode `62/62` and dependency-free PlayMode `5/5`, with post-settle compile green and verified editor closeout. |
 | Current-source guarded interaction proof | Development-system Unity `2022.3.62f3` and main-consumer Unity `6000.0.58f2`, both in devmode | Package PlayMode tests pass `7/7` on each consumer, including the uGUI-gated guarded-click delivery and refusal tests; each project was restored to its original Git UPM pin afterwards. |
-| Current-source full package gate | Clean devmode projects on Unity `2022.3.62f3` and `6000.0.58f2` | Both versions pass EditMode `62/62` and dependency-free PlayMode `5/5`, with authoritative post-settle compile green and verified editor closeout. The former prefab-mutation failure was a test dependency leak: the core test requested uGUI's `LayoutElement` in a no-uGUI project. It now uses built-in `MeshFilter` and proves both add and remove transactions. |
+| Current-source full package gate | Clean devmode projects on Unity `2022.3.62f3` and `6000.0.58f2` | Both versions pass EditMode `86/86` and dependency-free PlayMode `5/5`, plus acceptance, refresh, and compile contracts with authoritative post-settle compile green and verified editor closeout. |
 | Reference-driven UI acceptance | Unity `2021.3` and `6000.0` EditMode over `XUUnity.MCP.SelfTest` | `77/78` pass on both editors with one graphics-device-dependent test correctly self-skipping; the graphics-enabled `XUUnity.MCP.UiRenderClick` category passes `11/11`; a project without `com.unity.ugui` compiles with zero errors and builds only the core editor assembly. |
 | Typed resolver oracle | Current-source Unity `2022.3` + EDM4U callback adapter | Inactive Android and resolver callback failure fail closed; a project-local Maven coordinate passes with callback success, two stable SHA-256 samples, explicit dependency proof, `trust_class=decision_grade`, and a cleared package-operation busy flag. |
 | Consumer regression route | Compile preflight + scenario/contract + PlayMode lifecycle + consistency | Unity `6000.0` passes compile preflight `6/6`, acceptance `10/10`, refresh/compile contract, settled-state and lifecycle recovery, healthy final Edit Mode with zero compiler errors/unrecovered abandons, and project-action consistency. |
-| Public site checks | `scripts/testing/run_site_ui_checks.sh` | Public site Playwright checks passed for `v0.3.59`: `42/42`. |
+| Public site checks | `scripts/testing/run_site_ui_checks.sh` | Public site Playwright checks passed for `v0.3.60`: `42/42`. |
 | Historical Git UPM release smoke | Clean Unity project pinned to an earlier public tag | Bridge reached healthy `git_pinned` status, Android APK smoke passed, package self-tests passed, and closeout verified process exit. |
 | Multi-project compile matrix | Public summary evidence from consumer validation | `9/9` projects, `38/38` compile lanes, `0` failures |
-| Git tag visibility | Remote Git refs | Release tag `v0.3.59` is the current Git UPM release target; remote publication requires an authenticated push. |
+| Git tag visibility | Remote Git refs | Release tag `v0.3.60` is the current Git UPM release target; remote publication requires an authenticated push. |
 
 Cross-platform status:
 
@@ -355,7 +362,7 @@ Use Git UPM for production consumers:
 ```json
 {
   "dependencies": {
-    "com.xuunity.light-mcp": "https://github.com/FoxsterDev/xuunity-mcp.git?path=/packages/com.xuunity.light-mcp#v0.3.59"
+    "com.xuunity.light-mcp": "https://github.com/FoxsterDev/xuunity-mcp.git?path=/packages/com.xuunity.light-mcp#v0.3.60"
   }
 }
 ```
@@ -381,7 +388,7 @@ Rules:
 
 - `devmode` points a Unity project at the local package working tree.
 - `prodmode` pins the Unity project to the published release tag that matches
-  the package version, for example `#v0.3.59`.
+  the package version, for example `#v0.3.60`.
 - `prodmode` refuses to pin when that release tag is not visible on `origin`.
 - both modes remove the package lock entry so Unity re-resolves honestly.
 

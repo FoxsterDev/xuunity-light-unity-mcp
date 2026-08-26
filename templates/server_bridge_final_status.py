@@ -19,6 +19,7 @@ from server_bridge_paths import default_editor_log_path, response_path, test_res
 from server_bridge_state import (
     derive_busy_reason,
     heartbeat_age_seconds,
+    inspect_bridge_state_writer_identity,
     pid_is_alive,
     read_best_effort_bridge_state,
     try_read_bridge_state,
@@ -98,13 +99,19 @@ def build_bridge_stabilization_summary(
     mcp_reachable: bool | None = None,
 ) -> dict[str, Any]:
     effective = state or {}
-    health_status = str(effective.get("health_status") or "unknown")
+    writer_identity = inspect_bridge_state_writer_identity(effective)
+    runtime_execution_allowed = bool(writer_identity.get("runtime_execution_allowed"))
+    health_status = (
+        str(effective.get("health_status") or "unknown")
+        if runtime_execution_allowed
+        else "bridge_owned_by_non_main_process"
+    )
     transport = str(effective.get("transport") or effective.get("transport_requested") or "")
     transport_listener_state = str(effective.get("transport_listener_state") or "")
     if transport == DEFAULT_BRIDGE_TRANSPORT and not transport_listener_state:
         transport_listener_state = "inactive"
     listener_required = transport == TCP_LOOPBACK_BRIDGE_TRANSPORT
-    transport_ready_for_requests = bool(transport) and (
+    transport_ready_for_requests = runtime_execution_allowed and bool(transport) and (
         not listener_required or transport_listener_state == "listening"
     )
     request_flow_state = "usable" if transport_ready_for_requests else "not_ready"
@@ -119,6 +126,8 @@ def build_bridge_stabilization_summary(
         blocking_reasons.append("editor_not_running")
     if not mcp_reachable_effective:
         blocking_reasons.append("mcp_not_reachable")
+    if not runtime_execution_allowed:
+        blocking_reasons.append("bridge_owned_by_non_main_process")
     if health_status != "healthy":
         blocking_reasons.append("health_not_healthy")
     if bool(effective.get("domain_reload_in_progress")):
@@ -154,6 +163,7 @@ def build_bridge_stabilization_summary(
         "stabilized": stabilized,
         "safe_to_retry": stabilized,
         "blocking_reasons": blocking_reasons,
+        **writer_identity,
     }
 
 

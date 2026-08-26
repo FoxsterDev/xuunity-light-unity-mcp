@@ -12,6 +12,7 @@ namespace XUUnity.LightMcp.Editor.Bridge
     internal static class XUUnityLightMcpBridgeStateWriter
     {
         static readonly int EditorProcessId = ResolveEditorProcessId();
+        static readonly string BridgeProcessClass = XUUnityLightMcpBridgeProcessIdentity.ResolveCurrentProcessClass();
 
         static int ResolveEditorProcessId()
         {
@@ -33,6 +34,8 @@ namespace XUUnity.LightMcp.Editor.Bridge
             {
                 project_root = XUUnityLightMcpFileIpcPaths.ProjectRootPath,
                 editor_pid = EditorProcessId,
+                bridge_process_class = BridgeProcessClass,
+                runtime_execution_allowed = BridgeProcessClass == XUUnityLightMcpBridgeProcessIdentity.MainEditorProcessClass,
                 unity_version = Application.unityVersion,
                 transport_requested = XUUnityLightMcpBridgeTransportRuntime.RequestedTransport,
                 transport = XUUnityLightMcpBridgeTransportRuntime.ActiveTransport,
@@ -76,6 +79,7 @@ namespace XUUnity.LightMcp.Editor.Bridge
                 compiler_error_count = XUUnityLightMcpCompilerDiagnostics.ErrorCount,
                 recent_compiler_diagnostics = XUUnityLightMcpCompilerDiagnostics.Snapshot(5),
                 compiler_diagnostics_source = ResolveCompilerDiagnosticsSource(),
+                compiler_diagnostics_process_class = BridgeProcessClass,
                 is_playing = EditorApplication.isPlaying,
                 is_paused = EditorApplication.isPaused,
                 is_updating = EditorApplication.isUpdating,

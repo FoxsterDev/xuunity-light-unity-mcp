@@ -1537,6 +1537,7 @@ def classify_project_health(
         or bridge_pid_alive
         or host_session_pid_alive
     )
+    bridge_owned_by_non_main_process = bool(discovery.get("bridge_owned_by_non_main_process"))
 
     heartbeat_age = heartbeat_age_seconds(bridge_state) if bridge_state else None
     busy_reason = derive_busy_reason(bridge_state if bridge_state else None)
@@ -1553,7 +1554,12 @@ def classify_project_health(
     termination_policy = "observe_only"
     anr_classification = "none"
 
-    if not bridge_enabled and not live_editor_present:
+    if bridge_owned_by_non_main_process:
+        classification = "bridge_owned_by_non_main_process"
+        reason = "bridge_state_writer_is_not_the_main_editor"
+        recommended_next_action = "wait_for_main_editor_bridge"
+        termination_policy = "observe_only"
+    elif not bridge_enabled and not live_editor_present:
         classification = "bridge_disabled"
         reason = "bridge_disabled_in_project_config"
         recommended_next_action = "enable_bridge_and_retry"

@@ -42,6 +42,46 @@ namespace XUUnity.LightMcp.Tests.EditMode
         }
 
         [Test]
+        public void BridgeProcessIdentity_RefusesAssetImportWorkerCommandLines()
+        {
+            Assert.That(
+                XUUnityLightMcpBridgeProcessIdentity.ClassifyProcess(
+                    new[] { "Unity", "-adb2", "-batchMode", "-name", "AssetImportWorker7" },
+                    false,
+                    true),
+                Is.EqualTo(XUUnityLightMcpBridgeProcessIdentity.ImportWorkerProcessClass));
+            Assert.That(
+                XUUnityLightMcpBridgeProcessIdentity.ClassifyProcess(
+                    new[] { "Unity", "-projectPath", "/tmp/Project", "-assetImportWorker" },
+                    false,
+                    false),
+                Is.EqualTo(XUUnityLightMcpBridgeProcessIdentity.ImportWorkerProcessClass));
+            Assert.That(
+                XUUnityLightMcpBridgeProcessIdentity.ClassifyProcess(
+                    new[] { "Unity", "-projectPath", "/tmp/Project" },
+                    true,
+                    false),
+                Is.EqualTo(XUUnityLightMcpBridgeProcessIdentity.ImportWorkerProcessClass));
+        }
+
+        [Test]
+        public void BridgeProcessIdentity_DistinguishesMainEditorFromOrdinaryBatchMode()
+        {
+            Assert.That(
+                XUUnityLightMcpBridgeProcessIdentity.ClassifyProcess(
+                    new[] { "Unity", "-projectPath", "/tmp/Project" },
+                    false,
+                    false),
+                Is.EqualTo(XUUnityLightMcpBridgeProcessIdentity.MainEditorProcessClass));
+            Assert.That(
+                XUUnityLightMcpBridgeProcessIdentity.ClassifyProcess(
+                    new[] { "Unity", "-batchMode", "-runTests" },
+                    false,
+                    true),
+                Is.EqualTo(XUUnityLightMcpBridgeProcessIdentity.BatchProcessClass));
+        }
+
+        [Test]
         public void TestFilter_BuildsCategoryAndAssemblyFilter()
         {
             var args = JsonUtility.ToJson(new XUUnityLightMcpTestsArgs

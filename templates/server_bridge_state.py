@@ -53,6 +53,37 @@ def try_read_bridge_state(project_root: Path) -> dict[str, Any] | None:
     return data if isinstance(data, dict) else None
 
 
+def inspect_bridge_state_writer_identity(state: dict[str, Any] | None) -> dict[str, Any]:
+    effective = state or {}
+    declared_process_class = str(effective.get("bridge_process_class") or "").strip().lower()
+    editor_log_path = str(effective.get("editor_log_path") or "")
+    normalized_log_path = editor_log_path.replace("\\", "/").lower()
+
+    process_class = declared_process_class
+    identity_source = "bridge_process_class" if declared_process_class else ""
+    if not process_class and "assetimportworker" in normalized_log_path:
+        process_class = "import_worker"
+        identity_source = "editor_log_path"
+    if not process_class:
+        process_class = "legacy_unclassified"
+        identity_source = "legacy_state"
+
+    runtime_execution_allowed = process_class in {"main_editor", "legacy_unclassified"}
+    trust_class = (
+        "main_editor_declared"
+        if process_class == "main_editor"
+        else "legacy_unclassified"
+        if process_class == "legacy_unclassified"
+        else "untrusted_non_main_process"
+    )
+    return {
+        "bridge_process_class": process_class,
+        "bridge_process_class_source": identity_source,
+        "bridge_state_writer_trust_class": trust_class,
+        "runtime_execution_allowed": runtime_execution_allowed,
+    }
+
+
 def pid_is_alive(pid: int) -> bool:
     return current_host_platform_adapter().pid_is_alive(pid)
 
@@ -60,6 +91,9 @@ def pid_is_alive(pid: int) -> bool:
 def try_read_live_editor_state(project_root: Path) -> dict[str, Any] | None:
     state = try_read_bridge_state(project_root)
     if not state:
+        return None
+
+    if not inspect_bridge_state_writer_identity(state)["runtime_execution_allowed"]:
         return None
 
     pid = int(state.get("editor_pid") or 0)
@@ -76,6 +110,9 @@ def read_best_effort_bridge_state(project_root: Path) -> dict[str, Any] | None:
 
     state = try_read_bridge_state(project_root)
     if state is None:
+        return None
+
+    if not inspect_bridge_state_writer_identity(state)["runtime_execution_allowed"]:
         return None
 
     pid = int(state.get("editor_pid") or 0)

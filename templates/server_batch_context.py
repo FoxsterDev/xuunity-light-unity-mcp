@@ -329,6 +329,8 @@ def run_in_project_request_lock(
 
 def current_project_context_bridge_state(project_root: Path) -> dict[str, Any]:
     context = refresh_project_context(project_root)
+    if bool((getattr(context, "discovery_details", {}) or {}).get("bridge_owned_by_non_main_process")):
+        return {}
     return read_best_effort_bridge_state(project_root) or dict(context.last_bridge_state or {})
 
 
@@ -392,6 +394,7 @@ DISCOVERY_STATUS_FALLBACK_ERROR_CODES = frozenset(
         "process_visibility_restricted_before_open",
         "transport_not_ready",
         "bridge_disabled",
+        "bridge_owned_by_non_main_process",
     }
 )
 
@@ -421,6 +424,7 @@ DISCOVERY_NEXT_ACTION_COMMANDS = {
     "inspect_editor_log_and_observe": "{launcher} project-discovery-report --project-root {project_root}",
     "inspect_editor_log_and_consider_graceful_restart": "{launcher} ensure-ready --project-root {project_root} --open-editor",
     "poll_bridge_bootstrap_attached_then_retry": "{launcher} request-status-summary --project-root {project_root} --timeout-ms 5000",
+    "wait_for_main_editor_bridge": "{launcher} request-status-summary --project-root {project_root} --timeout-ms 5000",
     "wait_for_editor_idle_then_retry": "{launcher} request-status-summary --project-root {project_root} --timeout-ms 5000",
     "run_batch_compile_gate_and_fix_errors": "{launcher} batch-build-config-compile-matrix --project-root {project_root}",
     "open_safe_mode_manually": "Open the Unity project manually and enter Safe Mode; do not use automated dialog clicking.",

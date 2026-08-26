@@ -1,6 +1,6 @@
 # XUUnity Light Unity MCP Roadmap
 
-Date: `2026-07-29`
+Date: `2026-08-26`
 Status: `active public roadmap`
 
 ## North Star
@@ -40,6 +40,7 @@ Implemented:
 - per-project mutation locking
 - formal discovery and reconciliation
 - exact process ownership matching by parsed `-projectPath`
+- import-worker bridge attach refusal plus host-side non-main-writer rejection
 - health and ANR classification scaffold
 - structured grouped state:
   - `transport_state`
@@ -66,7 +67,7 @@ survival and more about:
 
 Already implemented:
 
-- standalone public repository and current `v0.3.59` Git UPM package path under
+- standalone public repository and current `v0.3.60` Git UPM package path under
   `packages/com.xuunity.light-mcp`
 - bridge enable/disable lifecycle
 - status and capability probing
@@ -90,6 +91,9 @@ Already implemented:
   from compile truth, mark unmeasured compile state explicitly, prefer
   non-destructive polling during bridge attach/import churn, and keep the
   readiness prerequisite verdict consistent with the top-level condition
+- bridge-state process provenance: Asset Import Workers cannot bootstrap the
+  bridge, legacy/non-main writers cannot authorize runtime execution, and their
+  compile-health fields are reported as unknown instead of clean
 - session-scoped structural assembly-definition diagnostics in refresh,
   compile, and direct-test post-settle envelopes, with stale-log refusal and a
   no-cache-cleanup recovery action
@@ -162,7 +166,7 @@ This is enough for:
 - controlled screenshot capture
 - early automation experiments
 - repeatable same-host multi-project routing and recovery
-- production Git UPM consumption through `v0.3.59`
+- production Git UPM consumption through `v0.3.60`
 
 This is not yet enough for:
 
@@ -246,7 +250,7 @@ Most valuable next milestone:
 
 Why this is next:
 
-- `v0.3.12` moved the package to the registry-native path and `v0.3.59` is the
+- `v0.3.12` moved the package to the registry-native path and `v0.3.60` is the
   current public Git UPM line
 - macOS validation is strong enough for current same-host use
 - Linux and Windows claims should remain conservative until executed on those hosts

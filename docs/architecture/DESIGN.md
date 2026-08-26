@@ -61,6 +61,7 @@ Current discovery inputs:
 - bridge state
 - host editor session state
 - process-table verification for the target Unity project
+- bridge-writer process class and editor-log identity
 - bridge-enabled project config state
 
 Current discovery outputs:
@@ -70,6 +71,9 @@ Current discovery outputs:
 - `reconciliation_case`
 - `reconciliation_status`
 - `reconciliation_recommended_next_action`
+- `bridge_process_class`
+- `bridge_state_writer_trust_class`
+- `runtime_execution_allowed`
 
 Current health outputs:
 
@@ -102,6 +106,11 @@ Current design intent:
 - prefer reusing a healthy editor session before forcing a new editor launch
 - avoid launching a second Unity instance when the project is already open without a reusable bridge
 - distinguish a real Unity editor process from launcher-only helper processes such as Unity Hub
+- refuse bridge startup inside Unity Asset Import Workers before any session,
+  transport, heartbeat, or journal file is created
+- fail closed with `bridge_owned_by_non_main_process` when a legacy state file
+  is attributed to a worker or another live non-main process; compiler booleans,
+  counts, and diagnostics from that state are unknown rather than green
 - fail fast when a launch command completes but no matching editor process appears for the target project
 - surface editor busy reasons explicitly
 - activate Unity before focus-sensitive interactive operations
@@ -230,6 +239,9 @@ Current multi-project lifecycle baseline:
 - process-table matches are split between main editor processes and
   worker/helper processes; worker-only visibility does not count as a live
   editor
+- `bridge_bootstrap_attached` journal events identify their writer by process
+  id, process class, and editor-log path; the current package never emits this
+  event from an Asset Import Worker
 - host editor opening fails closed when process visibility is unavailable, so
   the wrapper does not call `open -na` without proving same-project absence
 - the host can classify and recover:
@@ -237,6 +249,7 @@ Current multi-project lifecycle baseline:
   - `stale_bridge_state`
   - `stale_host_session`
   - `bridge_disabled`
+  - `bridge_owned_by_non_main_process`
 - reconciliation is used not only for diagnostics but also for recovery decisions in:
   - `ensure-ready`
   - direct bridge invocation retry

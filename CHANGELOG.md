@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+## 0.3.60
+
+Release tag: `v0.3.60`
+
+Current Git UPM install URL:
+
+```text
+https://github.com/FoxsterDev/xuunity-mcp.git?path=/packages/com.xuunity.light-mcp#v0.3.60
+```
+
+### Changed
+
+- Released `v0.3.60` package metadata, server metadata, package manifests, and Git UPM examples.
+
 ### Changed
 
 - The release closeout now requires a published GitHub Release after the tag
@@ -10,6 +24,46 @@
   the practical benefit, exact validation, and every known gap. Host automation
   may then update private consumer pins and the external product site without
   putting private paths or project names in this public repository.
+
+### Fixed
+
+- Unity Asset Import Workers no longer attach the Model Context Protocol (MCP)
+  bridge. These headless
+  child processes load editor code while importing assets, but they do not own
+  the main Unity Editor's compile state. The bridge now exits before creating a
+  session, transport, heartbeat, or journal file in an import worker. The host
+  also refuses older worker-owned state with
+  `bridge_owned_by_non_main_process`, reports compile health as unknown instead
+  of `false` / `0`, and blocks runtime requests until the main editor writes a
+  trusted state. Bootstrap journal entries now include the writer process id,
+  process class, and editor-log path for later diagnosis.
+
+### Validation
+
+- The host suite passes `938/938` tests with `14` expected platform skips.
+  Focused bridge-ownership regression passes `220/220` tests, and the
+  separate-process file inter-process communication (IPC) simulator passes
+  `3/3` ownership and delivery tests.
+- Clean projects on Unity `2022.3.62f3` and `6000.0.58f2` each pass package
+  EditMode `86/86`, PlayMode `5/5`, acceptance, refresh, and compile contracts.
+- A Unity `2022.3.62f3` consumer passes package EditMode `86/86` and PlayMode
+  with `18` passed and one expected environment skip. A Unity `6000.0.58f2`
+  consumer passes compile preflight `6/6`, acceptance `10/10`, refresh/compile
+  contract, PlayMode lifecycle recovery, and project-action consistency.
+- Public documentation checks pass `42/42` desktop, mobile, and narrow-layout
+  browser tests.
+
+### Known limitations
+
+- An older bridge state with no process class and no worker-shaped editor-log
+  path stays compatible until host process discovery can attribute its process
+  id. This avoids breaking older package/host combinations while still
+  refusing a proven non-main writer.
+- The `Unity Package CI` continuous integration workflow remains explicitly
+  waived because the runners have no Unity license secrets. The release
+  therefore has no CI-recorded EditMode or PlayMode result for its exact
+  commit; the local Unity validation above is the available package proof.
+  Restore the gate after configuring the documented Unity license secrets.
 
 ## 0.3.59
 

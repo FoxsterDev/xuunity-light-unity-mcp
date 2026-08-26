@@ -300,7 +300,7 @@ from server_batch_recovery import (
 PROTOCOL_VERSION = "2025-06-18"
 SERVER_INFO = {
     "name": "xuunity-mcp",
-    "version": "0.3.59",
+    "version": "0.3.60",
 }
 
 # === Block A: Registry & Discovery Helpers ===
@@ -607,6 +607,8 @@ def run_in_project_request_lock(
 
 def current_project_context_bridge_state(project_root: Path) -> dict[str, Any]:
     context = refresh_project_context(project_root)
+    if bool((getattr(context, "discovery_details", {}) or {}).get("bridge_owned_by_non_main_process")):
+        return {}
     return read_best_effort_bridge_state(project_root) or dict(context.last_bridge_state or {})
 
 
@@ -1142,6 +1144,21 @@ def resolve_operation_lifecycle_policy(project_root: Path, operation: str) -> di
 def invoke_bridge(project_root_value: str, operation: str, args: dict[str, Any], timeout_ms: int) -> dict[str, Any]:
     context = get_project_context(project_root_value)
     project_root = context.project_root
+    discovery = dict(getattr(context, "discovery_details", {}) or {})
+    if bool(discovery.get("bridge_owned_by_non_main_process")):
+        raise ToolInvocationError(
+            "bridge_owned_by_non_main_process",
+            "The recorded bridge state was written by a Unity worker or another non-main process; runtime execution is refused.",
+            {
+                "project_root": str(project_root),
+                "bridge_pid": int(discovery.get("bridge_pid") or 0),
+                "bridge_process_class": str(discovery.get("bridge_process_class") or "non_main_process"),
+                "bridge_state_writer_trust_class": str(discovery.get("bridge_state_writer_trust_class") or "untrusted_non_main_process"),
+                "runtime_execution_allowed": False,
+                "request_submitted": False,
+                "recommended_next_action": "wait_for_main_editor_bridge",
+            },
+        )
 
     def perform_invoke() -> dict[str, Any]:
         policy = resolve_operation_lifecycle_policy(project_root, operation)

@@ -56,6 +56,8 @@ def build_state(
         "bridge_session_id": session_id,
         "transport": "file_ipc",
         "editor_pid": os.getpid(),
+        "bridge_process_class": "main_editor",
+        "runtime_execution_allowed": True,
         "heartbeat_utc": utc_stamp(),
         "last_pump_utc": utc_stamp(),
         "health_status": "healthy",
@@ -215,9 +217,11 @@ def stress_write(target: Path, iterations: int) -> int:
 
 def main(argv: list) -> int:
     mode = argv[0] if argv else ""
-    if mode == "simulate" and len(argv) == 3:
+    # End-to-end callers append Unity's real -projectPath shape so host process
+    # discovery can verify this separate process as the state writer.
+    if mode == "simulate" and len(argv) >= 3:
         return simulate(Path(argv[1]), float(argv[2]))
-    if mode == "complete-without-delivery" and len(argv) == 3:
+    if mode == "complete-without-delivery" and len(argv) >= 3:
         return complete_without_delivery(Path(argv[1]), float(argv[2]))
     if mode == "stress-write" and len(argv) == 3:
         return stress_write(Path(argv[1]), int(argv[2]))
