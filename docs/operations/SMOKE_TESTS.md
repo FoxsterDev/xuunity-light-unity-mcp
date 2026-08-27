@@ -1,7 +1,7 @@
 # XUUnity Light Unity MCP Smoke Tests
 
 Date: `2026-07-15`
-Status: `current source after v0.3.60`
+Status: `current source after v0.3.61`
 
 This file defines the public reusable smoke-test contract for the lightweight
 Unity MCP lane.
@@ -264,6 +264,36 @@ Pass criteria:
   `active_scene.path` before Play Mode entry
 - play mode transitions reach explicit target states
 
+For any UI-evidence lane, configure the Game View before entering Play Mode.
+Use a fixed portrait or landscape size appropriate to the UI under test (for
+example `1080x1920`) and keep it constant across projects. A responsive panel
+can report itself visible while its rendered bounds are `0x0` below a layout
+breakpoint; an unpinned capture can therefore show the wrong screen while a
+visibility-only assertion appears plausible. If a capture is surprising,
+measure the target with `unity_ui_query` or `unity_ui_get_bounds` before rerunning.
+
+For `project_defined_hook_poll_until`, `passWhen` and `failWhen` remain the
+terminal predicates. When `continueWhen` is omitted, an unmatched successful
+payload now keeps polling until a terminal predicate matches or the step times
+out. Supply `continueWhen` only when unmatched payloads should be treated as a
+contract error instead of normal waiting.
+
+### 3a. Profile Apply Then Gate
+
+A build-profile apply may change scripting defines and trigger a domain reload.
+Do not place `project_refresh` immediately after that hook. Mark the apply step
+with `mutationSettlePolicy: "apply_then_gate"`; scenario validation then
+requires the next three steps to be `wait`, `status`, and
+`compile_player_scripts`, in that order, and rejects an intervening refresh.
+
+Run hook-dependent scenarios only while the assembly that owns the hook is
+enabled by the active profile. If validation cannot resolve a hook, the
+`scenario_invalid` message now includes the first validation issue. When a
+matching source candidate belongs to an assembly definition (`.asmdef`) with
+define constraints, the issue names the assembly, its constraints, and the
+active player defines. Apply the enabling profile in a separate gated phase,
+then validate and run the hook-dependent scenario.
+
 ### 4. Refresh Contract Smoke
 
 Use a short scenario or direct route to verify refresh semantics.
@@ -291,6 +321,8 @@ Pass criteria:
   `trust_class=mutation_applied_unsettled`, and
   `applied_mutation_settle_summary`. Treat the mutation as applied and the
   settle as unproven; verify the editor is settled before the next mutation.
+  This remains a compatibility diagnosis for older scenarios; new profile
+  lanes should use the apply-then-gate contract above and avoid this shape.
 - any other scenario whose first failure is a `project_refresh` step with
   `project_refresh_timeout` carries a `refresh_timeout_recovery` block. It
   classifies the timeout from Unity-side settle evidence captured at the

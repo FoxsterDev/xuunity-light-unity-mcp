@@ -101,6 +101,7 @@ from server_editor_host import (
     default_batch_operation_result_path,
     detect_unity_app_path_for_project,
     list_live_project_editor_pids,
+    force_terminate_verified_project_editor,
     open_unity_editor,
     process_visibility_summary,
     read_recent_editor_log,

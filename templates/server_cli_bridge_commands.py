@@ -538,11 +538,15 @@ def cmd_request_editor_quit(args):
     response = request_editor_quit(str(project_root), args.timeout_ms)
     response["quit_request_accepted"] = response.get("status") == "ok"
     response["process_exit_verified"] = False
-    if not bool(getattr(args, "wait_for_exit", False)):
+    force_after_ms = max(0, int(getattr(args, "force_after_ms", 0) or 0))
+    if not bool(getattr(args, "wait_for_exit", False)) and force_after_ms <= 0:
         print_json(response)
         return
 
-    verification = verify_project_editor_closed(project_root, args.exit_timeout_ms)
+    verification = verify_project_editor_closed(
+        project_root,
+        force_after_ms if force_after_ms > 0 else args.exit_timeout_ms,
+    )
     payload = {
         "action": "request_editor_quit",
         "project_root": str(project_root),
@@ -571,6 +575,20 @@ def cmd_request_editor_quit(args):
             ),
             payload,
         )
+
+    if force_after_ms > 0:
+        forced = force_terminate_verified_project_editor(
+            project_root,
+            list(payload.get("live_project_editor_pids") or []),
+            min(10000, max(1000, force_after_ms)),
+        )
+        payload.update(forced)
+        payload["force_after_ms"] = force_after_ms
+        payload["closeout_classification"] = "quit_ack_without_exit_force_terminated"
+        payload["recommended_next_action"] = "none"
+        payload["next_distinct_action"] = "rerun_closed_editor_batch_lane"
+        print_json(payload)
+        return
 
     payload["closeout_classification"] = "editor_quit_ack_without_exit"
     payload["recommended_next_action"] = "manual_editor_close"
@@ -801,7 +819,13 @@ def cmd_open_editor(args):
     project_root = ensure_project_root(args.project_root)
     unity_app = detect_unity_app_path_for_project(project_root, args.unity_app)
     log_path = resolve_editor_log_path(project_root, args.editor_log_path)
-    payload = open_unity_editor(project_root, log_path, unity_app, args.background_open)
+    payload = open_unity_editor(
+        project_root,
+        log_path,
+        unity_app,
+        args.background_open,
+        getattr(args, "unity_arg", []),
+    )
     payload["project_root"] = str(project_root)
     refresh_project_context(project_root)
     print_json(payload)
@@ -834,7 +858,11 @@ def cmd_ensure_ready(args):
             )
         current_state = current_project_context_bridge_state(project_root)
 
-        if args.open_editor and bridge_state_is_ready(current_state, args.heartbeat_max_age_seconds):
+        if (
+            args.open_editor
+            and not getattr(args, "unity_arg", [])
+            and bridge_state_is_ready(current_state, args.heartbeat_max_age_seconds)
+        ):
             payload["launch"] = {
                 "reused_existing_editor": True,
                 "reused_via": "healthy_bridge_state",
@@ -843,7 +871,13 @@ def cmd_ensure_ready(args):
             }
         elif args.open_editor:
             unity_app = detect_unity_app_path_for_project(project_root, args.unity_app)
-            payload["launch"] = open_unity_editor(project_root, log_path, unity_app, args.background_open)
+            payload["launch"] = open_unity_editor(
+                project_root,
+                log_path,
+                unity_app,
+                args.background_open,
+                getattr(args, "unity_arg", []),
+            )
 
         effective_timeout_ms = args.timeout_ms
         if (

@@ -15,6 +15,13 @@ namespace XUUnity.LightMcp.Editor.Helpers
 {
     static class XUUnityLightMcpScenarioHookExecutor
     {
+        [Serializable]
+        sealed class AssemblyDefinitionHint
+        {
+            public string name = "";
+            public string[] defineConstraints = Array.Empty<string>();
+        }
+
         public static XUUnityLightMcpScenarioHookResult ExecuteScenarioHook(
             IXUUnityLightMcpScenarioHook hook,
             string payloadJson,
@@ -124,8 +131,103 @@ namespace XUUnity.LightMcp.Editor.Helpers
             }
 
             errorCode = "hook_not_found";
-            errorMessage = $"No scenario hook registered as '{hookName}'.";
+            errorMessage = BuildMissingHookDiagnostic(hookName);
             return false;
+        }
+
+        public static string BuildMissingHookDiagnostic(string hookName)
+        {
+            var baseMessage = $"No scenario hook registered as '{hookName}'.";
+            if (string.IsNullOrWhiteSpace(hookName))
+            {
+                return baseMessage;
+            }
+
+            try
+            {
+                foreach (var assetPath in AssetDatabase.GetAllAssetPaths())
+                {
+                    if (!assetPath.EndsWith(".cs", StringComparison.OrdinalIgnoreCase)
+                        || (!assetPath.StartsWith("Assets/", StringComparison.Ordinal)
+                            && !assetPath.StartsWith("Packages/", StringComparison.Ordinal)))
+                    {
+                        continue;
+                    }
+
+                    var sourcePath = Path.GetFullPath(assetPath);
+                    string sourceText;
+                    try
+                    {
+                        sourceText = File.ReadAllText(sourcePath);
+                    }
+                    catch (Exception)
+                    {
+                        continue;
+                    }
+
+                    if (sourceText.IndexOf(hookName, StringComparison.OrdinalIgnoreCase) < 0)
+                    {
+                        continue;
+                    }
+
+                    var directory = Path.GetDirectoryName(sourcePath);
+                    while (!string.IsNullOrWhiteSpace(directory))
+                    {
+                        var asmdefPaths = Directory.GetFiles(directory, "*.asmdef", SearchOption.TopDirectoryOnly);
+                        if (asmdefPaths.Length > 0)
+                        {
+                            try
+                            {
+                                var asmdef = JsonUtility.FromJson<AssemblyDefinitionHint>(File.ReadAllText(asmdefPaths[0]));
+                                if (asmdef?.defineConstraints != null && asmdef.defineConstraints.Length > 0)
+                                {
+                                    var activeDefines = PlayerSettings.GetScriptingDefineSymbolsForGroup(
+                                        EditorUserBuildSettings.selectedBuildTargetGroup);
+                                    return FormatConstrainedHookDiagnostic(
+                                        hookName,
+                                        asmdef.name,
+                                        asmdef.defineConstraints,
+                                        activeDefines);
+                                }
+                            }
+                            catch (Exception)
+                            {
+                                return baseMessage;
+                            }
+                            return baseMessage;
+                        }
+
+                        var parent = Path.GetDirectoryName(directory);
+                        if (string.IsNullOrWhiteSpace(parent)
+                            || string.Equals(parent, directory, StringComparison.Ordinal))
+                        {
+                            break;
+                        }
+                        directory = parent;
+                    }
+                }
+            }
+            catch (Exception)
+            {
+                return baseMessage;
+            }
+
+            return baseMessage;
+        }
+
+        public static string FormatConstrainedHookDiagnostic(
+            string hookName,
+            string assemblyName,
+            IEnumerable<string> defineConstraints,
+            string activeDefines)
+        {
+            var constraints = string.Join(", ", (defineConstraints ?? Array.Empty<string>()).Where(value => !string.IsNullOrWhiteSpace(value)));
+            return (
+                $"No scenario hook registered as '{hookName}'. A source candidate belongs to assembly "
+                + $"'{assemblyName}' with defineConstraints [{constraints}], while the active player defines are "
+                + $"[{activeDefines ?? ""}]. Apply a profile that enables the owning assembly before validating "
+                + "or running this hook-dependent scenario."
+            );
         }
         public static bool IsSupportedPayloadEqualityPredicate(string expression)
         {

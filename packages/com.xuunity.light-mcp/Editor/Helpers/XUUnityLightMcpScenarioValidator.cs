@@ -59,8 +59,72 @@ namespace XUUnity.LightMcp.Editor.Helpers
                 ValidateStep(payload, step, stepId, i);
             }
 
+            ValidateMutationSettleSequences(payload, steps, cleanupStartIndex);
+
             payload.status = payload.error_count > 0 ? "invalid" : "valid";
             return payload;
+        }
+
+        public static void ValidateMutationSettleSequences(
+            XUUnityLightMcpScenarioValidatePayload payload,
+            List<XUUnityLightMcpScenarioStepDefinition> steps,
+            int cleanupStartIndex)
+        {
+            var mainStepCount = cleanupStartIndex >= 0 ? cleanupStartIndex : steps.Count;
+            for (var index = 0; index < mainStepCount; index++)
+            {
+                var step = steps[index] ?? new XUUnityLightMcpScenarioStepDefinition();
+                var policy = (step.mutationSettlePolicy ?? "").Trim();
+                if (string.IsNullOrWhiteSpace(policy))
+                {
+                    continue;
+                }
+
+                var stepId = NormalizeStepId(step, index);
+                if (!string.Equals(policy, "apply_then_gate", StringComparison.Ordinal))
+                {
+                    AddIssue(
+                        payload,
+                        "error",
+                        "unsupported_mutation_settle_policy",
+                        $"Unsupported mutationSettlePolicy '{policy}'. Expected apply_then_gate.",
+                        stepId,
+                        index);
+                    continue;
+                }
+
+                var followingKinds = new List<string>();
+                for (var cursor = index + 1; cursor < Math.Min(mainStepCount, index + 4); cursor++)
+                {
+                    followingKinds.Add(NormalizeStepKind(steps[cursor]));
+                }
+
+                if (followingKinds.Contains("project_refresh"))
+                {
+                    AddIssue(
+                        payload,
+                        "error",
+                        "project_refresh_after_profile_mutation_forbidden",
+                        "A profile-apply step must settle through wait + status + compile_player_scripts; project_refresh can lose domain-reload accounting.",
+                        stepId,
+                        index);
+                }
+
+                var patternValid = followingKinds.Count >= 3
+                    && string.Equals(followingKinds[0], "wait", StringComparison.Ordinal)
+                    && string.Equals(followingKinds[1], "status", StringComparison.Ordinal)
+                    && string.Equals(followingKinds[2], "compile_player_scripts", StringComparison.Ordinal);
+                if (!patternValid)
+                {
+                    AddIssue(
+                        payload,
+                        "error",
+                        "apply_then_gate_sequence_required",
+                        "mutationSettlePolicy=apply_then_gate requires the next three steps to be wait, status, and compile_player_scripts, in that order.",
+                        stepId,
+                        index);
+                }
+            }
         }
         public static void ValidateStep(XUUnityLightMcpScenarioValidatePayload payload, XUUnityLightMcpScenarioStepDefinition step, string stepId, int index)
         {

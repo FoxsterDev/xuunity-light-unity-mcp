@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shlex
 import shutil
 import signal
 import subprocess
@@ -45,6 +46,38 @@ UNITY_EDITOR_ROOTS_ENV = "XUUNITY_UNITY_EDITOR_ROOTS"
 HOST_EDITOR_LAUNCH_IN_PROGRESS_MAX_AGE_SECONDS = 90.0
 TASKKILL_TIMEOUT_SECONDS = 15.0
 LAUNCH_HELPER_TIMEOUT_SECONDS = 30.0
+TRANSIENT_LICENSING_BLOCKER_GRACE_SECONDS = 5.0
+STARTUP_BLOCKER_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
+    (
+        "licensing_channel_unavailable",
+        re.compile(r"Channel\s+[^\r\n]+\s+doesn't exist", re.IGNORECASE),
+    ),
+    (
+        "licensing_initialization_failed",
+        re.compile(r"Licensing(?:\s+initialization)?\s+failed|waiting for Licensing to initialize", re.IGNORECASE),
+    ),
+    (
+        "invalid_editor_license",
+        re.compile(
+            r"No valid Unity Editor license found|Unity has not been activated with a valid License|"
+            r"No valid Unity license|No ULF license found|Access token is unavailable",
+            re.IGNORECASE,
+        ),
+    ),
+    (
+        "api_update_dialog",
+        re.compile(r"API Update Required|UnityUpgradable", re.IGNORECASE),
+    ),
+    (
+        "safe_mode_dialog",
+        re.compile(r"Enter Safe Mode|Opening project in Safe Mode", re.IGNORECASE),
+    ),
+)
+LICENSING_RECOVERY_PATTERN = re.compile(
+    r"Successfully connected to LicensingClient|Successfully resolved entitlement details|"
+    r"Successfully updated (?:the )?access token",
+    re.IGNORECASE,
+)
 
 
 from server_editor_host_discovery import *
@@ -52,11 +85,55 @@ from server_editor_host_state import *
 from server_editor_host_processes import *
 from server_editor_host_paths import *
 
-def open_unity_editor(project_root: Path, log_path: Path, unity_app: Path, background_open: bool) -> dict[str, Any]:
+def _normalize_unity_launch_args(unity_args: list[str] | None) -> list[str]:
+    normalized: list[str] = []
+    for raw_value in unity_args or []:
+        value = str(raw_value)
+        if not value or "\x00" in value:
+            raise ToolInvocationError(
+                "invalid_unity_launch_argument",
+                "Unity launch arguments must be non-empty strings without NUL characters.",
+            )
+        normalized.append(value)
+    return normalized
+
+
+def _unity_launch_argument_value(unity_args: list[str], option_name: str) -> str:
+    for index, value in enumerate(unity_args[:-1]):
+        if value.lower() == option_name.lower():
+            return unity_args[index + 1]
+    return ""
+
+
+def _command_contains_unity_launch_args(command: str, unity_args: list[str]) -> bool:
+    if not unity_args:
+        return True
+    try:
+        command_parts = shlex.split(str(command or ""), posix=os.name != "nt")
+    except ValueError:
+        return False
+
+    expected_index = 0
+    for part in command_parts:
+        if part == unity_args[expected_index]:
+            expected_index += 1
+            if expected_index == len(unity_args):
+                return True
+    return False
+
+
+def open_unity_editor(
+    project_root: Path,
+    log_path: Path,
+    unity_app: Path,
+    background_open: bool,
+    unity_args: list[str] | None = None,
+) -> dict[str, Any]:
+    extra_unity_args = _normalize_unity_launch_args(unity_args)
     log_path.parent.mkdir(parents=True, exist_ok=True)
 
     live_state = try_read_live_editor_state(project_root)
-    if live_state is not None:
+    if live_state is not None and not extra_unity_args:
         requested_version = resolve_unity_app_version(unity_app)
         running_version = str(live_state.get("unity_version") or "")
         if requested_version and running_version and requested_version != running_version:
@@ -74,6 +151,7 @@ def open_unity_editor(project_root: Path, log_path: Path, unity_app: Path, backg
             "unity_app": str(unity_app),
             "editor_log_path": str(log_path),
             "background_open": background_open,
+            "unity_args": extra_unity_args,
             "reused_existing_editor": True,
             "editor_pid": live_state.get("editor_pid"),
             "unity_version": running_version,
@@ -99,6 +177,7 @@ def open_unity_editor(project_root: Path, log_path: Path, unity_app: Path, backg
             "unity_app": str(unity_app),
             "editor_log_path": str(log_path),
             "background_open": background_open,
+            "unity_args": extra_unity_args,
             "process_visibility_available": False,
             "process_visibility_error_code": error_code,
             "process_visibility_stderr": str(visibility.get("process_visibility_stderr") or ""),
@@ -141,6 +220,24 @@ def open_unity_editor(project_root: Path, log_path: Path, unity_app: Path, backg
             )
 
         detected_unity_app = str(detected_editors[0].get("unity_app") or unity_app)
+        detected_command = str(detected_editors[0].get("command") or "")
+        if extra_unity_args and not _command_contains_unity_launch_args(detected_command, extra_unity_args):
+            raise ToolInvocationError(
+                "existing_editor_launch_arguments_not_applied",
+                (
+                    "A Unity editor for this project is already running, so requested launch arguments cannot "
+                    "be applied to that process. Close only the identified same-project editor, then retry the "
+                    "open command with the requested arguments."
+                ),
+                {
+                    "project_root": str(project_root),
+                    "editor_pid": int(detected_editors[0].get("pid") or 0),
+                    "matching_editor_pids": [int(editor["pid"]) for editor in detected_editors],
+                    "requested_unity_args": extra_unity_args,
+                    "requested_unity_args_applied": False,
+                    "recommended_next_action": "close_same_project_editor_then_retry_open",
+                },
+            )
         try:
             activate_unity_editor(project_root, Path(detected_unity_app))
         except Exception:
@@ -150,6 +247,8 @@ def open_unity_editor(project_root: Path, log_path: Path, unity_app: Path, backg
             "unity_app": detected_unity_app,
             "editor_log_path": str(log_path),
             "background_open": background_open,
+            "unity_args": extra_unity_args,
+            "requested_unity_args_applied": bool(extra_unity_args),
             "reused_existing_editor": True,
             "reused_via": "project_process_detection",
             "bridge_available": False,
@@ -166,12 +265,29 @@ def open_unity_editor(project_root: Path, log_path: Path, unity_app: Path, backg
             },
         }
 
+    if live_state is not None:
+        raise ToolInvocationError(
+            "existing_editor_launch_arguments_unverifiable",
+            (
+                "A live bridge reports an existing editor for this project, but its process command could not be "
+                "verified. Refusing to claim that requested Unity launch arguments were applied."
+            ),
+            {
+                "project_root": str(project_root),
+                "editor_pid": int(live_state.get("editor_pid") or 0),
+                "requested_unity_args": extra_unity_args,
+                "requested_unity_args_applied": False,
+                "recommended_next_action": "restore_process_visibility_or_close_same_project_editor",
+            },
+        )
+
     launch_in_progress = try_read_recent_host_editor_launch_in_progress(project_root)
     if launch_in_progress is not None:
         return {
             "unity_app": str(launch_in_progress.get("unity_app") or unity_app),
             "editor_log_path": str(launch_in_progress.get("editor_log_path") or log_path),
             "background_open": bool(launch_in_progress.get("background_open")),
+            "unity_args": list(launch_in_progress.get("unity_args") or []),
             "reused_existing_editor": True,
             "reused_via": "host_launch_in_progress",
             "opened_by_host": True,
@@ -213,7 +329,14 @@ def open_unity_editor(project_root: Path, log_path: Path, unity_app: Path, backg
                 ),
             )
 
-    launch_session = build_host_editor_session_state(project_root, unity_app, log_path, background_open, 0)
+    launch_session = build_host_editor_session_state(
+        project_root,
+        unity_app,
+        log_path,
+        background_open,
+        0,
+        extra_unity_args,
+    )
     launch_session["launch_in_progress"] = True
     write_host_editor_session_state(project_root, launch_session)
 
@@ -234,6 +357,7 @@ def open_unity_editor(project_root: Path, log_path: Path, unity_app: Path, backg
                     "-logFile",
                     str(log_path),
                     "-accept-apiupdate",
+                    *extra_unity_args,
                 ]
             )
             try:
@@ -297,6 +421,7 @@ def open_unity_editor(project_root: Path, log_path: Path, unity_app: Path, backg
                 "-logFile",
                 log_path_str,
                 "-accept-apiupdate",
+                *extra_unity_args,
             ]
             popen_kwargs: dict[str, Any] = {
                 "stdout": subprocess.DEVNULL,
@@ -324,12 +449,21 @@ def open_unity_editor(project_root: Path, log_path: Path, unity_app: Path, backg
 
     write_host_editor_session_state(
         project_root,
-        build_host_editor_session_state(project_root, unity_app, log_path, background_open, launched_pid),
+        build_host_editor_session_state(
+            project_root,
+            unity_app,
+            log_path,
+            background_open,
+            launched_pid,
+            extra_unity_args,
+        ),
     )
     return {
         "unity_app": str(unity_app),
         "editor_log_path": str(log_path),
         "background_open": background_open,
+        "unity_args": extra_unity_args,
+        "licensing_ipc_channel": _unity_launch_argument_value(extra_unity_args, "-licensingIpc"),
         "opened_by_host": True,
         "editor_pid": launched_pid,
         "launch_command": [str(part) for part in launch_command],
@@ -582,6 +716,54 @@ def verify_project_editor_closed(project_root: Path, timeout_ms: int) -> dict[st
     result.update(visibility)
     if not process_visibility_available and not process_visibility_error_code:
         result["process_visibility_error_code"] = "process_visibility_restricted"
+    return result
+
+
+def force_terminate_verified_project_editor(
+    project_root: Path,
+    expected_live_pids: list[int],
+    timeout_ms: int,
+) -> dict[str, Any]:
+    visibility = process_visibility_summary()
+    if not bool(visibility.get("process_visibility_available")):
+        raise ToolInvocationError(
+            "process_visibility_restricted",
+            "Refusing forced editor termination because host process visibility is unavailable.",
+            visibility,
+        )
+
+    expected = sorted({int(pid) for pid in expected_live_pids if int(pid) > 0})
+    current = sorted({int(pid) for pid in list_live_project_editor_pids(project_root) if int(pid) > 0})
+    if len(current) != 1 or current[0] not in expected:
+        raise ToolInvocationError(
+            "force_termination_identity_not_unique",
+            (
+                "Refusing forced editor termination because exactly one current same-project editor identity "
+                "was not re-verified."
+            ),
+            {
+                "expected_live_project_editor_pids": expected,
+                "current_live_project_editor_pids": current,
+                "termination_attempted": False,
+            },
+        )
+
+    editor_pid = current[0]
+    terminated = terminate_editor_pid(editor_pid, max(1000, int(timeout_ms or 0)))
+    verification = verify_project_editor_closed(project_root, max(1000, int(timeout_ms or 0)))
+    result = {
+        "termination_attempted": True,
+        "termination_identity_reverified": True,
+        "force_terminated_editor_pid": editor_pid,
+        "force_termination_signal_completed": bool(terminated),
+    }
+    result.update(verification)
+    if not bool(verification.get("same_project_editor_closed")):
+        raise ToolInvocationError(
+            "editor_force_termination_failed",
+            f"Forced termination was requested for editor pid {editor_pid}, but process exit was not verified.",
+            result,
+        )
     return result
 
 
@@ -940,6 +1122,96 @@ def _readiness_error_from_log_observation(
     return ToolInvocationError(code, summary, details)
 
 
+def _editor_log_idle_seconds(editor_log_path: Path) -> float | None:
+    try:
+        return max(0.0, time.time() - float(editor_log_path.stat().st_mtime))
+    except OSError:
+        return None
+
+
+def _startup_blocker_observation(
+    project_root: Path,
+    editor_log_path: Path,
+    started_at: float,
+) -> dict[str, Any]:
+    live_editor_pids = sorted(
+        {
+            int(editor.get("pid") or 0)
+            for editor in find_running_unity_editors_for_project(project_root)
+            if int(editor.get("pid") or 0) > 0
+        }
+    )
+    log_text = read_recent_editor_log(editor_log_path, started_at)
+    log_observation_during_wait = bool(log_text)
+    if not log_text and live_editor_pids and editor_log_path.is_file():
+        try:
+            log_text = editor_log_path.read_text(encoding="utf-8", errors="ignore")[-200000:]
+        except OSError:
+            log_text = ""
+    last_match_kind = ""
+    last_match_line = ""
+    last_licensing_recovery_line = ""
+    for line in log_text.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if LICENSING_RECOVERY_PATTERN.search(stripped):
+            last_licensing_recovery_line = stripped[-500:]
+            if last_match_kind.startswith("licensing_") or last_match_kind == "invalid_editor_license":
+                last_match_kind = ""
+                last_match_line = ""
+        for kind, pattern in STARTUP_BLOCKER_PATTERNS:
+            if pattern.search(stripped):
+                last_match_kind = kind
+                last_match_line = stripped[-500:]
+
+    idle_seconds = _editor_log_idle_seconds(editor_log_path)
+    observation: dict[str, Any] = {
+        "editor_pid": live_editor_pids[0] if len(live_editor_pids) == 1 else 0,
+        "live_project_editor_pids": live_editor_pids,
+        "editor_log_path": str(editor_log_path),
+        "editor_log_idle_seconds": None if idle_seconds is None else round(idle_seconds, 3),
+        "bridge_bootstrap_attached": False,
+        "editor_log_observation_during_wait": log_observation_during_wait,
+        "editor_log_observation_scope": (
+            "current_wait" if log_observation_during_wait else "stale_tail_for_live_project_editor"
+        ),
+    }
+    if last_match_line:
+        observation["startup_blocker_kind"] = last_match_kind
+        observation["last_matched_startup_blocker_line"] = last_match_line
+        licensing_channel_match = re.search(
+            r"Channel\s+['\"]?([^'\"\s]+)['\"]?\s+doesn't exist",
+            last_match_line,
+            re.IGNORECASE,
+        )
+        if licensing_channel_match:
+            observation["licensing_channel"] = licensing_channel_match.group(1)
+    if last_licensing_recovery_line:
+        observation["last_licensing_recovery_line"] = last_licensing_recovery_line
+    return observation
+
+
+def _launch_blocked_error(observation: dict[str, Any]) -> ToolInvocationError:
+    blocker_kind = str(observation.get("startup_blocker_kind") or "unknown_startup_blocker")
+    blocker_line = str(observation.get("last_matched_startup_blocker_line") or "")
+    details = dict(observation)
+    details["launch_classification"] = "launch_blocked_probable_modal"
+    details["recommended_next_action"] = (
+        "pass_working_licensing_ipc_channel_with_unity_arg"
+        if blocker_kind.startswith("licensing_")
+        else "dismiss_startup_dialog_or_relaunch_with_noninteractive_arguments"
+    )
+    return ToolInvocationError(
+        "launch_blocked_probable_modal",
+        (
+            "A Unity editor process is alive, but the MCP bridge never attached and Editor.log identifies "
+            f"a probable startup blocker ({blocker_kind}). Last matched line: {blocker_line}"
+        ),
+        details,
+    )
+
+
 def wait_for_ready(
     project_root: Path,
     timeout_ms: int,
@@ -993,10 +1265,48 @@ def wait_for_ready(
                 continue
             raise ToolInvocationError(code, message)
 
+        blocker_observation = _startup_blocker_observation(project_root, editor_log_path, started_at)
+        if blocker_observation.get("live_project_editor_pids") and blocker_observation.get(
+            "last_matched_startup_blocker_line"
+        ):
+            blocker_kind = str(blocker_observation.get("startup_blocker_kind") or "")
+            blocker_is_fresh_licensing_signal = (
+                blocker_kind.startswith("licensing_") or blocker_kind == "invalid_editor_license"
+            ) and bool(blocker_observation.get("editor_log_observation_during_wait"))
+            if (
+                blocker_is_fresh_licensing_signal
+                and (time.time() - started_at) < TRANSIENT_LICENSING_BLOCKER_GRACE_SECONDS
+            ):
+                # Unity 2022 can briefly report that both the supplied Hub
+                # channel and its version-local fallback channel are absent,
+                # then launch/connect the fallback client and resolve the
+                # entitlement. Give only fresh licensing evidence a short
+                # recovery window; stale invalid-license dialogs still fail
+                # immediately and the timeout path retains the typed blocker.
+                time.sleep(1.0)
+                continue
+            raise _launch_blocked_error(blocker_observation)
+
         time.sleep(1.0)
 
     if last_readiness_error is not None:
         raise last_readiness_error
+
+    blocker_observation = _startup_blocker_observation(project_root, editor_log_path, started_at)
+    if blocker_observation.get("live_project_editor_pids"):
+        if blocker_observation.get("last_matched_startup_blocker_line"):
+            raise _launch_blocked_error(blocker_observation)
+        details = dict(blocker_observation)
+        details["launch_classification"] = "editor_process_alive_bridge_never_attached"
+        details["recommended_next_action"] = "read_editor_log_before_extending_wait"
+        raise ToolInvocationError(
+            "editor_process_alive_bridge_never_attached",
+            (
+                "A Unity editor process remained alive until the readiness deadline, but the MCP bridge never "
+                f"attached. Read {editor_log_path} before extending the wait."
+            ),
+            details,
+        )
 
     raise ToolInvocationError(
         "editor_ready_timeout",
@@ -1004,10 +1314,10 @@ def wait_for_ready(
             "Timed out waiting for a healthy Unity bridge heartbeat. "
             f"Last inspected log: {editor_log_path}. "
             f"Bridge state present: {bool(state)}. "
-            f"Running editor pid(s): {[int(editor.get('pid') or 0) for editor in find_running_unity_editors_for_project(project_root)]}. "
             f"Running Unity Hub launcher pid(s): {[int(launcher.get('pid') or 0) for launcher in find_running_unity_hub_launchers_for_project(project_root)]}. "
             f"Host session: {try_read_host_editor_session_state(project_root) or {}}"
         ),
+        blocker_observation,
     )
 
 

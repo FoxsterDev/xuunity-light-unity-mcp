@@ -287,6 +287,12 @@ def build_parser() -> argparse.ArgumentParser:
     editor_quit_cmd.add_argument("--timeout-ms", type=int, default=15000)
     editor_quit_cmd.add_argument("--wait-for-exit", action="store_true")
     editor_quit_cmd.add_argument("--exit-timeout-ms", type=int, default=30000)
+    editor_quit_cmd.add_argument(
+        "--force-after-ms",
+        type=int,
+        default=0,
+        help="After quit acknowledgement, wait this long and then terminate one identity-verified same-project editor. Disabled by default.",
+    )
     editor_quit_cmd.set_defaults(func_name="cmd_request_editor_quit")
 
     verify_editor_closed_cmd = sub.add_parser(
@@ -652,6 +658,12 @@ def build_parser() -> argparse.ArgumentParser:
     open_editor_cmd.add_argument("--unity-app")
     open_editor_cmd.add_argument("--editor-log-path")
     open_editor_cmd.add_argument("--background-open", action="store_true")
+    open_editor_cmd.add_argument(
+        "--unity-arg",
+        action="append",
+        default=[],
+        help="Extra Unity Editor argument. Repeat to preserve argument boundaries; use --unity-arg=-flag for values beginning with '-'.",
+    )
     open_editor_cmd.set_defaults(func_name="cmd_open_editor")
 
     ensure_ready_cmd = sub.add_parser(
@@ -663,6 +675,12 @@ def build_parser() -> argparse.ArgumentParser:
     ensure_ready_cmd.add_argument("--unity-app")
     ensure_ready_cmd.add_argument("--editor-log-path")
     ensure_ready_cmd.add_argument("--background-open", action="store_true")
+    ensure_ready_cmd.add_argument(
+        "--unity-arg",
+        action="append",
+        default=[],
+        help="Extra Unity Editor argument used only when --open-editor launches Unity. Repeat to preserve argument boundaries.",
+    )
     ensure_ready_cmd.add_argument("--timeout-ms", type=int, default=120000)
     ensure_ready_cmd.add_argument("--heartbeat-max-age-seconds", type=int, default=10)
     ensure_ready_cmd.add_argument("--include-full-payload", action="store_true")
@@ -891,6 +909,11 @@ def build_parser() -> argparse.ArgumentParser:
     for action in parser._actions:
         if isinstance(action, argparse._SubParsersAction):
             for cmd_name, cmd_parser in action.choices.items():
+                cmd_parser.add_argument(
+                    "--json-only",
+                    action="store_true",
+                    help="Keep stdout to the final JSON result and suppress progress chatter.",
+                )
                 func_name = cmd_parser.get_default("func_name")
                 if func_name:
                     func_callable = getattr(server_cli_commands, func_name, None)

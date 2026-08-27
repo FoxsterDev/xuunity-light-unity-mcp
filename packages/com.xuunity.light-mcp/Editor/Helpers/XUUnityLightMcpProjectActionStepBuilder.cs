@@ -78,6 +78,11 @@ namespace XUUnity.LightMcp.Editor.Helpers
                 return false;
             }
 
+            if (!ValidateHostScopedPayload(action, payload, out errorCode, out errorMessage))
+            {
+                return false;
+            }
+
             payload.Object["action"] = LightJsonNode.String(action.ActionId);
 
             executableStep = new XUUnityLightMcpScenarioStepDefinition
@@ -121,6 +126,7 @@ namespace XUUnity.LightMcp.Editor.Helpers
                 projectAction = action.ActionId,
                 payloadJson = payload.ToJson(),
                 allowMutating = step?.allowMutating ?? false,
+                mutationSettlePolicy = action.SettlePolicy,
             };
             return true;
         }
@@ -216,6 +222,11 @@ namespace XUUnity.LightMcp.Editor.Helpers
                 return false;
             }
 
+            if (!ValidateHostScopedPayload(action, hookPayload, out errorCode, out errorMessage))
+            {
+                return false;
+            }
+
             var replacement = LightJsonNode.ObjectNode();
             foreach (var pair in step.Object)
             {
@@ -228,9 +239,51 @@ namespace XUUnity.LightMcp.Editor.Helpers
             replacement.Object["kind"] = LightJsonNode.String("project_defined_hook");
             replacement.Object["hookName"] = LightJsonNode.String(action.HookName);
             replacement.Object["hookPayloadJson"] = LightJsonNode.String(hookPayload.ToJson());
+            if (!string.IsNullOrWhiteSpace(action.SettlePolicy))
+            {
+                replacement.Object["mutationSettlePolicy"] = LightJsonNode.String(action.SettlePolicy);
+            }
 
             step.ReplaceWith(replacement);
             return true;
+        }
+
+        static bool ValidateHostScopedPayload(
+            ProjectActionRecord action,
+            LightJsonNode payload,
+            out string errorCode,
+            out string errorMessage)
+        {
+            errorCode = "";
+            errorMessage = "";
+            if (action == null || !action.HostScoped)
+            {
+                return true;
+            }
+
+            var missingFields = new List<string>();
+            foreach (var field in action.RequiredPayloadFields)
+            {
+                if (!payload.Object.TryGetValue(field, out var value)
+                    || value == null
+                    || (value.Kind == LightJsonKind.String && string.IsNullOrWhiteSpace(value.StringValue)))
+                {
+                    missingFields.Add(field);
+                }
+            }
+
+            if (missingFields.Count == 0)
+            {
+                return true;
+            }
+
+            errorCode = "hook_is_host_scoped";
+            errorMessage = (
+                $"Project action '{action.ActionId}' uses a host-scoped hook and requires explicit payload "
+                + $"field(s): {string.Join(", ", missingFields)}. Supply project-specific values instead of "
+                + "relying on the hook owner's defaults."
+            );
+            return false;
         }
 
         static bool TryBuildHookPayload(

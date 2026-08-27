@@ -34,6 +34,19 @@ def get_subparser_choices(parser):
 
 
 class BatchOperatorErgonomicsTests(unittest.TestCase):
+    def test_package_self_test_runner_forwards_repeated_unity_launch_arguments(self) -> None:
+        script = (
+            Path(__file__).resolve().parents[1]
+            / "templates"
+            / "smoke"
+            / "run_package_self_tests.sh"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("UNITY_ARGS=()", script)
+        self.assertIn('UNITY_ARGS+=("$1")', script)
+        self.assertIn('if (( ${#UNITY_ARGS[@]} > 0 )); then', script)
+        self.assertIn('ensure_ready_cmd+=("--unity-arg=$unity_arg")', script)
+
     def test_artifact_probe_checks_zip_entries_and_manifest_text(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             artifact_path = Path(tmp_dir) / "App.apk"

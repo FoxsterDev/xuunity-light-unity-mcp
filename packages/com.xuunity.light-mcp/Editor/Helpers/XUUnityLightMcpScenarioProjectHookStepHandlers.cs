@@ -213,13 +213,18 @@ namespace XUUnity.LightMcp.Editor.Helpers
                 payloadStatus,
                 "not_started",
                 StringComparison.OrdinalIgnoreCase);
-            if (PredicateMatches(step.continueWhen, payloadJson) || implicitlyContinueNotStarted)
+            var implicitlyContinueUntilTimeout = string.IsNullOrWhiteSpace(step.continueWhen);
+            if (PredicateMatches(step.continueWhen, payloadJson)
+                || implicitlyContinueNotStarted
+                || implicitlyContinueUntilTimeout)
             {
                 stepResult.status = "running";
                 stepResult.outcome = string.IsNullOrWhiteSpace(pollResult.outcome)
                     ? (implicitlyContinueNotStarted
                         ? "hook_poll_until_waiting_not_started"
-                        : "hook_poll_until_running")
+                        : (implicitlyContinueUntilTimeout
+                            ? "hook_poll_until_waiting_by_default"
+                            : "hook_poll_until_running"))
                     : pollResult.outcome;
                 var intervalSeconds = Math.Max(0.0d, step.intervalSeconds);
                 state.pollUntilNextPollUtc = DateTime.UtcNow.AddSeconds(intervalSeconds).ToString("yyyy-MM-ddTHH:mm:ssZ");

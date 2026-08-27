@@ -250,6 +250,9 @@ Current multi-project lifecycle baseline:
   - `stale_host_session`
   - `bridge_disabled`
   - `bridge_owned_by_non_main_process`
+  - `editor_process_alive_bridge_never_attached`
+  - `launch_blocked_probable_modal`, with the live editor PID, Editor.log path,
+    log idle time, and the last matched licensing/API-updater/dialog line
 - reconciliation is used not only for diagnostics but also for recovery decisions in:
   - `ensure-ready`
   - direct bridge invocation retry
@@ -267,6 +270,15 @@ Current native settle-watcher start:
 - successful playmode payloads can now report `completion_basis: unity_playmode_transition_watcher`
 - pending playmode transition state persists through bridge rebootstrap so `enter` can still complete on the native watcher path after Play Mode recreates the bridge session
 - `unity.editor.quit` is now part of the core bridge surface so the host can close a host-opened editor session without GUI automation
+- `open-editor` accepts ordered, repeatable extra Unity arguments and records
+  them in the host launch session; this supports host-required licensing IPC,
+  cache-server, and API-updater arguments without shell-string parsing. An
+  existing editor is reused with requested arguments only when its process
+  command proves them; later successful licensing evidence supersedes earlier
+  transient channel errors in the same log
+- `request-editor-quit --force-after-ms` is an explicit escalation only: after
+  the graceful wait it requires one current same-project editor PID, rechecks
+  identity, terminates that PID, and verifies exit
 - direct PlayMode test requests still have a stricter trust boundary than
   compile or refresh under lifecycle churn: bridge generation can change after
   request acceptance and before response commit, so a PlayMode retry may end

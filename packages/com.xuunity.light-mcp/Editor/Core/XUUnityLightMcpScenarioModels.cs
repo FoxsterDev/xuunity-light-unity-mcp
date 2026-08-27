@@ -73,6 +73,7 @@ namespace XUUnity.LightMcp.Editor.Core
             public string projectAction = "";
             public string payloadJson = "";
             public bool allowMutating;
+            public string mutationSettlePolicy = "";
             public string interactionId = "";
             public string targetKind = "";
             public string targetValue = "";

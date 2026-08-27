@@ -96,6 +96,7 @@ from server_editor_host import (
     build_plain_batch_build_command,
     resolve_editor_log_path,
     verify_project_editor_closed,
+    force_terminate_verified_project_editor,
 )
 from server_license import build_license_capabilities
 from server_loading_timing import request_loading_timing_summary
@@ -348,17 +349,22 @@ def cmd_request_editor_quit(args):
     ensure_project_root_fn = _compat_dep("ensure_project_root")
     request_editor_quit_fn = _compat_dep("request_editor_quit")
     verify_project_editor_closed_fn = _compat_dep("verify_project_editor_closed")
+    force_terminate_verified_project_editor_fn = _compat_dep("force_terminate_verified_project_editor")
     print_json_fn = _compat_dep("print_json")
 
     project_root = ensure_project_root_fn(args.project_root)
     response = request_editor_quit_fn(str(project_root), args.timeout_ms)
     response["quit_request_accepted"] = response.get("status") == "ok"
     response["process_exit_verified"] = False
-    if not bool(getattr(args, "wait_for_exit", False)):
+    force_after_ms = max(0, int(getattr(args, "force_after_ms", 0) or 0))
+    if not bool(getattr(args, "wait_for_exit", False)) and force_after_ms <= 0:
         print_json_fn(response)
         return
 
-    verification = verify_project_editor_closed_fn(project_root, args.exit_timeout_ms)
+    verification = verify_project_editor_closed_fn(
+        project_root,
+        force_after_ms if force_after_ms > 0 else args.exit_timeout_ms,
+    )
     payload = {
         "action": "request_editor_quit",
         "project_root": str(project_root),
@@ -387,6 +393,20 @@ def cmd_request_editor_quit(args):
             ),
             payload,
         )
+
+    if force_after_ms > 0:
+        forced = force_terminate_verified_project_editor_fn(
+            project_root,
+            list(payload.get("live_project_editor_pids") or []),
+            min(10000, max(1000, force_after_ms)),
+        )
+        payload.update(forced)
+        payload["force_after_ms"] = force_after_ms
+        payload["closeout_classification"] = "quit_ack_without_exit_force_terminated"
+        payload["recommended_next_action"] = "none"
+        payload["next_distinct_action"] = "rerun_closed_editor_batch_lane"
+        print_json_fn(payload)
+        return
 
     payload["closeout_classification"] = "editor_quit_ack_without_exit"
     payload["recommended_next_action"] = "manual_editor_close"
@@ -505,7 +525,13 @@ def cmd_ensure_ready(args):
             }
         elif args.open_editor:
             unity_app = detect_unity_app_path_for_project_fn(project_root, args.unity_app)
-            payload["launch"] = open_unity_editor_fn(project_root, log_path, unity_app, args.background_open)
+            payload["launch"] = open_unity_editor_fn(
+                project_root,
+                log_path,
+                unity_app,
+                args.background_open,
+                getattr(args, "unity_arg", []),
+            )
 
         effective_timeout_ms = args.timeout_ms
         if (

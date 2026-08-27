@@ -50,7 +50,13 @@ def build_host_editor_session_state(
     log_path: Path,
     background_open: bool,
     editor_pid: int = 0,
+    unity_args: list[str] | None = None,
 ) -> dict[str, Any]:
+    normalized_unity_args = [str(value) for value in (unity_args or [])]
+    licensing_ipc_channel = ""
+    for index, value in enumerate(normalized_unity_args[:-1]):
+        if value.lower() == "-licensingipc":
+            licensing_ipc_channel = normalized_unity_args[index + 1]
     log_session_start_offset_bytes = 0
     log_session_start_mtime = 0.0
     try:
@@ -67,6 +73,8 @@ def build_host_editor_session_state(
         "unity_app": str(unity_app),
         "editor_log_path": str(log_path),
         "background_open": background_open,
+        "unity_args": normalized_unity_args,
+        "licensing_ipc_channel": licensing_ipc_channel,
         "opened_by_host": True,
         "opened_at_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "editor_pid": max(0, int(editor_pid or 0)),

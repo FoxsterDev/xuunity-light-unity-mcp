@@ -12,3 +12,30 @@ the MCP action drives the same configured build path that humans use. This is
 for projects where raw `unity_build_player` or `batch-build-player` would skip
 profile application, signing setup, dependency generation, or other project
 build-tool behavior.
+
+Catalog actions whose defaults only make sense in the owning host may declare
+`hostScoped: true` plus `requiredPayloadFields`. Invocation then fails with
+`hook_is_host_scoped` until every project-specific field is supplied; it never
+silently inherits the hook owner's path.
+
+Profile/config actions that trigger a domain reload may declare
+`settlePolicy: apply_then_gate`. A direct project-action invocation then builds
+the safe `apply -> wait -> status -> compile_player_scripts` sequence and
+requires `build_target` or `target`. When such an action is embedded in a
+larger scenario, the author must place those three gate steps immediately after
+it; `project_refresh` is rejected in that position.
+
+```yaml
+  project.apply_profile:
+    hookName: example.project_environment
+    settlePolicy: apply_then_gate
+    payload:
+      build_target: enum[Android, iOS]
+  project.switch_host_target:
+    hookName: example.host_build
+    hostScoped: true
+    requiredPayloadFields: [config_resource_path]
+    payload:
+      config_resource_path: project-specific resource path
+      build_target: enum[Android, iOS]
+```

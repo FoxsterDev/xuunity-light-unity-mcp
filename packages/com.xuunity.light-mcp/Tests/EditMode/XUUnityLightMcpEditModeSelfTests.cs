@@ -817,6 +817,99 @@ namespace XUUnity.LightMcp.Tests.EditMode
         }
 
         [Test]
+        public void ScenarioValidation_ReportsFirstCauseInline()
+        {
+            var validation = new XUUnityLightMcpScenarioValidatePayload
+            {
+                status = "invalid",
+                error_count = 2,
+                issues = new List<XUUnityLightMcpScenarioIssue>
+                {
+                    new()
+                    {
+                        code = "hook_not_found",
+                        message = "No scenario hook registered as 'example.missing'.",
+                        stepId = "vendor_gate",
+                    },
+                },
+            };
+
+            var message = XUUnityLightMcpScenarioRunOperation.BuildValidationErrorMessage(validation);
+            Assert.That(message, Does.Contain("hook_not_found"));
+            Assert.That(message, Does.Contain("example.missing"));
+            Assert.That(message, Does.Contain("step 'vendor_gate'"));
+            Assert.That(message, Does.Contain("1 additional validation error"));
+        }
+
+        [Test]
+        public void ScenarioHookDiagnostic_NamesConstrainedAssemblyAndActiveDefines()
+        {
+            var message = XUUnityLightMcpScenarioHookExecutor.FormatConstrainedHookDiagnostic(
+                "example.vendor",
+                "Example.Editor.Vendor",
+                new[] { "EXAMPLE_DEV_BUILD" },
+                "UNITY_EDITOR;RELEASE_STORE");
+
+            Assert.That(message, Does.Contain("example.vendor"));
+            Assert.That(message, Does.Contain("Example.Editor.Vendor"));
+            Assert.That(message, Does.Contain("EXAMPLE_DEV_BUILD"));
+            Assert.That(message, Does.Contain("RELEASE_STORE"));
+            Assert.That(message, Does.Contain("Apply a profile"));
+        }
+
+        [Test]
+        public void ScenarioValidator_EnforcesApplyThenGateAndRejectsRefresh()
+        {
+            var scenario = new XUUnityLightMcpScenarioDefinition
+            {
+                name = "invalid_profile_settle",
+                steps = new List<XUUnityLightMcpScenarioStepDefinition>
+                {
+                    new()
+                    {
+                        stepId = "apply_profile",
+                        kind = "project_defined_hook",
+                        hookName = XUUnityLightMcpSyntheticPollUntilHook.Name,
+                        mutationSettlePolicy = "apply_then_gate",
+                    },
+                    new() { stepId = "refresh", kind = "project_refresh" },
+                    new() { stepId = "status", kind = "status" },
+                    new() { stepId = "compile", kind = "compile_player_scripts", target = "Android" },
+                },
+            };
+
+            var validation = XUUnityLightMcpScenarioRunner.Validate(scenario);
+            Assert.That(validation.status, Is.EqualTo("invalid"));
+            Assert.That(validation.issues.Exists(issue => issue.code == "project_refresh_after_profile_mutation_forbidden"), Is.True);
+            Assert.That(validation.issues.Exists(issue => issue.code == "apply_then_gate_sequence_required"), Is.True);
+        }
+
+        [Test]
+        public void ScenarioValidator_AcceptsWaitStatusCompileAfterProfileMutation()
+        {
+            var scenario = new XUUnityLightMcpScenarioDefinition
+            {
+                name = "valid_profile_settle",
+                steps = new List<XUUnityLightMcpScenarioStepDefinition>
+                {
+                    new()
+                    {
+                        stepId = "apply_profile",
+                        kind = "project_defined_hook",
+                        hookName = XUUnityLightMcpSyntheticPollUntilHook.Name,
+                        mutationSettlePolicy = "apply_then_gate",
+                    },
+                    new() { stepId = "settle", kind = "wait", durationSeconds = 1.0d },
+                    new() { stepId = "status", kind = "status" },
+                    new() { stepId = "compile", kind = "compile_player_scripts", target = "Android" },
+                },
+            };
+
+            var validation = XUUnityLightMcpScenarioRunner.Validate(scenario);
+            Assert.That(validation.status, Is.EqualTo("valid"), string.Join("\n", validation.issues.ConvertAll(issue => issue.message)));
+        }
+
+        [Test]
         public void ScenarioRunner_PollUntilPassesAfterRepeatedRunningPolls()
         {
             XUUnityLightMcpSyntheticPollUntilHook.Reset("passed_after_two_running_polls");
@@ -850,6 +943,38 @@ namespace XUUnity.LightMcp.Tests.EditMode
             Assert.That(payload.steps[0].status, Is.EqualTo("passed"));
             Assert.That(payload.steps[0].poll_count, Is.EqualTo(3));
             Assert.That(payload.steps[0].payload_json, Does.Contain("\"status\":\"passed\""));
+        }
+
+        [Test]
+        public void ScenarioRunner_PollUntilContinuesByDefaultWhenContinueWhenIsOmitted()
+        {
+            XUUnityLightMcpSyntheticPollUntilHook.Reset("passed_after_two_running_polls");
+            var scenario = new XUUnityLightMcpScenarioDefinition
+            {
+                name = "synthetic_poll_until_default_continue",
+                steps = new List<XUUnityLightMcpScenarioStepDefinition>
+                {
+                    new()
+                    {
+                        stepId = "flow",
+                        kind = "project_defined_hook_poll_until",
+                        hookName = XUUnityLightMcpSyntheticPollUntilHook.Name,
+                        startPayloadJson = "{\"action\":\"start_flow\"}",
+                        pollPayloadJson = "{\"action\":\"snapshot_flow\"}",
+                        passWhen = "payload.status == 'passed'",
+                        failWhen = "payload.status == 'failed'",
+                        intervalSeconds = 0.0d,
+                        timeoutSeconds = 5.0d,
+                    },
+                },
+            };
+
+            var queued = XUUnityLightMcpScenarioRunner.QueueRun(scenario);
+            TickScenarioUntilIdle();
+
+            Assert.That(XUUnityLightMcpScenarioRunner.TryReadResult(queued.run_id, "", out var payload, out var errorCode, out var errorMessage), Is.True, $"{errorCode}: {errorMessage}");
+            Assert.That(payload.status, Is.EqualTo("passed"));
+            Assert.That(payload.steps[0].poll_count, Is.EqualTo(3));
         }
 
         [Test]

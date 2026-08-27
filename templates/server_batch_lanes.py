@@ -15,7 +15,7 @@ def load_batch_side_effect_allow_config_data(
 
 
 def progress_stdout_enabled_data(args: Any) -> bool:
-    return not bool(getattr(args, "no_progress_stdout", False))
+    return not bool(getattr(args, "no_progress_stdout", False) or getattr(args, "json_only", False))
 
 
 def normalize_batch_fallback_mode_data(

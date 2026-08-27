@@ -102,6 +102,9 @@
       ],
       [
         "--include-step-payloads"
+      ],
+      [
+        "--json-only"
       ]
     ],
     "request_status_summary_options": [
@@ -117,6 +120,9 @@
       ],
       [
         "--include-full-payload"
+      ],
+      [
+        "--json-only"
       ]
     ],
     "root_contains": [

@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
+import os
 import sys
 import time
 from pathlib import Path
@@ -9,7 +10,7 @@ from typing import Any
 
 SERVER_INFO = {
     "name": "xuunity-mcp",
-    "version": "0.3.60",
+    "version": "0.3.61",
 }
 PROTOCOL_VERSION = "2025-06-18"
 
@@ -39,6 +40,7 @@ from server_editor_host import (
     terminate_editor_pid,
     update_host_editor_session_pid,
     verify_project_editor_closed,
+    force_terminate_verified_project_editor,
 )
 from server_bridge_runtime import (
     bridge_enabled,
@@ -259,6 +261,8 @@ def main() -> None:
         if not hasattr(args, "func"):
             parser.print_help()
             raise SystemExit(1)
+        if bool(getattr(args, "json_only", False)):
+            os.environ["XUUNITY_JSON_ONLY"] = "1"
         args.func(args)
     except ToolInvocationError as exc:
         payload = build_tool_error_payload(exc)

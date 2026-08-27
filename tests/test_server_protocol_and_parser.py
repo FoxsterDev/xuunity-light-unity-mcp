@@ -2,6 +2,7 @@ import argparse
 import contextlib
 import io
 import json
+import os
 import sys
 import tempfile
 import unittest
@@ -13,6 +14,8 @@ if str(TEMPLATES_DIR) not in sys.path:
     sys.path.insert(0, str(TEMPLATES_DIR))
 
 import server
+import server_batch_lanes
+import server_bridge_journal
 import server_mcp_tools
 import server_project_actions
 import server_summaries
@@ -26,6 +29,26 @@ def get_subparser_choices(parser: argparse.ArgumentParser) -> set[str]:
 
 
 class ServerProtocolAndParserTests(unittest.TestCase):
+    def test_json_only_is_available_on_every_cli_subcommand_and_suppresses_progress(self) -> None:
+        parser = server.build_parser()
+        args = parser.parse_args(
+            ["request-status", "--project-root", "/tmp/FakeProject", "--json-only"]
+        )
+        self.assertTrue(args.json_only)
+        self.assertFalse(server_batch_lanes.progress_stdout_enabled_data(args))
+
+        stderr = io.StringIO()
+        with (
+            mock.patch.dict(os.environ, {"XUUNITY_JSON_ONLY": "1"}, clear=False),
+            contextlib.redirect_stderr(stderr),
+        ):
+            server_bridge_journal.emit_operation_progress_phase(
+                project_root=Path("/tmp/FakeProject"),
+                operation="unity.status",
+                phase="waiting_for_response",
+            )
+        self.assertEqual("", stderr.getvalue())
+
     def test_parser_contains_critical_subcommands(self) -> None:
         parser = server.build_parser()
         choices = get_subparser_choices(parser)
@@ -721,6 +744,69 @@ actions:
         self.assertEqual("project.safe", action["action_id"])
         self.assertEqual("safe", action["resolved_by_alias"])
         self.assertEqual("example.project", action["hook_name"])
+
+    def test_host_scoped_project_action_requires_named_payload_fields(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            catalog_path = Path(temp_dir) / "project_actions.yaml"
+            catalog_path.write_text(
+                """
+schemaVersion: xuunity.project-actions.v1
+project: FakeProject
+hookName: example.host
+actions:
+  project.switch:
+    hostScoped: true
+    requiredPayloadFields: [config_resource_path]
+    payload:
+      config_resource_path: project-specific resource path
+    mutates: [ProjectSettings]
+""".strip(),
+                encoding="utf-8",
+            )
+            catalog = server_project_actions.load_project_action_catalog(
+                Path(temp_dir) / "FakeProject",
+                str(catalog_path),
+            )
+            action = server_project_actions.resolve_project_action(catalog, "project.switch")
+
+            with self.assertRaises(server.ToolInvocationError) as ctx:
+                server_project_actions.build_project_action_scenario(
+                    action_record=action,
+                    action_payload={},
+                )
+
+            self.assertEqual("hook_is_host_scoped", ctx.exception.code)
+            self.assertEqual(["config_resource_path"], ctx.exception.details["missing_payload_fields"])
+            scenario = server_project_actions.build_project_action_scenario(
+                action_record=action,
+                action_payload={"config_resource_path": "Configs/Satellite"},
+            )
+            self.assertIn("Configs/Satellite", scenario["steps"][0]["hookPayloadJson"])
+
+    def test_apply_then_gate_project_action_builds_authoritative_settle_sequence(self) -> None:
+        action = {
+            "action_id": "project.apply_profile",
+            "hook_name": "example.project_environment",
+            "settle_policy": "apply_then_gate",
+        }
+        scenario = server_project_actions.build_project_action_scenario(
+            action_record=action,
+            action_payload={"build_target": "Android"},
+        )
+
+        self.assertEqual(
+            ["project_defined_hook", "wait", "status", "compile_player_scripts"],
+            [step["kind"] for step in scenario["steps"]],
+        )
+        self.assertEqual("apply_then_gate", scenario["steps"][0]["mutationSettlePolicy"])
+        self.assertEqual("Android", scenario["steps"][3]["target"])
+
+        with self.assertRaises(server.ToolInvocationError) as ctx:
+            server_project_actions.build_project_action_scenario(
+                action_record=action,
+                action_payload={},
+            )
+        self.assertEqual("mutation_settle_target_required", ctx.exception.code)
 
     def test_catalog_payload_action_conflict_is_listed_and_refused_at_invoke(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -2316,6 +2402,40 @@ actions:
         self.assertTrue(quit_args.wait_for_exit)
         self.assertEqual(45000, quit_args.exit_timeout_ms)
 
+        force_quit_args = parser.parse_args(
+            [
+                "request-editor-quit",
+                "--project-root",
+                "/tmp/FakeProject",
+                "--force-after-ms",
+                "5000",
+            ]
+        )
+        self.assertEqual(5000, force_quit_args.force_after_ms)
+
+        open_args = parser.parse_args(
+            [
+                "open-editor",
+                "--project-root",
+                "/tmp/FakeProject",
+                "--unity-arg=-licensingIpc",
+                "--unity-arg",
+                "LicenseClient-session",
+            ]
+        )
+        self.assertEqual(["-licensingIpc", "LicenseClient-session"], open_args.unity_arg)
+
+        ensure_args = parser.parse_args(
+            [
+                "ensure-ready",
+                "--project-root",
+                "/tmp/FakeProject",
+                "--open-editor",
+                "--unity-arg=-accept-apiupdate",
+            ]
+        )
+        self.assertEqual(["-accept-apiupdate"], ensure_args.unity_arg)
+
         restore_args = parser.parse_args(
             [
                 "restore-editor-state",
@@ -2479,6 +2599,48 @@ actions:
         self.assertTrue(ctx.exception.details["quit_request_accepted"])
         self.assertEqual([1234], ctx.exception.details["live_project_editor_pids"])
         self.assertEqual("editor_quit_ack_without_exit", ctx.exception.details["closeout_classification"])
+
+    def test_request_editor_quit_force_after_ms_uses_identity_verified_termination(self) -> None:
+        args = argparse.Namespace(
+            project_root="/tmp/FakeProject",
+            timeout_ms=15000,
+            wait_for_exit=False,
+            exit_timeout_ms=30000,
+            force_after_ms=5000,
+        )
+        emitted_payloads: list[dict[str, object]] = []
+        with (
+            mock.patch.object(server, "ensure_project_root", return_value=Path("/tmp/FakeProject")),
+            mock.patch.object(server, "request_editor_quit", return_value={"status": "ok", "request_id": "quit-1"}),
+            mock.patch.object(
+                server,
+                "verify_project_editor_closed",
+                return_value={
+                    "same_project_editor_closed": False,
+                    "live_project_editor_pids": [1234],
+                    "process_visibility_available": True,
+                    "process_exit_verified": False,
+                },
+            ) as verify_mock,
+            mock.patch.object(
+                server,
+                "force_terminate_verified_project_editor",
+                return_value={
+                    "same_project_editor_closed": True,
+                    "live_project_editor_pids": [],
+                    "process_exit_verified": True,
+                    "termination_identity_reverified": True,
+                    "force_terminated_editor_pid": 1234,
+                },
+            ) as force_mock,
+            mock.patch.object(server, "print_json", side_effect=lambda payload: emitted_payloads.append(dict(payload))),
+        ):
+            server.cmd_request_editor_quit(args)
+
+        verify_mock.assert_called_once_with(Path("/tmp/FakeProject"), 5000)
+        force_mock.assert_called_once_with(Path("/tmp/FakeProject"), [1234], 5000)
+        self.assertEqual("quit_ack_without_exit_force_terminated", emitted_payloads[0]["closeout_classification"])
+        self.assertTrue(emitted_payloads[0]["termination_identity_reverified"])
 
     def test_restore_editor_state_require_closed_fails_when_project_still_live(self) -> None:
         args = argparse.Namespace(project_root="/tmp/FakeProject", timeout_ms=15000, require_closed=True)

@@ -2,6 +2,80 @@
 
 ## Unreleased
 
+## 0.3.61
+
+Release tag: `v0.3.61`
+
+Current Git UPM install URL:
+
+```text
+https://github.com/FoxsterDev/xuunity-mcp.git?path=/packages/com.xuunity.light-mcp#v0.3.61
+```
+
+### Changed
+
+- Released `v0.3.61` package metadata, server metadata, package manifests, and Git UPM examples.
+- `open-editor` and `ensure-ready --open-editor` accept ordered, repeatable
+  `--unity-arg` values and report the effective launch arguments. This lets a
+  developer supply a Unity licensing IPC channel, cache-server option, or other
+  required editor flag without bypassing XUUnity's duplicate-editor guard.
+  Existing editors are reused with requested arguments only when the process
+  command proves them, and the package self-test runner forwards the same
+  repeated arguments.
+- Every host helper subcommand accepts `--json-only`, which suppresses progress
+  chatter while keeping stdout as the final JSON result for scripts.
+- `project_defined_hook_poll_until` keeps polling unmatched successful payloads
+  until timeout when `continueWhen` is omitted. Scenario authors can still use
+  an explicit `continueWhen` as a stricter payload contract.
+- UI-evidence guidance now requires a fixed Game View size before Play Mode and
+  a bounds query after a surprising capture, because responsive UI can collapse
+  to zero size while a visibility flag remains true.
+
+### Fixed
+
+- `ensure-ready` no longer ends a live-editor/no-bridge launch as a generic
+  timeout. It reports the editor PID, Editor.log path and idle time, and the
+  last matched licensing or startup-dialog line; known blockers use
+  `launch_blocked_probable_modal`. A later successful licensing handshake or
+  entitlement resolution supersedes earlier transient channel errors. Fresh
+  licensing errors receive a five-second recovery window because Unity 2022
+  can briefly report a missing channel before its local licensing client is
+  ready; stale invalid-license evidence still fails immediately.
+- `scenario_invalid` includes its first validation cause. A missing hook can
+  name the source candidate's assembly definition constraints and active player
+  defines, so the developer can apply the profile that enables the hook before
+  rerunning the scenario.
+- Catalog authors can mark actions `hostScoped` and name
+  `requiredPayloadFields`; invocation refuses with `hook_is_host_scoped` when a
+  project-specific value is missing. Profile mutations can declare
+  `mutationSettlePolicy: apply_then_gate`, which rejects refresh-after-apply and
+  requires `wait`, `status`, then `compile_player_scripts`.
+- `request-editor-quit --force-after-ms` adds an opt-in escape from modal-blocked
+  quit. It terminates only one current, identity-verified editor for the target
+  project and verifies process exit; ambiguous or invisible processes are
+  refused.
+
+### Validation
+
+- The host suite passes `966/966` tests with `14` expected platform skips, and
+  the public documentation UI suite passes `42/42` browser checks.
+- Clean projects on Unity `2022.3.67f2` and `6000.0.58f2` each pass package
+  EditMode `91/91` and PlayMode `5/5` from the current source.
+- A Unity `2022.3.62f3` consumer passes package EditMode `91/91`; its broader
+  PlayMode environment passes `18` tests with one expected environment skip.
+  A Unity `6000.0.58f2` consumer passes an Android compile, the profile
+  apply-then-gate scenario `7/7`, a fixed-Game-View GUI scenario `18/18`, and
+  the profile-restore compile scenario `8/8`.
+
+### Known limitations
+
+- `Unity Package CI` remains explicitly waived because the hosted runners do
+  not have Unity license credentials. Local Unity validation above covers the
+  release, but the release commit has no CI-recorded EditMode or PlayMode proof.
+- Live editor-launch and forced-quit validation was performed on macOS. Windows
+  and Linux host paths are covered by the host suite, not by a live editor run
+  in this release cycle.
+
 ## 0.3.60
 
 Release tag: `v0.3.60`

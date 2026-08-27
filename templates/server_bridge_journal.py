@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import os
 import sys
 import time
 import uuid
@@ -9,6 +10,10 @@ from typing import Any
 
 from server_core import parse_utc_timestamp, read_json, write_json
 from server_bridge_paths import request_journal_dir
+
+
+def _json_only_enabled() -> bool:
+    return str(os.environ.get("XUUNITY_JSON_ONLY") or "").strip().lower() in {"1", "true", "yes"}
 
 def bridge_identity_from_state(state: dict[str, Any] | None) -> tuple[int, str]:
     if not state:
@@ -27,6 +32,8 @@ def emit_request_submission_ack(
     transport_name: str,
     state: dict[str, Any] | None,
 ) -> None:
+    if _json_only_enabled():
+        return
     bridge_generation, bridge_session_id = bridge_identity_from_state(state)
     message = (
         "[xuunity-mcp] request_submitted "
@@ -51,6 +58,8 @@ def emit_request_not_submitted_ack(
     transport_name: str,
     reason: str,
 ) -> None:
+    if _json_only_enabled():
+        return
     message = (
         "[xuunity-mcp] request_not_submitted "
         f"operation={operation} "
@@ -74,6 +83,8 @@ def emit_operation_progress_phase(
     state: dict[str, Any] | None = None,
     detail: str = "",
 ) -> None:
+    if _json_only_enabled():
+        return
     bridge_generation, bridge_session_id = bridge_identity_from_state(state)
     busy_reason = str((state or {}).get("busy_reason") or "")
     message = (

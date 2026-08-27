@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import sys
 import time
 from pathlib import Path
@@ -53,6 +54,8 @@ def emit_scenario_wait_heartbeat(
     last_emit_unix: float,
     min_interval_seconds: float = 15.0,
 ) -> tuple[str, float]:
+    if str(os.environ.get("XUUNITY_JSON_ONLY") or "").strip().lower() in {"1", "true", "yes"}:
+        return last_key, last_emit_unix
     steps = payload.get("steps")
     current_step_index = int(payload.get("current_step_index") or -1)
     active_step = None

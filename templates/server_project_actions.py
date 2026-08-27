@@ -312,7 +312,46 @@ def normalize_project_action_record(
         "cleanup": action_raw.get("cleanup", ""),
         "evidence": _as_string_list(action_raw.get("evidence")),
         "validation_modes": _as_string_list(action_raw.get("validationModes")),
+        "host_scoped": bool(action_raw.get("hostScoped")),
+        "required_payload_fields": _as_string_list(action_raw.get("requiredPayloadFields")),
+        "settle_policy": str(action_raw.get("settlePolicy") or "").strip(),
     }
+
+
+def refuse_missing_host_scoped_payload(
+    action_record: dict[str, Any],
+    payload: dict[str, Any],
+    *,
+    step_id: str = "",
+) -> None:
+    if not bool(action_record.get("host_scoped")):
+        return
+
+    required_fields = [
+        str(field).strip()
+        for field in action_record.get("required_payload_fields") or []
+        if str(field).strip()
+    ]
+    missing_fields = [field for field in required_fields if not str(payload.get(field) or "").strip()]
+    if not missing_fields:
+        return
+
+    details = {
+        "action_id": str(action_record.get("action_id") or ""),
+        "required_payload_fields": required_fields,
+        "missing_payload_fields": missing_fields,
+    }
+    if step_id:
+        details["step_id"] = step_id
+    raise ToolInvocationError(
+        "hook_is_host_scoped",
+        (
+            f"Project action '{details['action_id']}' uses a host-scoped hook and requires explicit "
+            f"payload field(s): {', '.join(missing_fields)}. Supply project-specific values instead of "
+            "relying on the hook owner's defaults."
+        ),
+        details,
+    )
 
 
 def project_action_catalog_payload(catalog: dict[str, Any]) -> dict[str, Any]:
@@ -409,23 +448,52 @@ def build_project_action_scenario(
         )
 
     hook_payload = dict(action_payload)
+    refuse_missing_host_scoped_payload(action_record, hook_payload)
     hook_payload["action"] = action_id
     effective_scenario_name = scenario_name.strip() if scenario_name else ""
     if not effective_scenario_name:
         effective_scenario_name = f"project_action_{sanitize_action_name(action_id)}_{int(time.time())}"
 
+    settle_policy = str(action_record.get("settle_policy") or "")
+    steps: list[dict[str, Any]] = [
+        {
+            "stepId": "invoke_project_action",
+            "kind": "project_defined_hook",
+            "hookName": hook_name,
+            "hookPayloadJson": json.dumps(hook_payload, ensure_ascii=True, separators=(",", ":")),
+            "mutationSettlePolicy": settle_policy,
+        }
+    ]
+    if settle_policy == "apply_then_gate":
+        compile_target = str(action_payload.get("build_target") or action_payload.get("target") or "").strip()
+        if not compile_target:
+            raise ToolInvocationError(
+                "mutation_settle_target_required",
+                (
+                    f"Project action '{action_id}' declares settlePolicy=apply_then_gate and requires "
+                    "build_target or target so its compile gate is authoritative."
+                ),
+                {"action_id": action_id, "settle_policy": settle_policy},
+            )
+        steps.extend(
+            [
+                {"stepId": "wait_after_project_action", "kind": "wait", "durationSeconds": 10.0},
+                {"stepId": "status_after_project_action", "kind": "status"},
+                {
+                    "stepId": "compile_after_project_action",
+                    "kind": "compile_player_scripts",
+                    "target": compile_target,
+                    "name": f"project_action_{sanitize_action_name(action_id)}",
+                    "timeoutSeconds": 300.0,
+                },
+            ]
+        )
+
     return {
         "name": effective_scenario_name,
         "description": f"Invoke typed project action {action_id}.",
         "stopOnFirstFailure": True,
-        "steps": [
-            {
-                "stepId": "invoke_project_action",
-                "kind": "project_defined_hook",
-                "hookName": hook_name,
-                "hookPayloadJson": json.dumps(hook_payload, ensure_ascii=True, separators=(",", ":")),
-            }
-        ],
+        "steps": steps,
     }
 
 
@@ -609,6 +677,7 @@ def normalize_project_action_step(
     fail_if_catalog_payload_action_conflicts(action_record, step_id=step_id)
 
     hook_payload = dict(payload)
+    refuse_missing_host_scoped_payload(action_record, hook_payload, step_id=step_id)
     hook_payload["action"] = canonical_action_id
     normalized = {
         key: value
@@ -618,6 +687,7 @@ def normalize_project_action_step(
     normalized["kind"] = "project_defined_hook"
     normalized["hookName"] = hook_name
     normalized["hookPayloadJson"] = json.dumps(hook_payload, ensure_ascii=True, separators=(",", ":"))
+    normalized["mutationSettlePolicy"] = str(action_record.get("settle_policy") or "")
     return normalized
 
 

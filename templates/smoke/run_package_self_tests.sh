@@ -9,6 +9,7 @@ PROJECT_ROOT=""
 OPEN_EDITOR="true"
 RUN_MODE="all"
 TIMEOUT_MS="240000"
+UNITY_ARGS=()
 TMP_DIR=""
 MANIFEST_BACKUP=""
 MANIFEST_WAS_PATCHED="false"
@@ -20,6 +21,7 @@ Usage:
     --project-root /path/to/UnityProject \
     [--mode all|editmode|playmode|fast|scene|lifecycle] \
     [--timeout-ms 240000] \
+    [--unity-arg VALUE ...] \
     [--no-open-editor]
 
 Runs the public XUUnity Light MCP package self-tests shipped inside
@@ -55,6 +57,11 @@ while [[ $# -gt 0 ]]; do
       shift
       [[ $# -gt 0 ]] || fail_usage "--timeout-ms requires a value"
       TIMEOUT_MS="$1"
+      ;;
+    --unity-arg)
+      shift
+      [[ $# -gt 0 ]] || fail_usage "--unity-arg requires a value"
+      UNITY_ARGS+=("$1")
       ;;
     --no-open-editor)
       OPEN_EDITOR="false"
@@ -282,6 +289,11 @@ ensure_ready_cmd=(
 )
 if [[ "$OPEN_EDITOR" == "true" ]]; then
   ensure_ready_cmd+=(--open-editor)
+fi
+if (( ${#UNITY_ARGS[@]} > 0 )); then
+  for unity_arg in "${UNITY_ARGS[@]}"; do
+    ensure_ready_cmd+=("--unity-arg=$unity_arg")
+  done
 fi
 
 "${ensure_ready_cmd[@]}" >/dev/null

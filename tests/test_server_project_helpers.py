@@ -199,6 +199,142 @@ class ServerProjectHelperTests(unittest.TestCase):
         self.assertEqual("wait_for_editor_idle_then_retry", exc.details["recommended_next_action"])
         self.assertTrue(exc.details["is_updating"])
 
+    def test_wait_for_ready_fails_with_licensing_blocker_and_log_evidence(self) -> None:
+        fake_time = types.SimpleNamespace(
+            time=mock.Mock(side_effect=[100.0, 100.0, 101.0, 101.0]),
+            sleep=mock.Mock(),
+        )
+        with (
+            mock.patch.object(server_editor_host, "time", fake_time),
+            mock.patch.object(server_editor_host, "bridge_enabled", return_value=True),
+            mock.patch.object(server_editor_host, "try_read_bridge_state", return_value={}),
+            mock.patch.object(server_editor_host, "bridge_state_is_ready", return_value=False),
+            mock.patch.object(
+                server_editor_host,
+                "read_recent_editor_log",
+                return_value="[Licensing::IpcConnector] Channel LicenseClient-session doesn't exist",
+            ),
+            mock.patch.object(server_editor_host, "classify_editor_log", return_value=None),
+            mock.patch.object(
+                server_editor_host,
+                "find_running_unity_editors_for_project",
+                return_value=[{"pid": 222}],
+            ),
+            mock.patch.object(server_editor_host._lifecycle, "_editor_log_idle_seconds", return_value=12.5),
+        ):
+            with self.assertRaises(ToolInvocationError) as ctx:
+                server_editor_host.wait_for_ready(
+                    Path("/tmp/FakeProject"),
+                    timeout_ms=1000,
+                    heartbeat_max_age_seconds=10,
+                    startup_policy="fail_fast_on_interactive_compile_block",
+                    editor_log_path=Path("/tmp/editor.log"),
+                )
+
+        self.assertEqual("launch_blocked_probable_modal", ctx.exception.code)
+        self.assertEqual(222, ctx.exception.details["editor_pid"])
+        self.assertEqual(12.5, ctx.exception.details["editor_log_idle_seconds"])
+        self.assertEqual("LicenseClient-session", ctx.exception.details["licensing_channel"])
+        self.assertIn("doesn't exist", ctx.exception.details["last_matched_startup_blocker_line"])
+        fake_time.sleep.assert_called_once_with(1.0)
+
+    def test_wait_for_ready_allows_fresh_licensing_signal_to_recover(self) -> None:
+        fake_time = types.SimpleNamespace(
+            time=mock.Mock(side_effect=[100.0, 100.0, 100.5, 101.0]),
+            sleep=mock.Mock(),
+        )
+        ready_state = {"editor_pid": 222, "heartbeat_utc": "2026-08-27T00:00:00Z"}
+        with (
+            mock.patch.object(server_editor_host, "time", fake_time),
+            mock.patch.object(server_editor_host, "bridge_enabled", return_value=True),
+            mock.patch.object(server_editor_host, "try_read_bridge_state", side_effect=[{}, ready_state]),
+            mock.patch.object(server_editor_host, "bridge_state_is_ready", side_effect=[False, True]),
+            mock.patch.object(server_editor_host, "heartbeat_age_seconds", return_value=0.1),
+            mock.patch.object(server_editor_host, "classify_editor_log", return_value=None),
+            mock.patch.object(
+                server_editor_host._lifecycle,
+                "_startup_blocker_observation",
+                return_value={
+                    "live_project_editor_pids": [222],
+                    "startup_blocker_kind": "licensing_channel_unavailable",
+                    "last_matched_startup_blocker_line": "Channel LicenseClient-session doesn't exist",
+                    "editor_log_observation_during_wait": True,
+                },
+            ),
+        ):
+            result = server_editor_host.wait_for_ready(
+                Path("/tmp/FakeProject"),
+                timeout_ms=5000,
+                heartbeat_max_age_seconds=10,
+                startup_policy="fail_fast_on_interactive_compile_block",
+                editor_log_path=Path("/tmp/editor.log"),
+            )
+
+        self.assertEqual(222, result["editor_pid"])
+        fake_time.sleep.assert_called_once_with(1.0)
+
+    def test_wait_for_ready_reads_stale_live_editor_log_for_invalid_license_popup(self) -> None:
+        fake_time = types.SimpleNamespace(
+            time=mock.Mock(side_effect=[1000.0, 1000.0]),
+            sleep=mock.Mock(),
+        )
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            log_path = Path(tmp_dir) / "unity_editor.log"
+            log_path.write_text("No valid Unity Editor license found. Please activate your license.\n")
+            os.utime(log_path, (100.0, 100.0))
+            with (
+                mock.patch.object(server_editor_host, "time", fake_time),
+                mock.patch.object(server_editor_host, "bridge_enabled", return_value=True),
+                mock.patch.object(server_editor_host, "try_read_bridge_state", return_value={}),
+                mock.patch.object(server_editor_host, "bridge_state_is_ready", return_value=False),
+                mock.patch.object(server_editor_host, "classify_editor_log", return_value=None),
+                mock.patch.object(
+                    server_editor_host,
+                    "find_running_unity_editors_for_project",
+                    return_value=[{"pid": 222}],
+                ),
+                mock.patch.object(server_editor_host._lifecycle, "_editor_log_idle_seconds", return_value=900.0),
+            ):
+                with self.assertRaises(ToolInvocationError) as ctx:
+                    server_editor_host.wait_for_ready(
+                        Path(tmp_dir),
+                        timeout_ms=1000,
+                        heartbeat_max_age_seconds=10,
+                        startup_policy="fail_fast_on_interactive_compile_block",
+                        editor_log_path=log_path,
+                    )
+
+        self.assertEqual("launch_blocked_probable_modal", ctx.exception.code)
+        self.assertEqual("invalid_editor_license", ctx.exception.details["startup_blocker_kind"])
+        self.assertEqual("stale_tail_for_live_project_editor", ctx.exception.details["editor_log_observation_scope"])
+        self.assertFalse(ctx.exception.details["editor_log_observation_during_wait"])
+        fake_time.sleep.assert_not_called()
+
+    def test_startup_blocker_ignores_licensing_error_recovered_by_later_entitlement(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            log_path = Path(tmp_dir) / "unity_editor.log"
+            log_path.write_text(
+                "[Licensing::IpcConnector] Channel LicenseClient-old doesn't exist\n"
+                "[Licensing::Module] Error: Access token is unavailable; failed to update\n"
+                "[Licensing::Client] Successfully resolved entitlement details\n"
+            )
+            with (
+                mock.patch.object(
+                    server_editor_host,
+                    "find_running_unity_editors_for_project",
+                    return_value=[{"pid": 222}],
+                ),
+                mock.patch.object(server_editor_host._lifecycle, "_editor_log_idle_seconds", return_value=0.5),
+            ):
+                observation = server_editor_host._lifecycle._startup_blocker_observation(
+                    Path(tmp_dir),
+                    log_path,
+                    started_at=0.0,
+                )
+
+        self.assertNotIn("last_matched_startup_blocker_line", observation)
+        self.assertIn("Successfully resolved entitlement details", observation["last_licensing_recovery_line"])
+
     def test_host_platform_process_report_exposes_listing_failure(self) -> None:
         completed = mock.Mock(returncode=1, stdout="", stderr="operation not permitted")
         adapter = HostPlatformAdapter(platform_kind="macos")
@@ -359,6 +495,133 @@ class ServerProjectHelperTests(unittest.TestCase):
         find_mock.assert_not_called()
         run_mock.assert_not_called()
         popen_mock.assert_not_called()
+
+    def test_open_unity_editor_preserves_repeated_extra_launch_arguments(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            project_root = make_unity_project(Path(tmp_dir) / "MyProject")
+            unity_app = Path("/Applications/Unity/Hub/Editor/6000.0.58f2/Unity.app")
+            log_path = project_root / "Library" / "XUUnityLightMcp" / "logs" / "unity_editor.log"
+            with (
+                mock.patch.object(server_editor_host, "try_read_live_editor_state", return_value=None),
+                mock.patch.object(
+                    server_editor_host,
+                    "list_process_commands_report",
+                    return_value={
+                        "available": True,
+                        "commands": [],
+                        "error_code": "",
+                        "stderr": "",
+                        "platform_kind": "macos",
+                    },
+                ),
+                mock.patch.object(server_editor_host, "find_running_unity_editors_for_project", return_value=[]),
+                mock.patch.object(server_editor_host, "find_running_unity_worker_processes_for_project", return_value=[]),
+                mock.patch.object(server_editor_host, "inspect_project_lock", return_value={"present": False}),
+                mock.patch.object(server_editor_host, "host_platform_kind", return_value="macos"),
+                mock.patch.object(server_editor_host.subprocess, "run", return_value=mock.Mock(returncode=0)) as run_mock,
+                mock.patch.object(
+                    server_editor_host,
+                    "wait_for_matching_editor_process",
+                    return_value={"pid": 4321},
+                ),
+            ):
+                result = server_editor_host.open_unity_editor(
+                    project_root,
+                    log_path,
+                    unity_app,
+                    True,
+                    ["-licensingIpc", "LicenseClient-session", "-cacheServerEnableDownload", "true"],
+                )
+
+        command = run_mock.call_args.args[0]
+        self.assertEqual(
+            ["-licensingIpc", "LicenseClient-session", "-cacheServerEnableDownload", "true"],
+            command[-4:],
+        )
+        self.assertEqual(command, result["launch_command"])
+        self.assertEqual(["-licensingIpc", "LicenseClient-session", "-cacheServerEnableDownload", "true"], result["unity_args"])
+
+    def test_open_unity_editor_rejects_nul_launch_argument(self) -> None:
+        with self.assertRaises(ToolInvocationError) as ctx:
+            server_editor_host.open_unity_editor(
+                Path("/tmp/FakeProject"),
+                Path("/tmp/editor.log"),
+                Path("/Applications/Unity.app"),
+                False,
+                ["bad\x00arg"],
+            )
+
+        self.assertEqual("invalid_unity_launch_argument", ctx.exception.code)
+
+    def test_open_unity_editor_refuses_to_claim_new_args_on_existing_editor(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            project_root = make_unity_project(Path(tmp_dir) / "MyProject")
+            unity_app = Path("/Applications/Unity.app")
+            log_path = project_root / "Library" / "XUUnityLightMcp" / "logs" / "unity_editor.log"
+            existing = {
+                "pid": 4321,
+                "command": f"/Applications/Unity.app/Contents/MacOS/Unity -projectPath {project_root}",
+                "unity_app": str(unity_app),
+                "unity_version": "",
+            }
+            with (
+                mock.patch.object(server_editor_host, "try_read_live_editor_state", return_value=None),
+                mock.patch.object(
+                    server_editor_host,
+                    "list_process_commands_report",
+                    return_value={"available": True, "commands": [], "error_code": "", "stderr": "", "platform_kind": "macos"},
+                ),
+                mock.patch.object(server_editor_host, "find_running_unity_editors_for_project", return_value=[existing]),
+                mock.patch.object(server_editor_host, "find_running_unity_worker_processes_for_project", return_value=[]),
+            ):
+                with self.assertRaises(ToolInvocationError) as ctx:
+                    server_editor_host.open_unity_editor(
+                        project_root,
+                        log_path,
+                        unity_app,
+                        True,
+                        ["-licensingIpc", "LicenseClient-session"],
+                    )
+
+        self.assertEqual("existing_editor_launch_arguments_not_applied", ctx.exception.code)
+        self.assertFalse(ctx.exception.details["requested_unity_args_applied"])
+        self.assertEqual(4321, ctx.exception.details["editor_pid"])
+
+    def test_open_unity_editor_reuses_existing_editor_when_requested_args_are_proven(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            project_root = make_unity_project(Path(tmp_dir) / "MyProject")
+            unity_app = Path("/Applications/Unity.app")
+            log_path = project_root / "Library" / "XUUnityLightMcp" / "logs" / "unity_editor.log"
+            existing = {
+                "pid": 4321,
+                "command": (
+                    f"/Applications/Unity.app/Contents/MacOS/Unity -projectPath {project_root} "
+                    "-licensingIpc LicenseClient-session"
+                ),
+                "unity_app": str(unity_app),
+                "unity_version": "",
+            }
+            with (
+                mock.patch.object(server_editor_host, "try_read_live_editor_state", return_value=None),
+                mock.patch.object(
+                    server_editor_host,
+                    "list_process_commands_report",
+                    return_value={"available": True, "commands": [], "error_code": "", "stderr": "", "platform_kind": "macos"},
+                ),
+                mock.patch.object(server_editor_host, "find_running_unity_editors_for_project", return_value=[existing]),
+                mock.patch.object(server_editor_host, "find_running_unity_worker_processes_for_project", return_value=[]),
+                mock.patch.object(server_editor_host, "activate_unity_editor"),
+            ):
+                result = server_editor_host.open_unity_editor(
+                    project_root,
+                    log_path,
+                    unity_app,
+                    True,
+                    ["-licensingIpc", "LicenseClient-session"],
+                )
+
+        self.assertTrue(result["reused_existing_editor"])
+        self.assertTrue(result["requested_unity_args_applied"])
 
     def test_restore_host_opened_editor_state_fast_paths_already_closed_editor(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:

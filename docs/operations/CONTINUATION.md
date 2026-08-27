@@ -350,6 +350,19 @@ Mini-playbook for closeout mismatch:
 5. only after `same_project_editor_closed=true` and
    `process_exit_verified=true` treat the validation session as fully closed
 
+When a known startup or store-profile modal systematically acknowledges quit
+without exiting, the explicit escalation is:
+
+```bash
+request-editor-quit --project-root <project> --timeout-ms 30000 \
+  --force-after-ms 30000
+```
+
+This is not a project-wide kill. The helper waits for graceful exit,
+re-verifies exactly one current same-project Unity editor PID, terminates only
+that PID, and verifies closure. It refuses restricted visibility, changed
+identity, and multiple matching editors.
+
 Compile-first closeout recipe for changed C# scripts:
 
 1. inspect editor state with `request-status-summary --project-root <project>`

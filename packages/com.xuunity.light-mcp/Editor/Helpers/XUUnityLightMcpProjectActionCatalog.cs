@@ -37,6 +37,9 @@ namespace XUUnity.LightMcp.Editor.Helpers
         public string HookName = "";
         public readonly List<string> Aliases = new();
         public readonly List<string> Mutates = new();
+        public bool HostScoped;
+        public readonly List<string> RequiredPayloadFields = new();
+        public string SettlePolicy = "";
     }
 
     static class ProjectActionCatalogLoader
@@ -180,8 +183,20 @@ namespace XUUnity.LightMcp.Editor.Helpers
                     {
                         currentAction.HookName = NormalizeYamlScalar(value);
                     }
+                    else if (string.Equals(key, "hostScoped", StringComparison.Ordinal))
+                    {
+                        currentAction.HostScoped = string.Equals(
+                            NormalizeYamlScalar(value),
+                            "true",
+                            StringComparison.OrdinalIgnoreCase);
+                    }
+                    else if (string.Equals(key, "settlePolicy", StringComparison.Ordinal))
+                    {
+                        currentAction.SettlePolicy = NormalizeYamlScalar(value);
+                    }
                     else if (string.Equals(key, "aliases", StringComparison.Ordinal)
-                        || string.Equals(key, "mutates", StringComparison.Ordinal))
+                        || string.Equals(key, "mutates", StringComparison.Ordinal)
+                        || string.Equals(key, "requiredPayloadFields", StringComparison.Ordinal))
                     {
                         listField = key;
                         foreach (var item in ParseInlineList(value))
@@ -239,6 +254,10 @@ namespace XUUnity.LightMcp.Editor.Helpers
             else if (string.Equals(key, "mutates", StringComparison.Ordinal))
             {
                 action.Mutates.Add(item);
+            }
+            else if (string.Equals(key, "requiredPayloadFields", StringComparison.Ordinal))
+            {
+                action.RequiredPayloadFields.Add(item);
             }
         }
 
