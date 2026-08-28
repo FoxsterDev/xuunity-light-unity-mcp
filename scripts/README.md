@@ -32,6 +32,19 @@ from `.xuunity-public-safety-denylist` or
 docs as part of the release surface: if they are stale or not public-safe, the
 MCP release is not ready to tag.
 
+For a published Git package release managed by Unity Package Manager (UPM)
+that must be adopted by multiple Unity projects, use the fail-closed consumer
+rollout helper:
+
+```bash
+python3 scripts/testing/run_consumer_rollout.py --help
+```
+
+It freezes an ignore-independent consumer inventory, proves the Unity/license
+and write preflight, requires one canary before fan-out, persists a resumable
+atomic ledger, and defaults to a compact decision summary. See
+[`docs/operations/CONSUMER_RELEASE_ROLLOUT.md`](../docs/operations/CONSUMER_RELEASE_ROLLOUT.md).
+
 Root-level setup wrappers remain at the repo root:
 
 - `init_xuunity_light_unity_mcp.sh`

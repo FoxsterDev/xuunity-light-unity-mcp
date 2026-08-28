@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+### Added
+
+- Added `scripts/testing/run_consumer_rollout.py` for safely moving several
+  Unity projects to one published Git package tag used by Unity Package Manager
+  (UPM). Before any package file changes, it compares the expected project list
+  with an ignore-independent scan, refuses a dirty canary project, and checks
+  the Unity version, batch-mode license, write access, running Unity processes,
+  and cleanup ownership. It updates and compiles one canary first, then updates
+  the remaining clean projects only after that canary passes. An atomic
+  per-project ledger supports reviewed resume; the generated worker packet
+  cannot diagnose, release, or terminate processes; and root cleanup rechecks
+  the current process identifier, project, and log before termination. Compact
+  output is the default, overall deadlines can stop before wider updates, and
+  credential-shaped process arguments are redacted before evidence is saved.
+
 ## 0.3.61
 
 Release tag: `v0.3.61`

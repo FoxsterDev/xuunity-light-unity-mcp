@@ -27,7 +27,8 @@ from server_host_platform import HostPlatformAdapter
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SWEPT_FILES = sorted((REPO_ROOT / "templates").glob("*.py")) + [
-    REPO_ROOT / "run_installed_or_refresh_xuunity_mcp.py"
+    REPO_ROOT / "run_installed_or_refresh_xuunity_mcp.py",
+    REPO_ROOT / "scripts" / "testing" / "run_consumer_rollout.py",
 ]
 
 # (file name, enclosing function): subprocess.run calls that intentionally have
@@ -125,6 +126,10 @@ class SubprocessTimeoutSweepTest(unittest.TestCase):
             encoding="utf-8"
         )
         self.assertIn("CREATE_NO_WINDOW", refresh_text)
+        consumer_rollout_text = (
+            REPO_ROOT / "scripts" / "testing" / "run_consumer_rollout.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn("hidden_window_subprocess_kwargs", consumer_rollout_text)
 
 
 class HiddenWindowKwargsTest(unittest.TestCase):

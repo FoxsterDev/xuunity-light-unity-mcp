@@ -134,6 +134,12 @@ Migration note:
   and reports compile failure, error count, and diagnostics as unknown rather
   than accepting a worker's green state as main-editor truth. Bootstrap journal
   events now record writer pid, process class, and editor-log path.
+- Current source adds a fail-closed published-package consumer rollout helper.
+  It reconciles explicit and ignore-independent discovery sets before edits,
+  proves the global Unity/license/write lane, requires a passing canary before
+  fan-out, persists an atomic resumable ledger, gives bounded workers no
+  diagnosis/release/process-kill authority, re-verifies owned PID identity
+  before root cleanup, and returns compact decision evidence by default.
 - Current source closes the licensing/dialog GUI-launch retro cluster:
   repeatable `--unity-arg` pass-through, typed live-process/bridge-never-attached
   diagnostics with Editor.log evidence, first-cause `scenario_invalid` output,

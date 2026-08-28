@@ -485,6 +485,34 @@ Pass criteria:
 - compact batch rows state whether license evidence came from cache and, when
   available, its age in seconds.
 
+### 5c. Published-Package Consumer Rollout
+
+Use `scripts/testing/run_consumer_rollout.py` for a release tag that must be
+resolved and compiled across several Git package consumers managed by Unity
+Package Manager (UPM). The detailed procedure is in
+`docs/operations/CONSUMER_RELEASE_ROLLOUT.md`.
+
+Pass criteria:
+
+- explicit roots and the ignore-independent manifest discovery set reconcile
+  before any package file changes;
+- preflight proves exact Unity-version parity, global process visibility, no
+  conflicting Unity main/worker process, batch-license capability, required
+  write access, and a unique evidence directory;
+- only the canary is pinned before its published tag/hash resolves and compiles;
+- every later clean project uses that exact tag and full release commit;
+- baseline-dirty package files remain unchanged and are reported separately;
+- the atomic ledger records every project transition, command, unique log,
+  package proof, compile verdict, workspace side-effect verdict, and cleanup;
+- a timeout leaves an owned PID evidence record for root review instead of
+  letting a bounded worker kill it;
+- cleanup refuses any PID whose current process command no longer proves the
+  exact Unity main process, project root, and unique log path;
+- credential-shaped process arguments are redacted before ledger persistence,
+  and the overall deadline can stop execution before fan-out;
+- compact summary output names the canary, denominator, first unproven project,
+  artifact paths, and next action; full evidence stays behind `--output full`.
+
 ### 6. PlayMode Lifecycle Retry Smoke
 
 Use a representative direct `unity.tests.run_playmode` request while the editor
