@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+## 0.3.62
+
+Release tag: `v0.3.62`
+
+Current Git UPM install URL:
+
+```text
+https://github.com/FoxsterDev/xuunity-mcp.git?path=/packages/com.xuunity.light-mcp#v0.3.62
+```
+
+### Changed
+
+- Released `v0.3.62` package metadata, server metadata, package manifests, and Git UPM examples.
+
 ### Added
 
 - Added `scripts/testing/run_consumer_rollout.py` for safely moving several
@@ -16,6 +30,30 @@
   the current process identifier, project, and log before termination. Compact
   output is the default, overall deadlines can stop before wider updates, and
   credential-shaped process arguments are redacted before evidence is saved.
+
+### Validation
+
+- Focused rollout and timeout-contract tests pass `23/23`. The full host suite
+  passes `966/966` tests with `14` expected platform skips, and the public
+  documentation UI suite passes `42/42` browser checks.
+- Clean projects on Unity `2022.3.67f2` and `6000.0.58f2` each pass package
+  EditMode `91/91`, PlayMode `5/5`, interactive acceptance `9/9`, refresh
+  contract `2/2`, compile contract `2/2`, and batch compilation. Both editors
+  closed with no owned Unity process left for cleanup.
+- Release-version consistency, documentation freshness, and public-release
+  safety checks pass on the release tree.
+
+### Known limitations
+
+- The rollout helper proves Git package resolution and script compilation. It
+  does not replace each game's Edit Mode, Play Mode, UI, or product tests.
+- Projects with a dirty package manifest or lock at the frozen baseline are
+  skipped. One ledger covers one selected Unity version, and a licensing or
+  global-process blocker stops the run before package mutation.
+- The `Unity Package CI` continuous integration workflow remains explicitly
+  waived because the hosted runners do not have Unity license credentials.
+  Local Unity validation above covers the release, but the release commit has
+  no CI-recorded EditMode or PlayMode proof.
 
 ## 0.3.61
 

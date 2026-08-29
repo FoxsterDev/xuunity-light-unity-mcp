@@ -1,7 +1,7 @@
 # MCP Retro — Editor Launch Blockers and GUI Evidence Lanes
 
 Date: 2026-08-27
-Status: `implemented and locally Unity-validated; release pending`
+Status: `implemented, locally Unity-validated, and released in v0.3.61`
 
 ## Summary
 
@@ -56,6 +56,12 @@ EditMode `91/91` and PlayMode `5/5` on both versions; each temporary editor was
 closed with process exit verified. A Unity `2022.3.62f3` consumer also passed
 EditMode `91/91` and PlayMode `18` passed with one expected environment skip. A
 Unity `6000.0.58f2` consumer passed Android compile plus apply-gate `7/7`, GUI
-scenario `18/18`, and profile-restore `8/8` contracts. Release checks and
-release/consumer closeout remain required before this row can move to released
-history.
+scenario `18/18`, and profile-restore `8/8` contracts.
+
+Release closeout completed on 2026-08-27. The implementation shipped in
+`v0.3.61` at commit `0a310270910d35b39f8d7c3b8158be1d1936d250` after the
+required commit and tag gates passed. The non-draft, non-prerelease GitHub
+Release is the Latest release before `v0.3.62`; the public product page was
+synchronized and production canonical/indexing checks passed. Consumer pins
+were preserved because every discovered package manifest and lock was already
+dirty at the frozen baseline.
