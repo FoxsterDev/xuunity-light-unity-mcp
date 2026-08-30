@@ -18,8 +18,8 @@ Use it when a session starts from this MCP repo, or when a host repo task target
 - Public shell entrypoints: `init_xuunity_light_unity_mcp.sh`, `xuunity_light_unity_mcp.sh`, `run_installed_or_refresh_xuunity_mcp.sh`; native Windows flavors: `xuunity_light_unity_mcp.cmd`, `xuunity_light_unity_mcp.ps1`, `run_installed_or_refresh_xuunity_mcp.cmd`, `templates/run.cmd`, `templates/run.ps1`
 
 ## Mode Detection
-- Standalone mode: `../../../Agents.md` is absent or does not describe the active workspace. Use this file and local repo docs as the full routing contract.
-- Host-mounted mode: `../../../Agents.md`, `../../Modules/XUUnity/`, and optionally `../../../AIModules/XUUnityInternal/` exist. Load host routing only for parent-workspace context.
+- Standalone mode: `../../../AGENTS.md` is absent or does not describe the active workspace. Use this file and local repo docs as the full routing contract.
+- Host-mounted mode: `../../../AGENTS.md`, `../../Modules/XUUnity/`, and optionally `../../../AIModules/XUUnityInternal/` exist. Load host routing only for parent-workspace context.
 - Never require `AIFoxsterDevHub`, `AIRoot/Modules/XUUnity/`, host-local overlays, or project-local `Assets/AIOutput/` memory for normal standalone work in this public repo.
 
 ## Load Order
@@ -27,7 +27,7 @@ Use it when a session starts from this MCP repo, or when a host repo task target
 2. Root public entrypoints: `README.md`, `INSTALL.md`, `llms.txt`, `mcp-server.json`, `SECURITY.md`, `CHANGELOG.md` only when relevant
 3. Relevant MCP docs under `docs/agents/`, `docs/operations/`, `docs/reference/`, or `docs/clients/`
 4. Relevant package, script, template, or test files from this repo
-5. Host repo router at `../../../Agents.md` only when this repo is mounted under `AIFoxsterDevHub` and the task needs parent-workspace routing
+5. Host repo router at `../../../AGENTS.md` only when this repo is mounted under `AIFoxsterDevHub` and the task needs parent-workspace routing
 6. Public `xuunity` core from `../../Modules/XUUnity/` only when present and useful for Unity package behavior, validation flows, runtime safety, SDK-style integration, or review
 7. Host-local overlay from `../../../AIModules/XUUnityInternal/` only when present and the task needs host topology, nested-repo routing, or parent-workspace validation
 
@@ -49,7 +49,7 @@ this router plus the local docs as the source of truth.
 - For any task editing the Unity editor package's tick-reachable code (`Editor/Bridge`, heartbeat, request pump, transport, scenario ticks), load the editor main-thread skill: [SKILL.md](skills/editor_main_thread/SKILL.md).
 - For any release, version bump, tag creation, GitHub Actions failure, or follow-up fix after CI catches a platform-only regression, load the release CI guardrails skill: [SKILL.md](skills/release_ci_guardrails/SKILL.md).
 - MCP `.sh` entrypoints must stay maximally thin. They may resolve the script directory, choose the Python interpreter, set launcher metadata, and `exec` Python. Do not put version parsing, source-root discovery, install refresh, process management, project traversal, JSON editing, or retry policy in bash; move that behavior into Python and cover it with tests.
-- For client setup tasks, load `docs/clients/Agents.md` when it exists, then the requested client guide.
+- For client setup tasks, load `docs/clients/AGENTS.md` when it exists, then the requested client guide.
 - For AI integration or workflow tasks, load `docs/agents/AI_INTEGRATION.md` or `docs/agents/AGENT_WORKFLOWS.md` as appropriate.
 - For Unity package implementation, edit `packages/com.xuunity.light-mcp/` and validate through the repo's test or smoke guidance.
 - For installer, wrapper, setup-plan/setup-apply, or uninstall-plan/uninstall-apply behavior, work in `scripts/`, `templates/`, and the root shell entrypoints.

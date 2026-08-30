@@ -157,7 +157,7 @@ transport.
 
 - The MCP server is per-project: each tool call must pass `--project-root` to
   the target Unity project (the server does not assume one).
-- The repo router (`Agents.md`) requires validation to go through MCP for
+- The repo router (`AGENTS.md`) requires validation to go through MCP for
   Unity-aware lanes; do not fall back to direct `unity -batchmode` /
   `-runTests` from a shell tool just because Unity is installed locally. If your
   host repo defines local validation-boundary guidance, follow that guidance.

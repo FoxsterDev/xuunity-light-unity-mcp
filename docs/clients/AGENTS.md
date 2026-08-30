@@ -6,7 +6,7 @@ Use this file when a session starts in `docs/clients/` or a parent task targets 
 specific MCP client guide.
 
 ## Load Order
-1. MCP project router at `../../Agents.md`
+1. MCP project router at `../../AGENTS.md`
 2. Relevant agent integration guidance from `../agents/`
 3. The requested client guide in this folder
 4. Matching client template under `../../templates/clients/` when the guide and template must stay aligned
