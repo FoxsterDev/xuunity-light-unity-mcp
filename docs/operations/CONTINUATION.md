@@ -331,12 +331,13 @@ Mini-playbook after `devmode` with an already-open editor:
 
 PlayMode churn note:
 
-- stale persisted and in-memory test ownership can now be released after
-  `request_abandoned` and `request_reclassified`, but the safer operator rule is
-  still:
-  - recover the last request by `request_id`
-  - inspect `result_trust_class`
-  - only then decide whether one bounded retry is warranted
+- `request_abandoned` is intermediate lifecycle evidence, not the terminal
+  owner when the same request later has `request_completed`
+- a passed PlayMode result followed by a fresh, healthy post-reload bridge in
+  Edit Mode with zero compiler errors is returned as
+  `confirmed_success_after_lifecycle_churn` with `retry_required=false`
+- use `request-final-status` only when that bounded confirmation is absent;
+  never retry solely because an earlier raw journal event says abandoned
 
 Mini-playbook for closeout mismatch:
 

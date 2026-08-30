@@ -124,14 +124,14 @@ Use this contract when the user gives a short request such as:
 > path.
 
 ```text
-Set up XUUnity Light Unity MCP release v0.3.62 from the canonical repository
+Set up XUUnity Light Unity MCP release v0.3.63 from the canonical repository
 https://github.com/FoxsterDev/xuunity-mcp for /path/to/UnityProject, follow
-https://github.com/FoxsterDev/xuunity-mcp/blob/v0.3.62/README.md. Before executing
-an existing helper, compare its version and .source_root with v0.3.62 and refresh
+https://github.com/FoxsterDev/xuunity-mcp/blob/v0.3.63/README.md. Before executing
+an existing helper, compare its version and .source_root with v0.3.63 and refresh
 stale files from that release. On native Windows, migrate only the XUUnity client
 block to cmd.exe plus run_installed_or_refresh_xuunity_mcp.cmd. After any helper
 or client-config change, restart or refresh the client, list the live MCP tools,
-and run unity_status_summary. Require mcp_server_info.version=0.3.62 in that live
+and run unity_status_summary. Require mcp_server_info.version=0.3.63 in that live
 result. Only then run EditMode tests.
 ```
 
@@ -153,7 +153,7 @@ Agent defaults:
 ### Required Sequence
 
 1. Read the release-pinned
-   `https://github.com/FoxsterDev/xuunity-mcp/blob/v0.3.62/README.md`, its
+   `https://github.com/FoxsterDev/xuunity-mcp/blob/v0.3.63/README.md`, its
    `INSTALL.md`, and the matching `docs/clients/*` guide for the current host
    client.
 2. Run a non-mutating preflight:
@@ -193,7 +193,7 @@ Agent defaults:
 9. After any helper or client-config change, restart or refresh the client,
    confirm that `xuunity_light_unity` appears in its MCP server list, list the
    live MCP tools, and run `unity_status_summary`; require
-   `mcp_server_info.version=0.3.62`. Helper-only validation does
+   `mcp_server_info.version=0.3.63`. Helper-only validation does
    not prove that the current MCP client session is connected.
 10. When the user requested tests, run EditMode tests only after the live status
     summary is healthy.
@@ -235,14 +235,14 @@ Preflight review
 - Unity project root: <approved project root>
 - Additional discovered Unity projects: <none or list>
 - Existing helper directory: <present | missing>
-- Requested package release: <v0.3.62>
+- Requested package release: <v0.3.63>
 - Current package pin: <missing | current | stale | custom>
 - Helper state: <current | refresh required | missing> (<installed version and source root>)
 - Client launcher: <native/current | migration required>
 - Planned project file changes: <manifest, bridge config, lockfile, none>
 - Planned user-level config changes: <exact file paths or none>
 - Restart or refresh required after mutation: <yes/no and which client>
-- Required live proof after restart: <server listed, tools listed, unity_status_summary healthy with mcp_server_info.version=0.3.62>
+- Required live proof after restart: <server listed, tools listed, unity_status_summary healthy with mcp_server_info.version=0.3.63>
 - Planned commands after approval: <setup-apply, validate-setup, ensure-ready, request-status-summary, unity_status_summary after reload, ...>
 
 Do not run setup-apply, installer commands, helper sync, or client config edits
@@ -443,8 +443,8 @@ first requested MCP operation after setup.
 
 Inputs:
 - Canonical source repository: https://github.com/FoxsterDev/xuunity-mcp
-- Required release: v0.3.62
-- Release README: https://github.com/FoxsterDev/xuunity-mcp/blob/v0.3.62/README.md
+- Required release: v0.3.63
+- Release README: https://github.com/FoxsterDev/xuunity-mcp/blob/v0.3.63/README.md
 - Unity project root: <absolute path to the Unity project>
 - Workspace root: <absolute path to workspace; may equal the project root>
 - First operation after setup: <optional, for example EditMode tests, health check, compile, or none>
@@ -463,8 +463,8 @@ Rules:
 - Install the required tagged Git UPM release unless the user explicitly
   requests local package development.
 - Reuse an existing helper install directory only after checking its installed
-  version, `.source_root`, and refresh launcher against v0.3.62. Do not execute
-  stale helper files; refresh them from the approved v0.3.62 source first.
+  version, `.source_root`, and refresh launcher against v0.3.63. Do not execute
+  stale helper files; refresh them from the approved v0.3.63 source first.
 - Preserve existing config. Merge the `xuunity_light_unity` server block; do
   not overwrite unrelated MCP servers, editor settings, or package entries. On
   native Windows, replace only an existing XUUnity `bash`/`run.sh` block with
@@ -483,7 +483,7 @@ Required procedure:
    topology, current package pin, installed helper version/source, and client
    launcher flavor.
 2. Use the canonical source repository
-   https://github.com/FoxsterDev/xuunity-mcp. If its v0.3.62 source is missing
+   https://github.com/FoxsterDev/xuunity-mcp. If its v0.3.63 source is missing
    locally, ask before cloning it outside the Unity Assets folder and treat it
    as <MCP_REPO_ROOT>.
 3. Produce a non-mutating setup plan from <MCP_REPO_ROOT>. `setup-plan` must
@@ -498,7 +498,7 @@ Required procedure:
    - intended wiring target
    - requested Unity project root
    - additional discovered Unity projects
-   - requested v0.3.62 package release and current manifest pin
+   - requested v0.3.63 package release and current manifest pin
    - installed helper version/source and whether refresh is required
    - current client launcher and whether native Windows migration is required
    - files that will change, including user-level config
@@ -508,11 +508,11 @@ Required procedure:
    wiring, setup-apply, manifest edits, lockfile edits, or user-level config
    changes.
 6. After approval, refresh the host helper whenever its version/source does not
-   match v0.3.62. Reuse the install directory, not stale files:
+   match v0.3.63. Reuse the install directory, not stale files:
    - POSIX: `bash init_xuunity_light_unity_mcp.sh`
    - native Windows Codex: set
      `XUUNITY_LIGHT_UNITY_MCP_INSTALL_TARGET=codex`, then run
-     `.\xuunity_light_unity_mcp.cmd server-help` from the v0.3.62 source
+     `.\xuunity_light_unity_mcp.cmd server-help` from the v0.3.63 source
 7. Apply the approved plan only to the approved Unity project roots:
    bash xuunity_light_unity_mcp.sh setup-apply --plan-file /tmp/xuunity-setup-plan.json --project-root "<UNITY_PROJECT_ROOT>" --yes
 8. Wire the selected client using templates/clients/ or the matching
@@ -557,7 +557,7 @@ In Unity: `Window > Package Manager > + > Add package from git URL...`
 > Tip
 >
 > ```text
-> https://github.com/FoxsterDev/xuunity-mcp.git?path=/packages/com.xuunity.light-mcp#v0.3.62
+> https://github.com/FoxsterDev/xuunity-mcp.git?path=/packages/com.xuunity.light-mcp#v0.3.63
 > ```
 
 Or add it directly to `Packages/manifest.json`:
@@ -565,7 +565,7 @@ Or add it directly to `Packages/manifest.json`:
 ```json
 {
   "dependencies": {
-    "com.xuunity.light-mcp": "https://github.com/FoxsterDev/xuunity-mcp.git?path=/packages/com.xuunity.light-mcp#v0.3.62"
+    "com.xuunity.light-mcp": "https://github.com/FoxsterDev/xuunity-mcp.git?path=/packages/com.xuunity.light-mcp#v0.3.63"
   }
 }
 ```
@@ -592,8 +592,8 @@ delegates to the installed low-level `run.sh` or `run.cmd` launcher.
 
 This refresh is source-relative, not an update-to-latest service. If
 `.source_root` still points at an older checkout, the old helper can consider
-itself current. Before executing an existing helper for a v0.3.62 setup, compare
-its installed version and `.source_root` with the approved v0.3.62 source and
+itself current. Before executing an existing helper for a v0.3.63 setup, compare
+its installed version and `.source_root` with the approved v0.3.63 source and
 refresh it from that source when they differ.
 
 ### 2. Install The Host MCP Helper
@@ -823,8 +823,35 @@ Host helper commands include `setup-plan`, `setup-apply`, `uninstall-plan`,
 `project-hook-scaffold`, `request-scene-open`, `request-console-grep`,
 `request-loading-timing`, `artifact-register`,
 `artifact-write-report`, `artifact-probe`, `devmode`, and `prodmode`.
+`diagnostic-retro-bundle` emits a bounded, sanitized, read-only snapshot of the
+project version, package alignment, licensing admission, editor ownership,
+terminal request lifecycle, restore ownership, and relevant log excerpts.
 
-`open-editor` and `ensure-ready --open-editor` accept repeatable
+For local PlayMode, start with the project-owned Unity version and the licensed
+GUI bridge:
+
+```bash
+bash xuunity_light_unity_mcp.sh license-capabilities \
+  --project-root /path/to/UnityProject --refresh
+bash xuunity_light_unity_mcp.sh ensure-ready \
+  --project-root /path/to/UnityProject --open-editor
+bash xuunity_light_unity_mcp.sh request-playmode-tests \
+  --project-root /path/to/UnityProject
+bash xuunity_light_unity_mcp.sh restore-editor-state \
+  --project-root /path/to/UnityProject
+```
+
+`ProjectSettings/ProjectVersion.txt` is authoritative. The helper refuses an
+explicit `--unity-app` whose resolved version differs, before Unity can upgrade
+or otherwise mutate `Library`. Closed-project batch PlayMode is not the local
+default; use it only in a separately proven headless/CI lane.
+
+`open-editor` and `ensure-ready --open-editor` automatically inspect the live
+host process table for a Unity Hub-owned licensing client. Exactly one live,
+parent-verified dynamic channel is forwarded to Unity automatically. Zero
+candidates produces typed user guidance when licensing blocks startup; multiple
+candidates are refused rather than guessed. Raw channel values are redacted
+from launch/session summaries. The commands also accept repeatable
 `--unity-arg` values when a project needs extra Unity startup arguments. Keep
 each argument boundary explicit; for an option beginning with `-`, use the
 `--unity-arg=-option` form:
@@ -837,7 +864,9 @@ bash xuunity_light_unity_mcp.sh ensure-ready \
   --unity-arg LicenseClient-session
 ```
 
-The launch result records `unity_args` and `licensing_ipc_channel`. If the
+The launch result records redacted `unity_args`, `licensing_ipc_channel`, and a
+structured `licensing_ipc_resolution` with candidate count, source, confidence,
+validation result, and user-action classification. If the
 editor process starts but the bridge never attaches, readiness now reports the
 editor PID, Editor.log path and idle time, plus the last matched licensing or
 startup-dialog line. A later successful licensing handshake or entitlement
@@ -859,6 +888,13 @@ templates/smoke/run_package_self_tests.sh \
 Use `--json-only` on any host helper subcommand when a
 script needs stdout to contain only the final JSON result; progress remains in
 the journal and is not printed.
+
+Use wrapper-level `--compact-summary` when an operator needs only the terminal
+decision. It emits one JSON envelope of at most 8192 bytes and suppresses the
+nested full payload and child stderr. The envelope preserves the verdict,
+counts, request identity, trust/retry decision, first failure, closeout state,
+licensing resolution, artifact pointers, and next action. Rerun without
+`--compact-summary` (or use the command's full-payload option) for full evidence.
 
 Scenario JSON may use Unity-native `project_action` steps for catalog-backed
 project actions. Unity resolves `project_actions.yaml`, enforces mutation
@@ -1019,6 +1055,10 @@ Troubleshooting:
   stayed in Unity batchmode.
   Use `--batch-fallback-mode require-batch` when a CI or release lane must fail
   unless real Unity batchmode is proven.
+  `licensing_handoff_classification=machine_recoverable_with_hub_session`
+  means the helper can forward a single verified Hub channel itself.
+  `manual_user_action_required` and `terms_or_activation_ui_required` are
+  distinct typed outcomes; neither should be treated as a package failure.
   Use `--output compact` when an operator only needs the batch decision summary
   and artifact pointers; the default `--output full` keeps the legacy command
   vector and nested payload for deep debugging.

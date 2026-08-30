@@ -231,6 +231,26 @@ def batch_lane_preflight_blocker_data(
             details,
         )
     if mode == "auto" and batchmode_supported is False:
+        if bool(license_capabilities.get("manual_user_action_required")):
+            details = {
+                "requested_execution_lane": "batch",
+                "effective_execution_lane": "none",
+                "batch_fallback_mode": mode,
+                "license_batchmode_supported": False,
+                "license_blocker_code": str(license_capabilities.get("batchmode_blocker_code") or ""),
+                "licensing_handoff_classification": str(
+                    license_capabilities.get("licensing_handoff_classification") or "manual_user_action_required"
+                ),
+                "licensing_ipc_resolution": dict(license_capabilities.get("licensing_ipc_resolution") or {}),
+                "license_capabilities": license_capabilities,
+                "recommended_next_action": "complete_unity_hub_or_activation_action",
+                "next_distinct_action": "resolve_license_user_action_then_retry",
+            }
+            raise ToolInvocationError(
+                "manual_user_action_required",
+                "Unity batchmode is blocked and the GUI admission preflight requires a user-owned Hub or activation action.",
+                details,
+            )
         if license_capabilities.get("editor_ui_supported") is False:
             details = {
                 "requested_execution_lane": "batch",

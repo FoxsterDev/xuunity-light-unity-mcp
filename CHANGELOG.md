@@ -2,6 +2,62 @@
 
 ## Unreleased
 
+## 0.3.63
+
+Release tag: `v0.3.63`
+
+Current Git UPM install URL:
+
+```text
+https://github.com/FoxsterDev/xuunity-mcp.git?path=/packages/com.xuunity.light-mcp#v0.3.63
+```
+
+### Changed
+
+- Released `v0.3.63` package metadata, server metadata, package manifests, and Git UPM examples.
+
+### Fixed
+
+- Added fail-closed, cross-platform Unity Hub licensing IPC discovery for GUI
+  admission. One live Hub-owned candidate is forwarded automatically; zero or
+  multiple candidates produce typed outcomes, and raw channels are redacted.
+- Explicit Unity applications must now match `ProjectVersion.txt`, preventing a
+  wrong-version launch from mutating `Library` outside an explicit matrix.
+- Wrapper `--compact-summary` now emits one bounded JSON envelope instead of a
+  full nested payload followed by a footer.
+- Successful PlayMode requests that complete after domain reload now use the
+  fresh bridge state to confirm Edit Mode and clean compilation, producing one
+  `confirmed_success_after_lifecycle_churn` verdict with retry disabled.
+- Host session cleanup tracks and revalidates only licensing clients spawned by
+  the helper-owned editor and never claims the shared Hub client.
+
+### Added
+
+- Added `diagnostic-retro-bundle`, a bounded, sanitized, read-only licensing,
+  readiness, request-lifecycle, test, and restore diagnostic.
+
+### Validation
+
+- A live macOS launch smoke on Unity `2022.3.62f3` passed automatic Unity Hub
+  licensing IPC discovery without an explicit licensing argument. The editor
+  reached a healthy bridge in Edit Mode with clean compilation, and the
+  restore flow verified exact editor exit without terminating the shared Hub
+  licensing client.
+- The full host suite passes `979/979` tests with `14` expected platform skips,
+  and the public documentation UI suite passes `42/42` browser checks.
+- Release-version consistency, documentation freshness, and public-release
+  safety checks pass on the release tree.
+
+### Known limitations
+
+- Live automatic Hub licensing handoff was exercised on macOS. Windows and
+  Linux Hub process and endpoint shapes are covered by host fixtures, not by a
+  live editor launch in this release cycle.
+- The `Unity Package CI` continuous integration workflow remains explicitly
+  waived because the hosted runners do not have Unity license credentials.
+  Local validation covers the release, but the release commit has no
+  CI-recorded EditMode or PlayMode proof.
+
 ## 0.3.62
 
 Release tag: `v0.3.62`

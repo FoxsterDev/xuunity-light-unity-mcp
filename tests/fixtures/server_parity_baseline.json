@@ -131,7 +131,7 @@
       "request-scenario-run-and-wait",
       "batch-compile"
     ],
-    "root_command_count": 76,
+    "root_command_count": 77,
     "root_commands": [
       "setup-plan",
       "setup-apply",
@@ -197,6 +197,7 @@
       "recover-editor-session",
       "runtime-config-show",
       "project-discovery-report",
+      "diagnostic-retro-bundle",
       "registry-context-report",
       "registry-prune-contexts",
       "batch-compile",

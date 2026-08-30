@@ -731,6 +731,13 @@ def build_parser() -> argparse.ArgumentParser:
     discovery_report_cmd.add_argument("--project-root", required=True)
     discovery_report_cmd.set_defaults(func_name="cmd_project_discovery_report")
 
+    diagnostic_retro_cmd = sub.add_parser(
+        "diagnostic-retro-bundle",
+        help="Emit a bounded, sanitized, read-only licensing/readiness/request lifecycle diagnostic bundle.",
+    )
+    diagnostic_retro_cmd.add_argument("--project-root", required=True)
+    diagnostic_retro_cmd.set_defaults(func_name="cmd_diagnostic_retro_bundle")
+
     registry_report_cmd = sub.add_parser(
         "registry-context-report",
         help="Print the current in-memory per-project registry context cache report.",

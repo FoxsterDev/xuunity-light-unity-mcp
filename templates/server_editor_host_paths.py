@@ -34,6 +34,7 @@ from server_host_platform import (
     wsl_to_windows_path,
 )
 from server_specs import STARTUP_POLICIES
+from server_hub_licensing import discover_owned_licensing_children, sanitize_unity_args
 
 ACTIVATION_DELAY_SECONDS = 0.35
 UNITY_EDITOR_ROOTS_ENV = "XUUNITY_UNITY_EDITOR_ROOTS"
@@ -52,7 +53,7 @@ def build_host_editor_session_state(
     editor_pid: int = 0,
     unity_args: list[str] | None = None,
 ) -> dict[str, Any]:
-    normalized_unity_args = [str(value) for value in (unity_args or [])]
+    normalized_unity_args = sanitize_unity_args([str(value) for value in (unity_args or [])])
     licensing_ipc_channel = ""
     for index, value in enumerate(normalized_unity_args[:-1]):
         if value.lower() == "-licensingipc":
@@ -92,6 +93,10 @@ def update_host_editor_session_pid(project_root: Path, editor_pid: int) -> None:
 
     normalized = dict(state)
     normalized["editor_pid"] = max(0, int(editor_pid or 0))
+    normalized["owned_licensing_children"] = discover_owned_licensing_children(
+        baseline_pids=list(normalized.get("licensing_client_pids_before_launch") or []),
+        editor_pid=normalized["editor_pid"],
+    )
     write_host_editor_session_state(project_root, normalized)
 
 
@@ -136,7 +141,24 @@ def read_project_unity_version(project_root: Path) -> str | None:
 
 def detect_unity_app_path_for_project(project_root: Path, explicit_path: str | None) -> Path:
     if explicit_path:
-        return detect_unity_app_path(explicit_path)
+        resolved = detect_unity_app_path(explicit_path)
+        project_version = read_project_unity_version(project_root)
+        explicit_version = resolve_unity_app_version(resolved)
+        if project_version and explicit_version and explicit_version != project_version:
+            raise ToolInvocationError(
+                "unity_version_mismatch",
+                (
+                    f"The project requires Unity {project_version} (ProjectSettings/ProjectVersion.txt), but "
+                    f"the explicit Unity application is {explicit_version}. Refusing before Unity can mutate Library."
+                ),
+                details={
+                    "project_unity_version": project_version,
+                    "explicit_unity_version": explicit_version,
+                    "explicit_unity_app_refused": True,
+                    "recommended_next_action": "select_the_project_declared_unity_version",
+                },
+            )
+        return resolved
 
     project_version = read_project_unity_version(project_root)
     if project_version:

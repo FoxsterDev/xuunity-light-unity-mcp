@@ -1,7 +1,7 @@
 # Features
 
 Date: `2026-07-06`
-Status: `current for v0.3.62`
+Status: `current for v0.3.63`
 
 XUUnity Light Unity MCP is optimized for validation-first Unity Editor
 automation: status, compile, tests, scene checks, Game View evidence, scenario
@@ -123,12 +123,13 @@ Unity MCP implementations when the user wants safe production validation.
 | Setup | `uninstall-apply` | `Host helper` | Applies an approved uninstall plan; removes only planned project state, selected MCP config block, and selected helper install. |
 | Setup | `validate-setup` | `Host helper` | Reports core readiness and optional Test Framework capability state. |
 | Setup | `install-test-framework` | `Host helper` | Installs the optional Test Framework dependency in `Packages/manifest.json` after explicit approval; prefer before opening Unity so package resolution happens on startup. |
-| License capabilities | `license-capabilities` | `Host helper` | Reports `batchmode_supported`, `editor_ui_supported`, blocker code, probe log path, and recommended execution lane. |
+| License capabilities | `license-capabilities` | `Host helper` | Reports batch/UI capability, blocker code, recommended lane, and redacted Hub IPC resolution with typed machine-recoverable versus user-action admission. |
+| Diagnostic bundle | `diagnostic-retro-bundle` | `Host helper` | Emits a bounded, sanitized, read-only project-version/package/license/editor/request/test/restore bundle without raw process commands or licensing channels. |
 | Discovery | `project-discovery-report` | `Host helper` | Explains bridge, editor, package, and stale-artifact state for one project. |
 | Registry | `registry-context-report` | `Host helper` | Reports same-host project context cache state. |
 | Registry | `registry-prune-contexts` | `Host helper` | Prunes stale same-host project context entries. |
-| Readiness | `open-editor` | `Host helper` | Opens a Unity project through the host helper; repeatable `--unity-arg` values preserve extra Unity startup arguments and the launch result records the effective list. |
-| Readiness | `ensure-ready` | `Host helper` | Opens or recovers Unity until the bridge is ready; an editor process that never attaches the bridge returns typed PID/log-idle/startup-blocker evidence. |
+| Readiness | `open-editor` | `Host helper` | Resolves the project-owned Unity version, auto-forwards exactly one verified Hub licensing channel, and returns redacted launch provenance; repeatable explicit `--unity-arg` values remain supported. |
+| Readiness | `ensure-ready` | `Host helper` | Opens or recovers Unity until the bridge is ready; wrong versions, Hub-channel ambiguity, user-action licensing, and bridge startup blockers have distinct typed outcomes. |
 | Recovery | `verify-editor-closed` | `Host helper` | Verifies `same_project_editor_closed=true` before closed-project batch lanes. |
 | Recovery | `request-editor-quit --wait-for-exit` | `Host helper` | Separates quit acknowledgement from process-exit proof; optional `--force-after-ms` performs one identity-reverified same-project termination and remains off by default. |
 | Recovery | `restore-editor-state` | `Host helper` | Restores host-opened editor session state. |
@@ -158,8 +159,8 @@ Unity MCP implementations when the user wants safe production validation.
 
 | Target | Status | Validation notes |
 | --- | --- | --- |
-| Current package path | `Validated` | Production Git UPM path is `packages/com.xuunity.light-mcp#v0.3.62`; old `templates/unity-package#v0.3.11` is migration-only. |
-| macOS host tools | `Validated in this release environment` | Host Python unittest suite passed for `v0.3.62`: `966` tests with `14` expected platform skips. |
+| Current package path | `Validated` | Production Git UPM path is `packages/com.xuunity.light-mcp#v0.3.63`; old `templates/unity-package#v0.3.11` is migration-only. |
+| macOS host tools | `Validated in this release environment` | Host Python unittest suite passed for `v0.3.63`: `966` tests with `14` expected platform skips. |
 | Linux host tools | `Portable path provided` | Unix launcher is bash-compatible and avoids zsh-only expansion; Linux host execution should still be smoke-tested on a Linux Unity workstation. |
 | Native Windows clients | `Template provided` | Windows JSON/TOML configs, `run.cmd`, and `run.ps1` are included and syntax/config files are statically validated; native Windows MCP connection still needs host smoke validation. |
 | Claude Code | `Template provided` | Project `.mcp.json`, Windows `.mcp.windows.json`, and user-scope installer path are documented. |

@@ -332,9 +332,22 @@ def list_process_commands_report() -> dict[str, Any]:
             continue
         if pid > 0 and command:
             normalized_commands.append((pid, command))
+    normalized_processes: list[dict[str, Any]] = []
+    for entry in (report.get("processes") if isinstance(report, dict) else []) or []:
+        if not isinstance(entry, dict):
+            continue
+        try:
+            pid = int(entry.get("pid") or 0)
+            ppid = int(entry.get("ppid") or 0)
+        except (TypeError, ValueError):
+            continue
+        command = str(entry.get("command") or "").strip()
+        if pid > 0 and command:
+            normalized_processes.append({"pid": pid, "ppid": max(0, ppid), "command": command})
     return {
         "available": bool(report.get("available")) if isinstance(report, dict) else False,
         "commands": normalized_commands,
+        "processes": normalized_processes,
         "error_code": str(report.get("error_code") or "") if isinstance(report, dict) else "process_listing_failed",
         "stderr": _truncate_host_process_text(report.get("stderr") if isinstance(report, dict) else ""),
         "platform_kind": str(report.get("platform_kind") or host_platform_kind()) if isinstance(report, dict) else host_platform_kind(),

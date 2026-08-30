@@ -152,7 +152,7 @@ When using batch-mode operations (tests, compilation) through xuunity_light_unit
 
 ### Multi-Project Workspaces
 
-For workspaces with multiple Unity projects (like AIFoxsterDevHub):
+For workspaces with multiple Unity projects (for example, a monorepo):
 
 1. The setup wizard can discover all Unity projects in the workspace
 2. Review the plan before mutation

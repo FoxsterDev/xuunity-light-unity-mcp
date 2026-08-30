@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import hashlib
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -47,6 +48,8 @@ sys.path.insert(0, str(_LAUNCHER_DIR))
 
 import server_setup_wizard
 from server_core import hidden_window_subprocess_kwargs, reconfigure_stdio_utf8
+
+COMPACT_OUTPUT_MAX_BYTES = 8192
 
 
 def fail(message: str, exit_code: int = 1) -> "SystemExit":
@@ -190,188 +193,245 @@ def require_package_source_root(source_root: str) -> None:
     raise SystemExit(1)
 
 
-def emit_compact_summary_from_payload_text(payload_text: str, exit_code: int) -> None:
-    try:
-        payload = json.loads(payload_text)
-    except Exception:
-        return
-    if not isinstance(payload, dict):
-        return
-
-    def line(*parts) -> None:
-        sys.stderr.write("[xuunity-mcp] compact " + " ".join(str(p) for p in parts if str(p)) + "\n")
-
-    if str(payload.get("reason") or "") == "assistive_access_not_granted":
-        line(
-            "outcome=window_arrangement",
-            "reason=assistive_access_not_granted",
-            "remediation=grant_accessibility_permission_then_rerun",
-        )
-        return
-
-    error = payload.get("error") if isinstance(payload.get("error"), dict) else {}
-    error_code = str(error.get("code") or "")
-    if exit_code != 0 or error_code:
-        parts = ["outcome=error", f"exit_code={exit_code}", f"code={error_code}"]
-        details = error.get("details") if isinstance(error.get("details"), dict) else {}
-        if payload.get("request_id"):
-            parts.append(f"request_id={payload.get('request_id')}")
-        next_action = payload.get("recommended_next_action") or error.get("recommended_next_action")
-        if next_action:
-            parts.append(f"next={next_action}")
-        for key in (
-            "process_visibility_error_code",
-            "same_project_editor_closed",
-            "process_exit_verified",
-            "closeout_classification",
+def _extract_last_json_object(payload_text: str) -> dict:
+    decoder = json.JSONDecoder()
+    last: dict = {}
+    last_end = -1
+    last_start = -1
+    text = str(payload_text or "")
+    for index, character in enumerate(text):
+        if character != "{":
+            continue
+        try:
+            value, consumed = decoder.raw_decode(text[index:])
+        except json.JSONDecodeError:
+            continue
+        absolute_end = index + consumed
+        if isinstance(value, dict) and (
+            absolute_end > last_end or (absolute_end == last_end and (last_start < 0 or index < last_start))
         ):
-            value = payload.get(key)
-            if value is None:
-                value = details.get(key)
-            if value is not None and value != "":
-                if isinstance(value, bool):
-                    value = str(value).lower()
-                parts.append(f"{key}={value}")
-        line(*parts)
-        return
+            last = value
+            last_end = absolute_end
+            last_start = index
+    return last
 
-    if payload.get("action") == "unity_status_summary" or "health_status" in payload:
-        line(
-            "outcome=status",
-            f"health={payload.get('health_status', '')}",
-            f"editor_running={str(bool(payload.get('editor_running'))).lower()}",
-            f"mcp_reachable={str(bool(payload.get('mcp_reachable'))).lower()}",
-            f"pending={int(payload.get('pending_request_count') or 0)}",
-            f"busy_reason={payload.get('busy_reason', '')}",
-            f"playmode={payload.get('playmode_state', '')}",
-        )
-        return
 
-    if payload.get("action") == "unity_scenario_result_summary":
-        parts = [
-            "outcome=scenario",
-            f"scenario={payload.get('scenario_name', '')}",
-            f"status={payload.get('status', '')}",
-            f"terminal={str(bool(payload.get('terminal'))).lower()}",
-            f"passed_steps={int(payload.get('passed_steps') or 0)}",
-            f"failed_steps={int(payload.get('failed_steps') or 0)}",
-            f"skipped_steps={int(payload.get('skipped_steps') or 0)}",
-        ]
-        failed = payload.get("first_failed_step") if isinstance(payload.get("first_failed_step"), dict) else {}
-        if failed:
-            parts.append(f"first_failed={failed.get('step_id', '')}:{failed.get('error_code', '')}")
-        profile = (
-            payload.get("profile_mutation_summary")
-            if isinstance(payload.get("profile_mutation_summary"), dict)
-            else {}
-        )
-        if profile:
-            parts.append(
-                f"profile_restore_required={str(bool(profile.get('profile_restore_required'))).lower()}"
-            )
-        line(*parts)
-        return
+def _artifact_pointers(payload: dict) -> dict:
+    pointers: dict[str, str] = {}
+    allowed = {
+        "result_path",
+        "result_file",
+        "summary_file",
+        "editor_log_path",
+        "batchmode_probe_log_path",
+        "journal_event_path",
+        "test_result_path",
+        "cache_path",
+    }
 
-    if payload.get("action") == "unity_project_action_invoke":
-        parts = [
-            "outcome=project_action",
-            f"action_id={payload.get('action_id', '')}",
-            f"hook={payload.get('hook_name', '')}",
-            f"status={payload.get('status', '')}",
-            f"succeeded={str(bool(payload.get('succeeded'))).lower()}",
-            f"mutating={str(bool(payload.get('mutation'))).lower()}",
-        ]
-        if payload.get("result_path"):
-            parts.append(f"result_path={payload.get('result_path')}")
-        line(*parts)
-        return
+    def visit(value, depth: int = 0) -> None:
+        if depth > 3 or len(pointers) >= 8:
+            return
+        if isinstance(value, dict):
+            for key, nested in value.items():
+                if key in allowed and isinstance(nested, str) and nested:
+                    pointers.setdefault(key, nested)
+                elif isinstance(nested, (dict, list)):
+                    visit(nested, depth + 1)
+        elif isinstance(value, list):
+            for nested in value[:8]:
+                visit(nested, depth + 1)
 
-    if payload.get("action") == "unity_loading_timing_summary":
-        parts = [
-            "outcome=loading_timing",
-            f"succeeded={str(bool(payload.get('succeeded'))).lower()}",
-            f"matches={int(payload.get('match_count') or 0)}",
-            f"returned={int(payload.get('returned_count') or 0)}",
-            f"timing_values={int(payload.get('timing_value_count') or 0)}",
-            f"truncated={str(bool(payload.get('truncated'))).lower()}",
-        ]
-        if payload.get("marker_count"):
-            parts.append(f"markers={int(payload.get('marker_count') or 0)}")
-        if payload.get("first_timestamp"):
-            parts.append(f"first={payload.get('first_timestamp')}")
-        if payload.get("last_timestamp"):
-            parts.append(f"last={payload.get('last_timestamp')}")
-        line(*parts)
-        return
+    visit(payload)
+    return pointers
 
-    if isinstance(payload.get("result_summary"), dict):
-        summary = payload.get("result_summary") or {}
-        matrix = summary.get("matrix") if isinstance(summary.get("matrix"), dict) else {}
-        parts = [
-            "outcome=batch",
-            f"action={payload.get('action', '')}",
-            f"succeeded={str(bool(payload.get('succeeded'))).lower()}",
-            f"requested_lane={summary.get('requested_execution_lane', '')}",
-            f"effective_lane={summary.get('effective_execution_lane', '')}",
-            f"unity={summary.get('unity_outcome', '')}",
-            f"transport={summary.get('transport_outcome', '')}",
-        ]
+
+def build_compact_terminal_envelope(payload: dict, exit_code: int, stderr_text: str = "") -> dict:
+    error = payload.get("error") if isinstance(payload.get("error"), dict) else {}
+    details = error.get("details") if isinstance(error.get("details"), dict) else {}
+    envelope: dict = {
+        "payload_mode": "compact_terminal_envelope",
+        "exit_code": int(exit_code),
+        "outcome": "error" if exit_code != 0 or error else "ok",
+        "action": str(payload.get("action") or ""),
+        "request_id": str(payload.get("request_id") or ""),
+    }
+    for key in (
+        "status",
+        "verdict",
+        "succeeded",
+        "health_status",
+        "operation_outcome",
+        "result_trust_class",
+        "terminal_disposition",
+        "terminal_lifecycle_disposition",
+        "test_verdict",
+        "total",
+        "passed",
+        "failed",
+        "skipped",
+        "retryable",
+        "retry_required",
+        "recommended_next_action",
+        "closeout_classification",
+        "closeout_verified",
+        "process_exit_verified",
+        "same_project_editor_closed",
+        "recommended_execution_lane",
+        "batchmode_supported",
+        "editor_ui_supported",
+        "batchmode_blocker_code",
+        "licensing_handoff_classification",
+        "manual_user_action_required",
+        "post_lifecycle_status_confirmation",
+    ):
+        value = payload.get(key)
+        if value is not None and value != "":
+            envelope[key] = value
+
+    for key in (
+        "closeout_classification",
+        "closeout_verified",
+        "process_exit_verified",
+        "same_project_editor_closed",
+        "recommended_next_action",
+        "result_trust_class",
+        "operation_outcome",
+        "retryable",
+    ):
+        if key not in envelope and details.get(key) is not None and details.get(key) != "":
+            envelope[key] = details.get(key)
+
+    payload_type = str(payload.get("payload_type") or "")
+    decoded_payload: dict = {}
+    if isinstance(payload.get("payload_json"), str):
+        try:
+            decoded = json.loads(payload.get("payload_json") or "{}")
+            if isinstance(decoded, dict):
+                decoded_payload = decoded
+        except json.JSONDecodeError:
+            decoded_payload = {}
+    if payload_type:
+        envelope["payload_type"] = payload_type
+    if payload_type.startswith("unity.tests."):
+        envelope["test_verdict"] = str(decoded_payload.get("status") or "")
+        for key in ("total", "passed", "failed", "skipped"):
+            envelope[key] = int(decoded_payload.get(key) or 0)
+        failures = decoded_payload.get("failures")
+        if isinstance(failures, list) and failures:
+            envelope["first_failure"] = failures[0]
+    elif payload_type == "unity.compile.matrix":
+        envelope["matrix_status"] = str(decoded_payload.get("status") or "")
+        for key in ("total", "passed", "failed"):
+            envelope[key] = int(decoded_payload.get(key) or 0)
+
+    result_summary = payload.get("result_summary") if isinstance(payload.get("result_summary"), dict) else {}
+    if result_summary:
+        for key in ("unity_outcome", "transport_outcome", "requested_execution_lane", "effective_execution_lane"):
+            if result_summary.get(key) is not None and result_summary.get(key) != "":
+                envelope[key] = result_summary.get(key)
+        matrix = result_summary.get("matrix") if isinstance(result_summary.get("matrix"), dict) else {}
         if matrix:
-            parts.extend(
-                [
-                    f"matrix_status={matrix.get('status', '')}",
-                    f"total={int(matrix.get('total') or 0)}",
-                    f"failed={int(matrix.get('failed') or 0)}",
-                ]
-            )
-        if payload.get("summary_file"):
-            parts.append(f"summary_file={payload.get('summary_file')}")
-        line(*parts)
-        return
+            envelope["matrix"] = {
+                key: matrix.get(key) for key in ("status", "total", "passed", "failed") if key in matrix
+            }
 
-    if payload.get("request_id") and payload.get("payload_type"):
-        parts = [
-            "outcome=ok",
-            f"request_id={payload.get('request_id')}",
-            f"payload_type={payload.get('payload_type')}",
-            f"status={payload.get('status', '')}",
-        ]
-        decoded = {}
-        raw = payload.get("payload_json")
-        if isinstance(raw, str) and raw:
-            try:
-                decoded = json.loads(raw)
-            except Exception:
-                decoded = {}
-        payload_type = str(payload.get("payload_type") or "")
-        if payload_type == "unity.compile.matrix":
-            parts.extend(
-                [
-                    f"matrix_status={decoded.get('status', '')}",
-                    f"total={int(decoded.get('total') or 0)}",
-                    f"passed={int(decoded.get('passed') or 0)}",
-                    f"failed={int(decoded.get('failed') or 0)}",
-                ]
+    health = payload.get("health") if isinstance(payload.get("health"), dict) else {}
+    if health:
+        envelope["health"] = {
+            key: health.get(key)
+            for key in ("status", "compiler_error_count", "playmode_state", "pending_request_count", "busy_reason")
+            if key in health
+        }
+    operator_verdict = payload.get("operator_verdict") if isinstance(payload.get("operator_verdict"), dict) else {}
+    if operator_verdict:
+        envelope["operator_verdict"] = {
+            key: operator_verdict.get(key)
+            for key in ("status", "should_retry", "next_action")
+            if key in operator_verdict
+        }
+    licensing_resolution = payload.get("licensing_ipc_resolution")
+    if not isinstance(licensing_resolution, dict):
+        licensing_resolution = details.get("licensing_ipc_resolution") if isinstance(details, dict) else {}
+    if isinstance(licensing_resolution, dict) and licensing_resolution:
+        envelope["licensing_ipc_resolution"] = {
+            key: licensing_resolution.get(key)
+            for key in (
+                "status",
+                "candidate_count",
+                "confidence",
+                "validation_result",
+                "action_classification",
+                "required_human_action",
+                "unity_argument_forwarded",
+                "raw_channel_exposed",
             )
-        elif payload_type.startswith("unity.tests."):
-            parts.extend(
-                [
-                    f"test_status={decoded.get('status', '')}",
-                    f"total={int(decoded.get('total') or 0)}",
-                    f"passed={int(decoded.get('passed') or 0)}",
-                    f"failed={int(decoded.get('failed') or 0)}",
-                ]
-            )
-        elif payload_type == "unity.console.grep":
-            items = decoded.get("items")
-            parts.extend(
-                [
-                    f"matches={int(decoded.get('match_count') or 0)}",
-                    f"returned={len(items) if isinstance(items, list) else 0}",
-                    f"truncated={str(bool(decoded.get('truncated'))).lower()}",
-                ]
-            )
-        line(*parts)
+            if key in licensing_resolution
+        }
+    if error:
+        envelope["error"] = {
+            "code": str(error.get("code") or ""),
+            "message": re.sub(
+                r"(?:Unity-)?LicenseClient-[A-Za-z0-9._-]+",
+                "<redacted-licensing-channel>",
+                str(error.get("message") or ""),
+            )[:600],
+            "recommended_next_action": str(
+                error.get("recommended_next_action") or details.get("recommended_next_action") or ""
+            ),
+        }
+    elif exit_code != 0 and stderr_text:
+        envelope["error"] = {
+            "code": "child_process_failed",
+            "message": re.sub(
+                r"(?:Unity-)?LicenseClient-[A-Za-z0-9._-]+",
+                "<redacted-licensing-channel>",
+                str(stderr_text),
+            )[-600:],
+        }
+
+    first_failures = payload.get("first_failures")
+    if "first_failure" not in envelope and isinstance(first_failures, list) and first_failures:
+        envelope["first_failure"] = first_failures[0]
+    pointers = _artifact_pointers(payload)
+    if pointers:
+        envelope["artifacts"] = pointers
+    envelope["full_payload_available"] = True
+    if isinstance(payload.get("full_payload_command"), str) and payload.get("full_payload_command"):
+        envelope["full_payload_command"] = payload.get("full_payload_command")
+    return envelope
+
+
+def _bounded_compact_json(envelope: dict) -> str:
+    encoded = json.dumps(envelope, ensure_ascii=True, separators=(",", ":"))
+    if len(encoded.encode("utf-8")) <= COMPACT_OUTPUT_MAX_BYTES:
+        return encoded + "\n"
+    reduced = {
+        "payload_mode": "compact_terminal_envelope",
+        "outcome": envelope.get("outcome"),
+        "exit_code": envelope.get("exit_code"),
+        "action": envelope.get("action"),
+        "request_id": envelope.get("request_id"),
+        "error": envelope.get("error"),
+        "artifacts": envelope.get("artifacts"),
+        "recommended_next_action": envelope.get("recommended_next_action"),
+        "full_payload_available": True,
+        "compact_truncated": True,
+    }
+    encoded = json.dumps(reduced, ensure_ascii=True, separators=(",", ":"))
+    if len(encoded.encode("utf-8")) <= COMPACT_OUTPUT_MAX_BYTES:
+        return encoded + "\n"
+    minimal = {
+        "payload_mode": "compact_terminal_envelope",
+        "outcome": envelope.get("outcome"),
+        "exit_code": envelope.get("exit_code"),
+        "action": str(envelope.get("action") or "")[:256],
+        "request_id": str(envelope.get("request_id") or "")[:256],
+        "recommended_next_action": str(envelope.get("recommended_next_action") or "")[:512],
+        "full_payload_available": True,
+        "compact_truncated": True,
+    }
+    return json.dumps(minimal, ensure_ascii=True, separators=(",", ":")) + "\n"
 
 
 def exec_python_script(script_path: str, args: list) -> "SystemExit":
@@ -391,13 +451,24 @@ def run_server_with_optional_compact_summary(server_path: str, args: list, compa
     completed = subprocess.run(
         [sys.executable, server_path] + list(args),
         stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
         text=True,
         encoding="utf-8",
         errors="replace",
+        **hidden_window_subprocess_kwargs(),
     )
-    sys.stdout.write(completed.stdout)
+    payload = _extract_last_json_object(completed.stdout)
+    if not payload:
+        payload = {
+            "action": str(args[0] if args else ""),
+            "error": {
+                "code": "compact_payload_parse_failed",
+                "message": "The child command did not emit a parseable JSON object.",
+            },
+        }
+    envelope = build_compact_terminal_envelope(payload, completed.returncode, completed.stderr)
+    sys.stdout.write(_bounded_compact_json(envelope))
     sys.stdout.flush()
-    emit_compact_summary_from_payload_text(completed.stdout, completed.returncode)
     return SystemExit(completed.returncode)
 
 
@@ -789,6 +860,7 @@ Server commands:
     request-editmode-tests
     request-playmode-tests
     request-final-status
+    diagnostic-retro-bundle
     restore-editor-state
     batch-compile
     batch-editmode-tests
@@ -799,6 +871,8 @@ Mode notes:
   before switching a project back to prodmode.
   After devmode or prodmode, let Unity re-resolve packages by reopen, focus, or
   explicit project refresh.
+  --compact-summary emits one bounded terminal JSON envelope and suppresses the
+  nested child payload. Rerun without it for full command output.
 """
 
 DEVMODE_HELP_TEMPLATE = """Usage: {name} devmode --project-root PATH

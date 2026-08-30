@@ -190,6 +190,20 @@ Current request journal baseline includes:
 
 This is intentionally a first protocol layer, not the final reconnect model.
 
+Licensing IPC provenance is host-owned and fail-closed. Candidate discovery is
+read-only and platform-native, accepts only live Unity licensing clients whose
+current parent is Unity Hub, and auto-selects only when the candidate count is
+exactly one. Public payloads carry fingerprints and validation classes, never
+raw named-pipe values. Helper cleanup records only licensing clients that were
+absent before launch and whose original ancestry contains the helper-owned
+editor; it revalidates exact process identity before single-PID termination and
+never treats the shared Hub client as helper-owned.
+
+Wrapper compact output is a terminal protocol, not a footer. It suppresses the
+child payload and stderr, emits one JSON envelope with an 8192-byte ceiling,
+and retains only decision fields plus artifact pointers. Full evidence remains
+an explicit opt-in.
+
 Known current weakness:
 
 - an already-open Unity session may not hot-pick up external file-package source edits reliably through `AssetDatabase.Refresh()` plus `Client.Resolve()` alone
@@ -212,6 +226,10 @@ Current reconnect policy:
   - Unity completed across lifecycle churn
   - wrapper/session failed after Unity accepted the request, leaving the Unity
     result unproven
+- a completed PlayMode request dominates an earlier `request_abandoned` event;
+  when the fresh post-reload bridge is healthy, idle, in Edit Mode, and has zero
+  compiler errors, the terminal owner is
+  `confirmed_success_after_lifecycle_churn` and retry is false
 - compact operator recovery is the default through
   `request-final-status <request_id>` and `request-latest-status`; CLI callers
   can request complete evidence with `--include-full-payload`

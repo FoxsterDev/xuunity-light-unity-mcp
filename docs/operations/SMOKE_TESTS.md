@@ -1,7 +1,7 @@
 # XUUnity Light Unity MCP Smoke Tests
 
 Date: `2026-07-15`
-Status: `current source after v0.3.62`
+Status: `current source after v0.3.63`
 
 This file defines the public reusable smoke-test contract for the lightweight
 Unity MCP lane.
@@ -562,6 +562,24 @@ Pass criteria:
 - a forced reload occurs before completion
 - Unity writes `request_abandoned` journal evidence for the same `request_id`
 - cleanup restores healthy `edit` idle state
+- if the same request later completes successfully, the terminal envelope is
+  `confirmed_success_after_lifecycle_churn`, confirms Edit Mode and zero
+  compiler errors, and reports `retry_required=false`
+
+### 8a. Dynamic Hub Licensing Handoff Smoke
+
+With a closed project and one signed-in Unity Hub session, run Hub-aware
+`ensure-ready --open-editor` without explicit `-licensingIpc` arguments.
+
+Pass criteria:
+
+- exactly one live Hub-owned licensing candidate is discovered and forwarded
+- the bridge reaches healthy readiness on the version from `ProjectVersion.txt`
+- output includes redacted provenance and never the raw channel
+- zero candidates returns typed user action; multiple candidates are refused
+- a stale/dead candidate is ignored
+- restore verifies editor exit and reports helper-owned licensing-child cleanup
+- a pre-existing shared Hub licensing client is never terminated
 
 ### 9. Transport Matrix Smoke
 
@@ -1064,6 +1082,11 @@ Token-discipline contract:
   digging when the request id is not already known
 - prefer persisted scenario-result summaries over tight `unity.scenario.result`
   polling loops
+- wrapper `--compact-summary` must emit one JSON document no larger than 8192
+  bytes; regression fixtures must fail if nested payload or child stderr is
+  printed before or after it
+- use `diagnostic-retro-bundle` for a bounded licensing/readiness/lifecycle
+  handoff instead of raw process commands or full Editor.log dumps
 
 Scenario payload contract:
 

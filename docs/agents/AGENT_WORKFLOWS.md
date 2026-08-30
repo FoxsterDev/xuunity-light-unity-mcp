@@ -246,7 +246,7 @@ Minimum evidence object:
   "workflowId": "post_change_validation",
   "projectRoot": "$PROJECT_ROOT",
   "unityVersion": "6000.0.58f2",
-  "packageVersion": "0.3.62",
+  "packageVersion": "0.3.63",
   "packageSourceMode": "git",
   "verdict": "pass",
   "checks": [
@@ -769,6 +769,13 @@ check the host capability report:
   --timeout-ms 30000
 ```
 
+For local PlayMode, resolve the editor from
+`ProjectSettings/ProjectVersion.txt`, then use `ensure-ready --open-editor` and
+`request-playmode-tests`. Do not select an installed Unity executable directly,
+and do not default local PlayMode to batchmode. The helper refuses an explicit
+wrong-version editor before Unity can mutate `Library`, and automatically
+forwards exactly one verified Unity Hub licensing channel when available.
+
 Default batch helpers use `--batch-fallback-mode auto`. If the report proves
 batchmode is blocked by a known license, Hub, account, Unity version, headless,
 or session condition, the helper uses the equivalent GUI bridge lane when the
@@ -776,6 +783,10 @@ editor is idle enough to restore safely. Treat this as successful completion
 when the command succeeds and Unity reports a passed outcome; do not classify
 GUI fallback itself as failure. Use `--batch-fallback-mode require-batch` only
 when the workflow must fail unless real batchmode is proven.
+If GUI admission reports multiple Hub licensing candidates, stop rather than
+choosing one. If it reports `manual_user_action_required`, let the user resolve
+Hub sign-in/session state; do not reinterpret it as package import, Test
+Framework, or compile failure.
 
 Compile route:
 
@@ -998,7 +1009,7 @@ Production route:
 
 ```bash
 # First synchronize release-facing version references, for example with
-# --version 0.3.62 when preparing the next patch release.
+# --version 0.3.63 when preparing the next patch release.
 python3 scripts/tools/sync_release_version.py --version <next-version>
 python3 scripts/testing/check_release_version_consistency.py
 scripts/testing/run_host_python_tests.sh

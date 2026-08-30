@@ -157,7 +157,7 @@ class HostPlatformAdapter:
                 "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; "
                 "Get-CimInstance Win32_Process | "
                 "Where-Object { $_.CommandLine } | "
-                "Select-Object ProcessId,CommandLine | "
+                "Select-Object ProcessId,ParentProcessId,CommandLine | "
                 "ConvertTo-Json -Compress"
             )
             try:
@@ -223,6 +223,7 @@ class HostPlatformAdapter:
                 payload = [payload]
 
             commands: list[tuple[int, str]] = []
+            processes: list[dict[str, object]] = []
             for entry in payload if isinstance(payload, list) else []:
                 if not isinstance(entry, dict):
                     continue
@@ -233,9 +234,15 @@ class HostPlatformAdapter:
                 command = str(entry.get("CommandLine") or "").strip()
                 if pid > 0 and command:
                     commands.append((pid, command))
+                    try:
+                        ppid = int(entry.get("ParentProcessId") or 0)
+                    except (TypeError, ValueError):
+                        ppid = 0
+                    processes.append({"pid": pid, "ppid": max(0, ppid), "command": command})
             return {
                 "available": True,
                 "commands": commands,
+                "processes": processes,
                 "error_code": "",
                 "stderr": stderr,
                 "platform_kind": self.platform_kind,
@@ -243,7 +250,7 @@ class HostPlatformAdapter:
 
         try:
             completed = subprocess.run(
-                ["ps", "-axo", "pid=,command="],
+                ["ps", "-axo", "pid=,ppid=,command="],
                 check=False,
                 capture_output=True,
                 text=True,
@@ -288,24 +295,34 @@ class HostPlatformAdapter:
             }
 
         commands: list[tuple[int, str]] = []
+        processes: list[dict[str, object]] = []
         for line in completed.stdout.splitlines():
             line = line.rstrip()
             if not line:
                 continue
-            parts = line.lstrip().split(None, 1)
-            if len(parts) != 2:
+            parts = line.lstrip().split(None, 2)
+            if len(parts) < 2:
                 continue
-            raw_pid, command = parts
             try:
-                pid = int(raw_pid)
+                pid = int(parts[0])
             except ValueError:
                 continue
+            try:
+                ppid = int(parts[1])
+                command = parts[2] if len(parts) == 3 else ""
+            except ValueError:
+                # Backward-compatible parsing for callers/tests that provide
+                # the historical `pid=,command=` ps shape.
+                ppid = 0
+                command = " ".join(parts[1:])
             command = command.strip()
             if pid > 0 and command:
                 commands.append((pid, command))
+                processes.append({"pid": pid, "ppid": max(0, ppid), "command": command})
         return {
             "available": True,
             "commands": commands,
+            "processes": processes,
             "error_code": "",
             "stderr": stderr,
             "platform_kind": self.platform_kind,

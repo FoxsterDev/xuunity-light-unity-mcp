@@ -234,7 +234,8 @@ class ServerProjectHelperTests(unittest.TestCase):
         self.assertEqual("launch_blocked_probable_modal", ctx.exception.code)
         self.assertEqual(222, ctx.exception.details["editor_pid"])
         self.assertEqual(12.5, ctx.exception.details["editor_log_idle_seconds"])
-        self.assertEqual("LicenseClient-session", ctx.exception.details["licensing_channel"])
+        self.assertEqual("<redacted>", ctx.exception.details["licensing_channel"])
+        self.assertTrue(ctx.exception.details["licensing_channel_redacted"])
         self.assertIn("doesn't exist", ctx.exception.details["last_matched_startup_blocker_line"])
         fake_time.sleep.assert_called_once_with(1.0)
 
@@ -538,8 +539,15 @@ class ServerProjectHelperTests(unittest.TestCase):
             ["-licensingIpc", "LicenseClient-session", "-cacheServerEnableDownload", "true"],
             command[-4:],
         )
-        self.assertEqual(command, result["launch_command"])
-        self.assertEqual(["-licensingIpc", "LicenseClient-session", "-cacheServerEnableDownload", "true"], result["unity_args"])
+        self.assertEqual(
+            ["-licensingIpc", "<redacted>", "-cacheServerEnableDownload", "true"],
+            result["launch_command"][-4:],
+        )
+        self.assertEqual(
+            ["-licensingIpc", "<redacted>", "-cacheServerEnableDownload", "true"],
+            result["unity_args"],
+        )
+        self.assertNotIn("LicenseClient-session", json.dumps(result))
 
     def test_open_unity_editor_rejects_nul_launch_argument(self) -> None:
         with self.assertRaises(ToolInvocationError) as ctx:

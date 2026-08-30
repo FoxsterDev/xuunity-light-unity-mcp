@@ -15,9 +15,10 @@ from server_editor_host import (
     resolve_unity_executable,
 )
 from server_host_platform import current_host_platform_adapter, is_wsl, wsl_to_windows_path
+from server_hub_licensing import resolve_hub_licensing_ipc
 
 
-LICENSE_CAPABILITIES_CACHE_SCHEMA = 3
+LICENSE_CAPABILITIES_CACHE_SCHEMA = 4
 LICENSE_PROBE_DEFAULT_TIMEOUT_MS = 30000
 BATCHMODE_SUPPORT_OVERRIDE_ENV = "XUUNITY_LIGHT_UNITY_MCP_BATCHMODE_SUPPORT_OVERRIDE"
 
@@ -34,6 +35,10 @@ def default_license_probe_log_path(project_root: Path) -> Path:
 def classify_license_log(text: str, exit_code: int | None = None, timed_out: bool = False) -> dict[str, Any]:
     haystack = str(text or "")
     patterns: list[tuple[str, str]] = [
+        (
+            "terms_or_activation_ui_required",
+            r"accept.*terms|terms.*accept|sign in to (?:the )?Unity Hub|activation.*required|manual activation",
+        ),
         (
             "no_valid_editor_license",
             r"No valid Unity Editor license found|Unity has not been activated with a valid License|No valid Unity license",
@@ -133,6 +138,14 @@ def first_non_empty_line(text: str, limit: int = 320) -> str:
     return ""
 
 
+def redact_licensing_channels(text: str) -> str:
+    return re.sub(
+        r"(?:Unity-)?LicenseClient-[A-Za-z0-9._-]+",
+        "<redacted-licensing-channel>",
+        str(text or ""),
+    )
+
+
 def build_license_capabilities(
     *,
     project_root: Path,
@@ -179,6 +192,19 @@ def build_license_capabilities(
         cached = read_cached_license_capabilities(cache_path, cache_key)
         if cached is not None:
             cached["from_cache"] = True
+            if str(cached.get("batchmode_blocker_code") or "") == "licensing_client_ipc_failure":
+                resolution, _ = resolve_hub_licensing_ipc()
+                cached["licensing_ipc_resolution"] = resolution
+                if str(resolution.get("status") or "") == "resolved":
+                    cached["editor_ui_supported"] = True
+                    cached["recommended_execution_lane"] = "gui"
+                    cached["licensing_handoff_classification"] = "machine_recoverable_with_hub_session"
+                    cached["manual_user_action_required"] = False
+                else:
+                    cached["editor_ui_supported"] = None
+                    cached["recommended_execution_lane"] = "gui_admission_blocked"
+                    cached["licensing_handoff_classification"] = "manual_user_action_required"
+                    cached["manual_user_action_required"] = True
             return cached
 
     timeout_ms = max(1000, int(timeout_ms or LICENSE_PROBE_DEFAULT_TIMEOUT_MS))
@@ -286,6 +312,36 @@ def build_capabilities_payload(
 ) -> dict[str, Any]:
     editor_ui_supported = infer_editor_ui_supported(blocker_code)
     recommended_execution_lane = recommend_execution_lane(batchmode_supported, editor_ui_supported, blocker_code)
+    licensing_ipc_resolution: dict[str, Any] = {
+        "status": "not_required",
+        "candidate_count": 0,
+        "confidence": "not_applicable",
+        "validation_result": "batch_probe_did_not_require_hub_handoff",
+        "action_classification": "not_required",
+        "raw_channel_exposed": False,
+    }
+    handoff_classification = "not_required"
+    manual_user_action_required = False
+    if blocker_code == "licensing_client_ipc_failure":
+        licensing_ipc_resolution, _ = resolve_hub_licensing_ipc()
+        resolution_status = str(licensing_ipc_resolution.get("status") or "")
+        if resolution_status == "resolved":
+            editor_ui_supported = True
+            recommended_execution_lane = "gui"
+            handoff_classification = "machine_recoverable_with_hub_session"
+        else:
+            editor_ui_supported = None
+            recommended_execution_lane = "gui_admission_blocked"
+            handoff_classification = "manual_user_action_required"
+            manual_user_action_required = True
+    elif blocker_code in {
+        "terms_or_activation_ui_required",
+        "access_token_unavailable",
+        "no_ulf_license",
+        "no_valid_editor_license",
+    }:
+        handoff_classification = "terms_or_activation_ui_required"
+        manual_user_action_required = True
     return {
         "schema_version": LICENSE_CAPABILITIES_CACHE_SCHEMA,
         "action": "license_capabilities",
@@ -301,11 +357,14 @@ def build_capabilities_payload(
         "batchmode_probe_exit_code": batch_exit_code,
         "batchmode_probe_timed_out": bool(timed_out),
         "recommended_execution_lane": recommended_execution_lane,
+        "licensing_handoff_classification": handoff_classification,
+        "manual_user_action_required": manual_user_action_required,
+        "licensing_ipc_resolution": licensing_ipc_resolution,
         "source_evidence": source_evidence,
         "source_evidence_detail": {
-            "matched_text": matched_text[:1000],
-            "stderr": (stderr or "")[:1000],
-            "stdout": (stdout or "")[:1000],
+            "matched_text": redact_licensing_channels(matched_text)[:1000],
+            "stderr": redact_licensing_channels(stderr)[:1000],
+            "stdout": redact_licensing_channels(stdout)[:1000],
             "platform_kind": current_host_platform_adapter().platform_kind,
         },
         "cache_key": cache_key,
@@ -342,7 +401,12 @@ def infer_license_kind(blocker_code: str, batchmode_supported: bool | None) -> s
         return "batch_capable"
     if blocker_code == "headless_entitlement_missing":
         return "headless_or_build_server_related"
-    if blocker_code in {"access_token_unavailable", "no_ulf_license", "no_valid_editor_license"}:
+    if blocker_code in {
+        "terms_or_activation_ui_required",
+        "access_token_unavailable",
+        "no_ulf_license",
+        "no_valid_editor_license",
+    }:
         return "interactive_or_hub_activation_required"
     if blocker_code:
         return "unknown_license_or_host_blocker"

@@ -2,7 +2,7 @@
 
 Date: 2026-08-30
 
-Status: public-safe completed analysis; implementation backlog open
+Status: implementation completed; host, docs and live macOS Hub launch validation green
 
 Observed MCP release: `v0.3.62`
 
@@ -456,6 +456,50 @@ Platform-native ADB, Android emulator, iOS Simulator, `xcodebuild`, and XCUITest
 automation remain separate responsibilities. XUUnity should own Unity
 project/editor/build/test truth; platform runners should own device and
 simulator state.
+
+## Implementation follow-through — 2026-08-30
+
+All implementation tracks from this retro are now closed in the host/runtime,
+CLI contracts, tests and public documentation:
+
+| Track | Implemented result |
+| --- | --- |
+| P0 — automatic Hub IPC handoff | Platform-native process discovery now accepts exactly one live licensing client whose current parent is Unity Hub, injects its dynamic channel internally, emits only redacted provenance/fingerprints, and fails closed for zero, stale or multiple candidates. Explicit operator-provided IPC remains supported and redacted. |
+| P0 — project-version and lane guard | An explicit Unity executable whose resolved version differs from `ProjectVersion.txt` is refused before launch. License capability output distinguishes machine-recoverable Hub handoff, no-Hub/manual action, ambiguity, and Terms/activation UI. Batch lanes no longer blindly route manual-action blockers into GUI automation. |
+| P1 — compact output | `--compact-summary` now captures child stdout/stderr and emits one terminal JSON envelope only. The envelope has an 8192-byte hard ceiling and retains action/request identity, verdict/counts, trust/retry state, first failure, artifacts, lifecycle disposition, licensing resolution and next action. |
+| P1 — lifecycle terminalization | A passed PlayMode result followed by fresh healthy/idle/Edit Mode state after bridge generation churn is terminalized as `confirmed_success_after_lifecycle_churn` with `retry_required=false`; intermediate abandonment is not promoted over the later terminal completion. |
+| P1 — owned residual cleanup | Launch sessions snapshot licensing processes, track only new children with verified editor ancestry, revalidate PID plus command fingerprint at cleanup, and refuse any client currently owned by Unity Hub. Cleanup remains exact-PID only. |
+| P2 — diagnostic bundle | `diagnostic-retro-bundle --project-root ...` emits a read-only sanitized bundle with project/package/license/Hub/editor/request/restore evidence, at most 12 relevant 240-character log excerpts, and a 32768-byte bundle ceiling. Raw channel values, process commands, request ids, project/home paths, licensing identifiers and credential-like log fragments are excluded. |
+| Public promotion | The Hub-aware GUI path, ambiguity/manual-action model, lifecycle terminal verdict, compact budget, ownership cleanup and diagnostic command are documented in the README, install guide, agent workflow, continuation, smoke, architecture, features and status surfaces. |
+
+Validation evidence:
+
+- `scripts/testing/run_host_python_tests.sh`: **979 tests passed**, 14
+  platform-specific skips;
+- focused Hub/licensing/operator regression tests cover macOS, Windows and Linux
+  process shapes, fail-closed ambiguity/staleness, redaction, output budgets,
+  lifecycle terminalization, version refusal and shared-Hub cleanup refusal;
+- public-site static verification: **pass**;
+- Playwright public-site UI verification: **42/42 passed** across desktop,
+  mobile and narrow viewports; and
+- the mandatory privacy preflight passed across all seven discovered Unity
+  projects and the host opt-out;
+- a live macOS launch with Unity initially closed resolved exactly one current
+  Hub-owned licensing candidate, excluded one unrelated non-Hub candidate and
+  reached a healthy TCP bridge on the project-declared Unity `2022.3.62f3`
+  without any explicit `-licensingIpc` argument;
+- the live status operation confirmed fresh heartbeat, idle Edit Mode, zero
+  compiler errors, zero pending requests and a main-editor-owned bridge; and
+- restore verified same-project process exit, found no remaining project
+  editor, and accounted for the one helper-owned licensing child as already
+  exited with zero cleanup refusals.
+
+The live diagnostic also caught credential-like success lines emitted by
+Unity's licensing module. The excerpt selector was tightened during the smoke
+to retain only actionable licensing failures, exclude path-bearing compile
+noise and defensively redact credential assignments and path-shaped tokens.
+The hardened command was rerun against the same real log and exposed only
+redacted channel failures and non-secret blocker classifications.
 
 ## Final verdict
 

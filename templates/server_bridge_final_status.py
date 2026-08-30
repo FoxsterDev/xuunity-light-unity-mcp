@@ -6,7 +6,11 @@ import time
 from pathlib import Path
 from typing import Any, Callable
 
-from server_bridge_constants import DEFAULT_BRIDGE_TRANSPORT, TCP_LOOPBACK_BRIDGE_TRANSPORT
+from server_bridge_constants import (
+    DEFAULT_BRIDGE_TRANSPORT,
+    DEFAULT_HEARTBEAT_MAX_AGE_SECONDS,
+    TCP_LOOPBACK_BRIDGE_TRANSPORT,
+)
 from server_bridge_journal import (
     bridge_identity_changed,
     bridge_identity_from_state,
@@ -39,6 +43,9 @@ TEST_PLAYMODE_ACCOUNTING_FIELDS = (
     "playmode_state_after_settle_note",
     "playmode_state_after_settle_recommended_next_action",
     "persisted_test_result_reconciliation",
+    "post_lifecycle_status_confirmation",
+    "terminal_lifecycle_disposition",
+    "retry_required",
 )
 
 
@@ -1014,6 +1021,45 @@ def build_test_verdict_summary(
         "result_trust_class": trust_class,
     }
     summary.update(_test_playmode_accounting_summary(source_payload, source=source))
+    post_lifecycle_heartbeat_age = heartbeat_age_seconds(active_state or {})
+    post_lifecycle_confirmed = bool(
+        operation == "unity.tests.run_playmode"
+        and test_verdict == "passed"
+        and bridge_changed_since_submission
+        and post_lifecycle_heartbeat_age is not None
+        and post_lifecycle_heartbeat_age <= DEFAULT_HEARTBEAT_MAX_AGE_SECONDS
+        and str((active_state or {}).get("health_status") or "") == "healthy"
+        and str((active_state or {}).get("playmode_state") or "") == "edit"
+        and not bool((active_state or {}).get("is_compiling"))
+        and not bool((active_state or {}).get("is_updating"))
+        and int((active_state or {}).get("compiler_error_count") or 0) == 0
+        and int((active_state or {}).get("pending_request_count") or 0) == 0
+    )
+    if post_lifecycle_confirmed:
+        summary.update(
+            {
+                "terminal_lifecycle_disposition": "confirmed_success_after_lifecycle_churn",
+                "retry_required": False,
+                "playmode_state_after_host_settle": "edit",
+                "playmode_state_after_settle": "edit",
+                "playmode_state_after_settle_source": "bounded_host_bridge_status_confirmation",
+                "playmode_state_after_settle_trust_class": "confirmed_after_lifecycle_churn",
+                "playmode_state_after_settle_note": (
+                    "A fresh post-reload bridge state confirmed healthy Edit Mode with zero compiler errors."
+                ),
+                "playmode_state_after_settle_recommended_next_action": "none",
+                "post_lifecycle_status_confirmation": {
+                    "confirmed": True,
+                    "health_status": "healthy",
+                    "playmode_state": "edit",
+                    "compiler_error_count": 0,
+                    "pending_request_count": 0,
+                    "bridge_generation": int((active_state or {}).get("bridge_generation") or 0),
+                    "heartbeat_age_seconds": round(float(post_lifecycle_heartbeat_age or 0.0), 3),
+                    "source": "bounded_host_bridge_status_confirmation",
+                },
+            }
+        )
     return summary
 
 

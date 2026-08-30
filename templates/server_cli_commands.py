@@ -4,6 +4,8 @@ from __future__ import annotations
 import sys
 import json
 import time
+import hashlib
+import re
 from pathlib import Path
 from typing import Any
 
@@ -99,6 +101,9 @@ from server_editor_host import (
     force_terminate_verified_project_editor,
 )
 from server_license import build_license_capabilities
+from server_license import license_capabilities_cache_path
+from server_hub_licensing import resolve_hub_licensing_ipc
+from server_bridge_final_status import build_compact_final_status_projection
 from server_loading_timing import request_loading_timing_summary
 from server_summaries import (
     build_scenario_result_summary,
@@ -1167,6 +1172,258 @@ def cmd_test_results_table(args):
 
 def _resolve_cli_project_root(value: str) -> Path:
     return ensure_project_root(value)
+
+
+def _diagnostic_request_fingerprint(request_id: str) -> str:
+    if not request_id:
+        return ""
+    return hashlib.sha256(request_id.encode("utf-8", errors="replace")).hexdigest()[:16]
+
+
+def _diagnostic_log_excerpts(log_path: Path, project_root: Path, limit: int = 12) -> list[str]:
+    if not log_path.is_file():
+        return []
+    try:
+        text = log_path.read_text(encoding="utf-8", errors="replace")[-200000:]
+    except OSError:
+        return []
+    pattern = re.compile(
+        r"licens.*(?:error|fail|unavailable|doesn't exist|timeout|invalid|denied|expired)|"
+        r"(?:error|fail|unavailable|doesn't exist|timeout|invalid|denied|expired).*licens|"
+        r"channel\s+.*doesn't exist|xuunity.*bridge|request_(?:abandoned|completed|reclassified)|"
+        r"play\s*mode.*(?:enter|exit|state|transition|request|test|pass|fail|error|timeout|abandon|complete)|"
+        r"(?:enter|exit|state|transition|request|test|pass|fail|error|timeout|abandon|complete).*play\s*mode|"
+        r"(?:compiler|compilation).*(?:error|fail)|(?:error|fail).*(?:compiler|compilation)|error\s+CS\d+",
+        re.IGNORECASE,
+    )
+    project_root_spellings = {
+        str(project_root),
+        str(project_root).replace("\\", "/"),
+    }
+    home_root_spellings = {
+        str(Path.home()),
+        str(Path.home()).replace("\\", "/"),
+    } - project_root_spellings
+    sensitive_root_replacements = sorted(
+        [(value, "<project-root>") for value in project_root_spellings if value]
+        + [(value, "<home>") for value in home_root_spellings if value],
+        key=lambda item: len(item[0]),
+        reverse=True,
+    )
+    excerpts: list[str] = []
+    for line in text.splitlines():
+        if not pattern.search(line):
+            continue
+        if (
+            "CopyFiles " in line
+            or "(at ./Library/PackageCache/" in line
+            or "will not be compiled because it exists outside" in line
+        ):
+            continue
+        redacted = re.sub(
+            r"(?:Unity-)?LicenseClient-[A-Za-z0-9._-]+",
+            "<redacted-licensing-channel>",
+            line.strip(),
+        )
+        redacted = re.sub(
+            r"\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b",
+            "<redacted-request-id>",
+            redacted,
+            flags=re.IGNORECASE,
+        )
+        redacted = re.sub(
+            r"(?i)((?:serial\s+number|access\s+token|refresh\s+token|password)\s*(?:assigned\s+to)?\s*[:=]\s*)"
+            r"(?:\"[^\"]*\"|'[^']*'|\S+)",
+            r"\1<redacted-credential>",
+            redacted,
+        )
+        for sensitive_root, replacement in sensitive_root_replacements:
+            redacted = redacted.replace(sensitive_root, replacement)
+        redacted = re.sub(
+            r"(?:[A-Za-z]:)?[\\/](?:[^\\/\s'\"]+[\\/]){1,}[^\\/\s'\"]*",
+            "<redacted-path>",
+            redacted,
+        )
+        redacted = re.sub(
+            r"(?<![\w.-])(?:[^\\/\s'\"]+[\\/]){2,}[^\\/\s'\"]*",
+            "<redacted-path>",
+            redacted,
+        )
+        excerpts.append(redacted[-240:])
+    return excerpts[-limit:]
+
+
+def _bounded_diagnostic_payload(payload: dict[str, Any], max_bytes: int = 32768) -> dict[str, Any]:
+    def encoded_size(value: dict[str, Any]) -> int:
+        return len((json.dumps(value, ensure_ascii=False) + "\n").encode("utf-8"))
+
+    while encoded_size(payload) > max_bytes and payload.get("bounded_log_excerpts"):
+        payload["bounded_log_excerpts"].pop(0)
+    if encoded_size(payload) <= max_bytes:
+        return payload
+
+    licensing = payload.get("licensing_ipc_resolution") if isinstance(payload.get("licensing_ipc_resolution"), dict) else {}
+    terminal = payload.get("terminal_request") if isinstance(payload.get("terminal_request"), dict) else {}
+    return {
+        "action": "diagnostic_retro_bundle",
+        "schema_version": 1,
+        "sanitized": True,
+        "bundle_truncated": True,
+        "project_root": "<project-root>",
+        "project_unity_version": str(payload.get("project_unity_version") or "")[:64],
+        "licensing_ipc_resolution": {
+            key: str(licensing.get(key) or "")[:128]
+            for key in ("status", "confidence", "validation_result", "action_classification")
+        },
+        "terminal_request": {
+            key: str(terminal.get(key) or "")[:128]
+            for key in ("operation", "operation_outcome", "terminal_disposition", "test_verdict")
+        },
+        "bounds": dict(payload.get("bounds") or {}),
+    }
+
+
+def cmd_diagnostic_retro_bundle(args):
+    project_root = ensure_project_root(args.project_root)
+    project_version = ""
+    version_path = project_root / "ProjectSettings" / "ProjectVersion.txt"
+    try:
+        for line in version_path.read_text(encoding="utf-8", errors="replace").splitlines():
+            if line.startswith("m_EditorVersion:"):
+                project_version = line.split(":", 1)[1].strip()
+                break
+    except OSError:
+        pass
+
+    package_alignment = inspect_package_dependency_alignment(project_root)
+    package_import = inspect_light_mcp_import_state(project_root)
+    discovery = build_project_discovery_report(project_root)
+    host_session = current_project_context_host_session_state(project_root)
+    licensing_resolution, _ = resolve_hub_licensing_ipc()
+
+    cached_license: dict[str, Any] = {}
+    cache_path = license_capabilities_cache_path(project_root)
+    try:
+        value = read_json(cache_path)
+        if isinstance(value, dict):
+            cached_license = value
+    except Exception:
+        cached_license = {}
+
+    latest_summary: dict[str, Any] = {}
+    latest_event = find_latest_request_event(project_root, [])
+    if latest_event is not None:
+        request_id = str(latest_event.get("request_id") or "")
+        operation = str(latest_event.get("operation") or "")
+        if request_id:
+            compact_latest = build_compact_final_status_projection(
+                build_request_final_status_from_context(project_root, request_id, operation, 0)
+            )
+            latest_summary = {
+                key: compact_latest.get(key)
+                for key in (
+                    "operation",
+                    "request_completed",
+                    "operation_outcome",
+                    "result_trust_class",
+                    "terminal_disposition",
+                    "test_verdict",
+                    "total",
+                    "passed",
+                    "failed",
+                    "skipped",
+                    "lifecycle_churn_observed",
+                    "terminal_lifecycle_disposition",
+                    "retry_required",
+                    "recommended_next_action",
+                    "operator_verdict",
+                )
+                if key in compact_latest
+            }
+            latest_summary["request_id"] = "<redacted>"
+            latest_summary["request_fingerprint"] = _diagnostic_request_fingerprint(request_id)
+
+    editor_log_path = resolve_editor_log_path(project_root, None)
+    payload = {
+        "action": "diagnostic_retro_bundle",
+        "schema_version": 1,
+        "sanitized": True,
+        "project_root": "<project-root>",
+        "project_unity_version": project_version,
+        "package_alignment": {
+            key: package_alignment.get(key)
+            for key in (
+                "package_name",
+                "manifest_dependency",
+                "lock_dependency_version",
+                "lock_entry_present",
+                "alignment_status",
+            )
+            if key in package_alignment
+        },
+        "package_import": {
+            key: package_import.get(key)
+            for key in (
+                "import_state",
+                "dependency_declared",
+                "lock_entry_present",
+                "package_cache_present",
+                "bridge_state_present",
+            )
+            if key in package_import
+        },
+        "license_capability": {
+            key: cached_license.get(key)
+            for key in (
+                "batchmode_supported",
+                "editor_ui_supported",
+                "batchmode_blocker_code",
+                "recommended_execution_lane",
+                "licensing_handoff_classification",
+                "manual_user_action_required",
+            )
+            if key in cached_license
+        },
+        "licensing_ipc_resolution": {
+            key: licensing_resolution.get(key)
+            for key in (
+                "source",
+                "platform_kind",
+                "process_visibility_available",
+                "candidate_count",
+                "other_licensing_candidate_count",
+                "confidence",
+                "validation_result",
+                "status",
+                "action_classification",
+                "raw_channel_exposed",
+                "selected_candidate_fingerprint",
+                "required_human_action",
+            )
+            if key in licensing_resolution
+        },
+        "editor_ownership": {
+            "detected_editor_count": int(discovery.get("detected_editor_count") or 0),
+            "bridge_state_live": bool(discovery.get("bridge_state_live")),
+            "host_session_live": bool(discovery.get("host_session_live")),
+            "opened_by_host": bool(host_session.get("opened_by_host")),
+            "owned_licensing_child_count": len(host_session.get("owned_licensing_children") or []),
+        },
+        "terminal_request": latest_summary,
+        "restore_status": {
+            "host_opened_session_found": bool(host_session.get("opened_by_host")),
+            "tracked_editor_pid_present": int(host_session.get("editor_pid") or 0) > 0,
+        },
+        "bounded_log_excerpts": _diagnostic_log_excerpts(editor_log_path, project_root),
+        "bounds": {
+            "max_bundle_bytes": 32768,
+            "max_log_excerpt_count": 12,
+            "max_log_excerpt_chars": 240,
+            "raw_process_commands_included": False,
+            "raw_licensing_channels_included": False,
+        },
+    }
+    print_json(_bounded_diagnostic_payload(payload))
 
 
 def _discover_test_result_project_roots(workspace_root: Path) -> list[Path]:

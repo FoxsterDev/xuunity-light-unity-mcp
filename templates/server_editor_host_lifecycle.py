@@ -40,6 +40,15 @@ from server_host_platform import (
     wsl_to_windows_path,
 )
 from server_specs import STARTUP_POLICIES
+from server_hub_licensing import (
+    cleanup_owned_licensing_children,
+    discover_owned_licensing_children,
+    licensing_client_pid_snapshot,
+    prepare_hub_licensing_unity_args,
+    resolve_hub_licensing_ipc,
+    sanitize_launch_command,
+    sanitize_unity_args,
+)
 
 ACTIVATION_DELAY_SECONDS = 0.35
 UNITY_EDITOR_ROOTS_ENV = "XUUNITY_UNITY_EDITOR_ROOTS"
@@ -55,6 +64,10 @@ STARTUP_BLOCKER_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     (
         "licensing_initialization_failed",
         re.compile(r"Licensing(?:\s+initialization)?\s+failed|waiting for Licensing to initialize", re.IGNORECASE),
+    ),
+    (
+        "terms_or_activation_ui_required",
+        re.compile(r"accept.*terms|terms.*accept|sign in to (?:the )?Unity Hub|activation.*required", re.IGNORECASE),
     ),
     (
         "invalid_editor_license",
@@ -78,6 +91,14 @@ LICENSING_RECOVERY_PATTERN = re.compile(
     r"Successfully updated (?:the )?access token",
     re.IGNORECASE,
 )
+
+
+def _redact_licensing_channels(text: str) -> str:
+    return re.sub(
+        r"(?:Unity-)?LicenseClient-[A-Za-z0-9._-]+",
+        "<redacted-licensing-channel>",
+        str(text or ""),
+    )
 
 
 from server_editor_host_discovery import *
@@ -151,7 +172,7 @@ def open_unity_editor(
             "unity_app": str(unity_app),
             "editor_log_path": str(log_path),
             "background_open": background_open,
-            "unity_args": extra_unity_args,
+            "unity_args": sanitize_unity_args(extra_unity_args),
             "reused_existing_editor": True,
             "editor_pid": live_state.get("editor_pid"),
             "unity_version": running_version,
@@ -177,7 +198,7 @@ def open_unity_editor(
             "unity_app": str(unity_app),
             "editor_log_path": str(log_path),
             "background_open": background_open,
-            "unity_args": extra_unity_args,
+            "unity_args": sanitize_unity_args(extra_unity_args),
             "process_visibility_available": False,
             "process_visibility_error_code": error_code,
             "process_visibility_stderr": str(visibility.get("process_visibility_stderr") or ""),
@@ -233,7 +254,7 @@ def open_unity_editor(
                     "project_root": str(project_root),
                     "editor_pid": int(detected_editors[0].get("pid") or 0),
                     "matching_editor_pids": [int(editor["pid"]) for editor in detected_editors],
-                    "requested_unity_args": extra_unity_args,
+                    "requested_unity_args": sanitize_unity_args(extra_unity_args),
                     "requested_unity_args_applied": False,
                     "recommended_next_action": "close_same_project_editor_then_retry_open",
                 },
@@ -247,7 +268,7 @@ def open_unity_editor(
             "unity_app": detected_unity_app,
             "editor_log_path": str(log_path),
             "background_open": background_open,
-            "unity_args": extra_unity_args,
+            "unity_args": sanitize_unity_args(extra_unity_args),
             "requested_unity_args_applied": bool(extra_unity_args),
             "reused_existing_editor": True,
             "reused_via": "project_process_detection",
@@ -275,7 +296,7 @@ def open_unity_editor(
             {
                 "project_root": str(project_root),
                 "editor_pid": int(live_state.get("editor_pid") or 0),
-                "requested_unity_args": extra_unity_args,
+                "requested_unity_args": sanitize_unity_args(extra_unity_args),
                 "requested_unity_args_applied": False,
                 "recommended_next_action": "restore_process_visibility_or_close_same_project_editor",
             },
@@ -329,6 +350,11 @@ def open_unity_editor(
                 ),
             )
 
+    licensing_client_pids_before_launch = licensing_client_pid_snapshot(process_report)
+    extra_unity_args, licensing_ipc_resolution = prepare_hub_licensing_unity_args(
+        extra_unity_args,
+        process_report,
+    )
     launch_session = build_host_editor_session_state(
         project_root,
         unity_app,
@@ -337,6 +363,8 @@ def open_unity_editor(
         0,
         extra_unity_args,
     )
+    launch_session["licensing_ipc_resolution"] = licensing_ipc_resolution
+    launch_session["licensing_client_pids_before_launch"] = licensing_client_pids_before_launch
     launch_session["launch_in_progress"] = True
     write_host_editor_session_state(project_root, launch_session)
 
@@ -380,7 +408,7 @@ def open_unity_editor(
                     "unity_editor_launch_failed",
                     (
                         f"Failed to launch Unity editor at {unity_app}. "
-                        f"Command: {' '.join(launch_command)}. Detail: {detail}"
+                        f"Command: {' '.join(sanitize_launch_command(launch_command))}. Detail: {detail}"
                     ),
                     {
                         "unity_app_bundle_present": unity_app.is_dir(),
@@ -404,7 +432,7 @@ def open_unity_editor(
                     (
                         f"Unity launch command completed but no matching editor process was observed for project {project_root}. "
                         f"Resolved unity_app: {unity_app}. "
-                        f"Command: {' '.join(launch_command)}. "
+                        f"Command: {' '.join(sanitize_launch_command(launch_command))}. "
                         f"Observed Unity Hub launcher pid(s): {hub_pids or []}. "
                         f"Terminated stale Hub launcher pid(s): {terminated_hub_pids or []}."
                     ),
@@ -447,26 +475,35 @@ def open_unity_editor(
         clear_host_editor_session_state(project_root)
         raise
 
-    write_host_editor_session_state(
+    completed_session = build_host_editor_session_state(
         project_root,
-        build_host_editor_session_state(
-            project_root,
-            unity_app,
-            log_path,
-            background_open,
-            launched_pid,
-            extra_unity_args,
-        ),
+        unity_app,
+        log_path,
+        background_open,
+        launched_pid,
+        extra_unity_args,
     )
+    completed_session["licensing_ipc_resolution"] = licensing_ipc_resolution
+    completed_session["licensing_client_pids_before_launch"] = licensing_client_pids_before_launch
+    post_launch_process_report = list_process_commands_report()
+    completed_session["owned_licensing_children"] = discover_owned_licensing_children(
+        baseline_pids=licensing_client_pids_before_launch,
+        editor_pid=launched_pid,
+        process_report=post_launch_process_report,
+    )
+    write_host_editor_session_state(project_root, completed_session)
     return {
         "unity_app": str(unity_app),
         "editor_log_path": str(log_path),
         "background_open": background_open,
-        "unity_args": extra_unity_args,
-        "licensing_ipc_channel": _unity_launch_argument_value(extra_unity_args, "-licensingIpc"),
+        "unity_args": sanitize_unity_args(extra_unity_args),
+        "licensing_ipc_channel": "<redacted>" if _unity_launch_argument_value(extra_unity_args, "-licensingIpc") else "",
+        "licensing_ipc_channel_redacted": bool(_unity_launch_argument_value(extra_unity_args, "-licensingIpc")),
+        "licensing_ipc_resolution": licensing_ipc_resolution,
+        "owned_licensing_child_count": len(completed_session.get("owned_licensing_children") or []),
         "opened_by_host": True,
         "editor_pid": launched_pid,
-        "launch_command": [str(part) for part in launch_command],
+        "launch_command": sanitize_launch_command([str(part) for part in launch_command]),
         "launch_decision": {
             "bridge_ready": False,
             "process_visibility_available": True,
@@ -788,6 +825,17 @@ def _attach_editor_closed_verification(
     return payload
 
 
+def _attach_owned_licensing_cleanup(
+    payload: dict[str, Any],
+    session: dict[str, Any],
+    timeout_ms: int,
+) -> None:
+    payload["licensing_child_cleanup"] = cleanup_owned_licensing_children(
+        session,
+        max(1000, min(15000, int(timeout_ms or 0))),
+    )
+
+
 def restore_host_opened_editor_state(
     project_root: Path,
     timeout_ms: int,
@@ -851,6 +899,7 @@ def restore_host_opened_editor_state(
             "process_visibility_platform_kind",
         ):
             restoration[key] = already_closed_probe.get(key)
+        _attach_owned_licensing_cleanup(restoration, session, bounded_timeout_ms)
         return restoration
 
     if current_pid > 0 and (tracked_pid <= 0 or current_pid == tracked_pid):
@@ -899,6 +948,7 @@ def restore_host_opened_editor_state(
             restoration["live_project_editor_pids"] = live_project_pids
             clear_stale_project_lock(project_root)
             _attach_editor_closed_verification(restoration, project_root, 0)
+            _attach_owned_licensing_cleanup(restoration, session, bounded_timeout_ms)
             return restoration
 
     # The session file may be stale: after a crash or reboot the recorded pid
@@ -947,6 +997,7 @@ def restore_host_opened_editor_state(
             restoration["live_project_editor_pids"] = live_project_pids
             clear_stale_project_lock(project_root)
             _attach_editor_closed_verification(restoration, project_root, 0)
+            _attach_owned_licensing_cleanup(restoration, session, bounded_timeout_ms)
             return restoration
 
     if managed_pid > 0 and not pid_is_alive(managed_pid):
@@ -966,6 +1017,7 @@ def restore_host_opened_editor_state(
             restoration["reason"] = "tracked_editor_already_closed"
             restoration["terminated_hub_launcher_pids"] = terminated_hub_pids
             _attach_editor_closed_verification(restoration, project_root, 0)
+            _attach_owned_licensing_cleanup(restoration, session, bounded_timeout_ms)
             return restoration
 
         if bool(restoration.get("quit_request_attempted")) and bool(restoration.get("quit_request_accepted")):
@@ -1163,7 +1215,7 @@ def _startup_blocker_observation(
         for kind, pattern in STARTUP_BLOCKER_PATTERNS:
             if pattern.search(stripped):
                 last_match_kind = kind
-                last_match_line = stripped[-500:]
+                last_match_line = _redact_licensing_channels(stripped[-500:])
 
     idle_seconds = _editor_log_idle_seconds(editor_log_path)
     observation: dict[str, Any] = {
@@ -1186,7 +1238,8 @@ def _startup_blocker_observation(
             re.IGNORECASE,
         )
         if licensing_channel_match:
-            observation["licensing_channel"] = licensing_channel_match.group(1)
+            observation["licensing_channel"] = "<redacted>"
+            observation["licensing_channel_redacted"] = True
     if last_licensing_recovery_line:
         observation["last_licensing_recovery_line"] = last_licensing_recovery_line
     return observation
@@ -1197,11 +1250,22 @@ def _launch_blocked_error(observation: dict[str, Any]) -> ToolInvocationError:
     blocker_line = str(observation.get("last_matched_startup_blocker_line") or "")
     details = dict(observation)
     details["launch_classification"] = "launch_blocked_probable_modal"
-    details["recommended_next_action"] = (
-        "pass_working_licensing_ipc_channel_with_unity_arg"
-        if blocker_kind.startswith("licensing_")
-        else "dismiss_startup_dialog_or_relaunch_with_noninteractive_arguments"
-    )
+    if blocker_kind.startswith("licensing_"):
+        resolution, _ = resolve_hub_licensing_ipc()
+        details["licensing_ipc_resolution"] = resolution
+        if str(resolution.get("status") or "") == "resolved":
+            details["licensing_handoff_classification"] = "hub_ipc_available_but_not_forwarded"
+            details["recommended_next_action"] = "retry_hub_aware_ensure_ready"
+        else:
+            details["licensing_handoff_classification"] = "manual_user_action_required"
+            details["recommended_next_action"] = str(
+                resolution.get("required_human_action") or "start_or_sign_in_to_unity_hub"
+            )
+    elif blocker_kind in {"terms_or_activation_ui_required", "invalid_editor_license"}:
+        details["licensing_handoff_classification"] = "terms_or_activation_ui_required"
+        details["recommended_next_action"] = "complete_terms_sign_in_or_activation_in_unity_hub"
+    else:
+        details["recommended_next_action"] = "dismiss_startup_dialog_or_relaunch_with_noninteractive_arguments"
     return ToolInvocationError(
         "launch_blocked_probable_modal",
         (
