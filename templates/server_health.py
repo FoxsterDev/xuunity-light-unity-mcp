@@ -125,7 +125,7 @@ def _same_path(left: Path, right: Path) -> bool:
 
     `samefile` settles it when both exist. When one does not — a rotated or deleted log, which is exactly when the
     anchor guards compare paths — the fallback string comparison was case- and separator-sensitive, so on Windows
-    `C:\\Users\\u\\Editor.log` and `c:/users/u/editor.log` read as different files and a valid anchor was refused as
+    `C:\\Users\\user\\Editor.log` and `c:/users/user/editor.log` read as different files and a valid anchor was refused as
     `anchor_log_mismatch`. `os.path.normcase` applies the platform rule: lowercase plus separator folding on
     Windows, identity on POSIX, so macOS and Linux behaviour is unchanged.
     """
