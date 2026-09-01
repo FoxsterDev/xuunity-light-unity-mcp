@@ -190,7 +190,7 @@ namespace XUUnity.LightMcp.Editor.Helpers
                 var value = property.objectReferenceValue;
                 if (value == null)
                 {
-                    if (property.objectReferenceInstanceIDValue != 0)
+                    if (HasSerializedObjectReference(property))
                     {
                         payload.defects.Add(new XUUnityLightMcpPrefabDefect
                         {
@@ -230,6 +230,15 @@ namespace XUUnity.LightMcp.Editor.Helpers
 
                 ClassifyAssignedReference(property, value, objectPath, componentType, payload);
             }
+        }
+
+        static bool HasSerializedObjectReference(SerializedProperty property)
+        {
+#if UNITY_6000_5_OR_NEWER
+            return !property.objectReferenceEntityIdValue.Equals(default(UnityEngine.EntityId));
+#else
+            return property.objectReferenceInstanceIDValue != 0;
+#endif
         }
 
         static bool InScope(

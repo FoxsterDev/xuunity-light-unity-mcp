@@ -367,6 +367,37 @@ class UiReadSurfaceContractTest(unittest.TestCase):
         ):
             self.assertIn(f'defect_type = "{defect}"', text)
 
+    def test_prefab_validator_gates_the_obsolete_object_reference_instance_id_api(self) -> None:
+        inspector = read(EDITOR_ROOT / "Helpers" / "XUUnityLightMcpPrefabInspector.cs")
+        self.assertEqual(
+            1,
+            inspector.count("objectReferenceInstanceIDValue"),
+            "the obsolete API may exist only once, inside the pre-6000.5 compatibility branch",
+        )
+        self.assertRegex(
+            inspector,
+            re.compile(
+                r"static bool HasSerializedObjectReference\(SerializedProperty property\)\s*"
+                r"\{\s*"
+                r"#if UNITY_6000_5_OR_NEWER\s*"
+                r"return !property\.objectReferenceEntityIdValue\.Equals\(default\(UnityEngine\.EntityId\)\);\s*"
+                r"#else\s*"
+                r"return property\.objectReferenceInstanceIDValue != 0;\s*"
+                r"#endif\s*"
+                r"\}",
+                re.MULTILINE,
+            ),
+            "Unity 6000.5+ must compile only the EntityId API; older editors must retain instance-ID semantics",
+        )
+
+        offenders = []
+        for source in sorted(PACKAGE_ROOT.rglob("*.cs")):
+            if source == EDITOR_ROOT / "Helpers" / "XUUnityLightMcpPrefabInspector.cs":
+                continue
+            if "objectReferenceInstanceIDValue" in read(source):
+                offenders.append(source.relative_to(PACKAGE_ROOT).as_posix())
+        self.assertEqual([], offenders, "no unconditional legacy object-reference API use may return")
+
     def test_new_package_sources_have_committed_meta_files(self) -> None:
         missing = []
         for source in sorted(PACKAGE_ROOT.rglob("*")):

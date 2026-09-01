@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Fixed
+
+- Restored Unity 6000.5+ package compilation by using the supported
+  `SerializedProperty.objectReferenceEntityIdValue` API for missing serialized
+  object-reference detection while retaining the legacy instance-ID path on
+  Unity 2021.3 through 6000.4.
+
 ## 0.3.64
 
 Release tag: `v0.3.64`

@@ -24,6 +24,7 @@ namespace XUUnity.LightMcp.Tests.EditMode
     {
         const string GENERATED_ROOT = "Assets/XUUnityLightMcpGenerated";
         const string PREFAB_DIR = GENERATED_ROOT + "/DefectSelfTest";
+        const string MESH_PATH = PREFAB_DIR + "/ReferencedMesh.asset";
 
         string _prefabPath = "";
 
@@ -33,7 +34,7 @@ namespace XUUnity.LightMcp.Tests.EditMode
             Directory.CreateDirectory(PREFAB_DIR);
             AssetDatabase.Refresh();
 
-            var root = new GameObject("XUUnityMcp_DefectRoot", typeof(RectTransform));
+            var root = new GameObject("XUUnityMcp_DefectRoot", typeof(RectTransform), typeof(MeshFilter));
             var child = new GameObject("CloseButton", typeof(RectTransform));
             child.transform.SetParent(root.transform, false);
 
@@ -114,10 +115,59 @@ namespace XUUnity.LightMcp.Tests.EditMode
             Assert.That(payload.unassigned_reference_count, Is.Zero);
         }
 
+        [Test]
+        public void Validate_DistinguishesADeletedSerializedReferenceFromAnUnassignedOne()
+        {
+            var unassigned = RunValidate("\"reportUnassignedReferences\":true,\"unassignedReferenceScope\":\"all\"");
+            Assert.That(
+                FindDefect(unassigned, "serialized_reference_unassigned", "m_Mesh"),
+                Is.Not.Null,
+                "an empty MeshFilter reference must remain classified as unassigned");
+            Assert.That(
+                FindDefect(unassigned, "serialized_reference_missing_component", "m_Mesh"),
+                Is.Null);
+
+            var mesh = new Mesh { name = "ReferencedMesh" };
+            AssetDatabase.CreateAsset(mesh, MESH_PATH);
+            var contents = PrefabUtility.LoadPrefabContents(_prefabPath);
+            try
+            {
+                contents.GetComponent<MeshFilter>().sharedMesh = AssetDatabase.LoadAssetAtPath<Mesh>(MESH_PATH);
+                PrefabUtility.SaveAsPrefabAsset(contents, _prefabPath);
+            }
+            finally
+            {
+                PrefabUtility.UnloadPrefabContents(contents);
+            }
+
+            Assert.That(AssetDatabase.DeleteAsset(MESH_PATH), Is.True);
+            AssetDatabase.ImportAsset(_prefabPath, ImportAssetOptions.ForceUpdate);
+            AssetDatabase.Refresh();
+
+            var missing = RunValidate("\"reportUnassignedReferences\":true,\"unassignedReferenceScope\":\"all\"");
+            Assert.That(
+                FindDefect(missing, "serialized_reference_missing_component", "m_Mesh"),
+                Is.Not.Null,
+                "a non-empty serialized reference whose asset was deleted must remain classified as missing");
+            Assert.That(
+                FindDefect(missing, "serialized_reference_unassigned", "m_Mesh"),
+                Is.Null,
+                "a deleted reference must not be downgraded to an unassigned field");
+        }
+
         static int CountUnassigned(XUUnityLightMcpPrefabValidatePayload payload)
         {
             return payload.defects.FindAll(
                 defect => defect.defect_type == "serialized_reference_unassigned").Count;
+        }
+
+        static XUUnityLightMcpPrefabDefect FindDefect(
+            XUUnityLightMcpPrefabValidatePayload payload,
+            string defectType,
+            string propertyPath)
+        {
+            return payload.defects.Find(
+                defect => defect.defect_type == defectType && defect.property_path == propertyPath);
         }
 
         /// <summary>
