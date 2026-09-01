@@ -1,7 +1,7 @@
 # Documentation
 
 Date: `2026-05-23`
-Status: `current for v0.3.64`
+Status: `current for v0.3.65`
 
 Use this folder for secondary documentation. Root-level files stay limited to
 public entrypoints, install metadata, license, security, and MCP discovery.

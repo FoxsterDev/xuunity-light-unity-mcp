@@ -2,12 +2,69 @@
 
 ## Unreleased
 
+## 0.3.65
+
+Release tag: `v0.3.65`
+
+Current Git UPM install URL:
+
+```text
+https://github.com/FoxsterDev/xuunity-mcp.git?path=/packages/com.xuunity.light-mcp#v0.3.65
+```
+
+### Changed
+
+- Released `v0.3.65` package metadata, server metadata, package manifests, and Git UPM examples.
+
+### Why
+
+- Unity 6000.5 marks `SerializedProperty.objectReferenceInstanceIDValue` as an
+  error-level obsolete API (`CS0619`). The prefab validator used that API to
+  distinguish an unassigned object reference from a serialized reference whose
+  target was deleted, preventing the Editor assembly from compiling.
+
 ### Fixed
 
 - Restored Unity 6000.5+ package compilation by using the supported
   `SerializedProperty.objectReferenceEntityIdValue` API for missing serialized
   object-reference detection while retaining the legacy instance-ID path on
   Unity 2021.3 through 6000.4.
+- Added EditMode and source-contract regressions that preserve the distinction
+  between unassigned and missing/deleted serialized object references and reject
+  an unconditional legacy API use.
+
+### Benefits
+
+- The core Editor assembly and conditional uGUI assembly compile on Unity
+  6000.5 and 6000.6 without losing prefab missing-reference diagnostics.
+- Unity 2021.3, Unity 2022.3 LTS, and Unity 6000.0 through 6000.4 retain the
+  established instance-ID implementation behind a version guard.
+
+### Validation
+
+- Focused/static contracts pass `52/52`. The full host suite collected `982`
+  tests with `14` expected platform skips; six loopback-socket cases were
+  sandbox-denied in that run, and the affected TCP module passed `11/11` when
+  rerun with loopback access.
+- Clean local-package projects compile both the core Editor and conditional
+  uGUI assemblies with zero errors on Unity `2022.3.62f3`, `6000.0.58f2`,
+  `6000.4.4f1`, `6000.5.10f1`, and `6000.6.0b3`.
+- Unity `2022.3.62f3`, `6000.5.10f1`, and `6000.6.0b3` each pass EditMode
+  `92/92` and PlayMode `18/19` with one expected skip. No `CS0619` occurs on
+  Unity 6000.5 or 6000.6.
+
+### Known limitations
+
+- Unity `2021.3.45f2` was installed but could not begin package import because
+  the local machine had no available license token. Its compatibility remains
+  protected by the legacy compile branch and static regression coverage.
+- Unity 6000.1 through 6000.3 were not run individually; Unity `6000.0.58f2`
+  and `6000.4.4f1` exercise the same pre-6000.5 conditional branch.
+- Live Editor compilation in this cycle covered macOS only. Windows and Linux
+  retain host/static coverage.
+- The `Unity Package CI` workflow remains explicitly waived because hosted
+  runners do not have Unity license credentials; the local Unity matrix above
+  is the release evidence for this package change.
 
 ## 0.3.64
 
