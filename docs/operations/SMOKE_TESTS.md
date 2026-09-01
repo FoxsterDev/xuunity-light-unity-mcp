@@ -1,7 +1,7 @@
 # XUUnity Light Unity MCP Smoke Tests
 
 Date: `2026-07-15`
-Status: `current source after v0.3.63`
+Status: `current source after v0.3.64`
 
 This file defines the public reusable smoke-test contract for the lightweight
 Unity MCP lane.
@@ -931,6 +931,16 @@ Pass criteria:
   `DontDestroyOnLoad`, and its `delivered_to_path` resolves in the owning scene
 - with two same-named objects in different loaded scenes, the click refuses as
   `selector_ambiguous` rather than clicking whichever one a name lookup found first
+- with a deliberately tiny `maxNodes`, a selector that exists beyond the
+  scanned prefix refuses as `ui_selector_search_truncated`, reports
+  `search_node_count`, `search_max_nodes`, `search_truncation_reason`, searched
+  scenes, and scenes not reached, and does not deliver a click
+- with a budget that finds one candidate but truncates before the remaining
+  tree, the click still refuses as `ui_selector_search_truncated` because the
+  candidate's uniqueness is not proven
+- retrying the same direct or scenario click with a narrowed
+  `targetKind`/`targetValue`/`sceneName` or a sufficient `maxNodes` reaches the
+  target; only a complete zero-match search may return `ui_node_not_found`
 
 ### 24. Play-Mode Liveness Assertion Smoke
 

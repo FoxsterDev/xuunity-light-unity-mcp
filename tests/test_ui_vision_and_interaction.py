@@ -960,6 +960,15 @@ class CrossLanguageContractTests(unittest.TestCase):
         self.assertIn("playmode_state = CurrentPlayModeState()", text)
         self.assertIn("EditorApplication.isPaused", text)
 
+    def test_scenario_click_preserves_search_budget_and_truncation_evidence(self) -> None:
+        handler = self.read("Helpers/XUUnityLightMcpScenarioUiInteractionStepHandler.cs")
+
+        self.assertIn("maxDepth = step.maxDepth > 0", handler)
+        self.assertIn("maxNodes = step.maxNodes > 0", handler)
+        self.assertIn("search_truncation_reason = click.search_truncation_reason", handler)
+        self.assertEqual(12, server_specs.SCENARIO_STEP_SCHEMA["properties"]["maxDepth"]["default"])
+        self.assertEqual(500, server_specs.SCENARIO_STEP_SCHEMA["properties"]["maxNodes"]["default"])
+
     def test_the_new_tools_are_host_only(self) -> None:
         for name in ("unity_ui_vision_packet", "unity_ui_vision_submit", "unity_ui_interaction_validate"):
             self.assertIn(name, server_specs.TOOLS)

@@ -258,6 +258,7 @@ namespace XUUnity.LightMcp.Editor.Core
     {
         public int node_count;
         public bool truncated;
+        public string truncation_reason = "";
         public string signature = "";
 
         public static string Hash(string value)
@@ -290,6 +291,12 @@ namespace XUUnity.LightMcp.Editor.Core
         public string requested_action = "";
         public string refusal_code = "";
         public XUUnityLightMcpUiSelectorArgs selector = new();
+        public XUUnityLightMcpUiTargetInfo search_target = new();
+        public int search_node_count;
+        public int search_max_depth;
+        public int search_max_nodes;
+        public bool search_truncated;
+        public string search_truncation_reason = "";
         public int match_count;
         public XUUnityLightMcpUiNode target_node;
         public string target_component = "";
@@ -322,6 +329,12 @@ namespace XUUnity.LightMcp.Editor.Core
         public bool state_changed;
         public string before_signature = "";
         public string after_signature = "";
+        public XUUnityLightMcpUiTargetInfo search_target = new();
+        public int search_node_count;
+        public int search_max_depth;
+        public int search_max_nodes;
+        public bool search_truncated;
+        public string search_truncation_reason = "";
         public string playmode_state = "";
         public string refusal_code = "";
     }

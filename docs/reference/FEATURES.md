@@ -1,7 +1,7 @@
 # Features
 
 Date: `2026-07-06`
-Status: `current for v0.3.63`
+Status: `current for v0.3.64`
 
 XUUnity Light Unity MCP is optimized for validation-first Unity Editor
 automation: status, compile, tests, scene checks, Game View evidence, scenario
@@ -110,7 +110,7 @@ Unity MCP implementations when the user wants safe production validation.
 | UI read | `unity_ui_get_bounds` | `Supported` | Returns the screen-space rect of a single matched node so a failed comparison region maps to concrete geometry. |
 | UI render | `unity_prefab_render` | `Supported` | Renders a prefab in an isolated preview scene at the declared viewport and safe area without booting the app, returning the PNG plus the snapshot it rendered. Requires com.unity.ugui. |
 | UI mutation | `unity_prefab_mutate` | `Supported` | Typed atomic prefab transaction through the Editor API; previews by default, re-validates bindings, rolls the whole batch back on any failure, and emits a reversible inverse patch. |
-| UI interaction | `unity_ui_click` | `Supported` | One guarded EventSystem click to a unique selector; refuses ambiguous, hidden, disabled, raycast-transparent, and handler-less targets. Requires com.unity.ugui. |
+| UI interaction | `unity_ui_click` | `Supported` | One guarded EventSystem click to a unique selector; refuses ambiguous, hidden, disabled, raycast-transparent, and handler-less targets. A node/depth-budget-limited search is `ui_selector_search_truncated` with scope/budget evidence because absence or uniqueness is unproven. Requires com.unity.ugui. |
 | Maintenance | `unity_maintenance_prune` | `Supported` | Prunes stale request, scenario, capture, and optional log artifacts. |
 
 ## Host-Side Helper Commands
@@ -159,8 +159,8 @@ Unity MCP implementations when the user wants safe production validation.
 
 | Target | Status | Validation notes |
 | --- | --- | --- |
-| Current package path | `Validated` | Production Git UPM path is `packages/com.xuunity.light-mcp#v0.3.63`; old `templates/unity-package#v0.3.11` is migration-only. |
-| macOS host tools | `Validated in this release environment` | Host Python unittest suite passed for `v0.3.63`: `966` tests with `14` expected platform skips. |
+| Current package path | `Validated` | Production Git UPM path is `packages/com.xuunity.light-mcp#v0.3.64`; old `templates/unity-package#v0.3.11` is migration-only. |
+| macOS host tools | `Validated in this release environment` | Host Python unittest suite passed for `v0.3.64`: `966` tests with `14` expected platform skips. |
 | Linux host tools | `Portable path provided` | Unix launcher is bash-compatible and avoids zsh-only expansion; Linux host execution should still be smoke-tested on a Linux Unity workstation. |
 | Native Windows clients | `Template provided` | Windows JSON/TOML configs, `run.cmd`, and `run.ps1` are included and syntax/config files are statically validated; native Windows MCP connection still needs host smoke validation. |
 | Claude Code | `Template provided` | Project `.mcp.json`, Windows `.mcp.windows.json`, and user-scope installer path are documented. |

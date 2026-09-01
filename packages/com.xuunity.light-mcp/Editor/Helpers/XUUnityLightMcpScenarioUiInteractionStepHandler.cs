@@ -35,6 +35,8 @@ namespace XUUnity.LightMcp.Editor.Helpers
                 targetValue = step.targetValue ?? "",
                 sceneName = step.sceneName ?? "",
                 includeDontDestroyOnLoad = step.includeDontDestroyOnLoad,
+                maxDepth = step.maxDepth > 0 ? step.maxDepth : XUUnityLightMcpUiRead.DefaultMaxDepth,
+                maxNodes = step.maxNodes > 0 ? step.maxNodes : XUUnityLightMcpUiRead.DefaultMaxNodes,
                 selector = step.selector ?? new XUUnityLightMcpUiSelectorArgs()
             };
 
@@ -80,6 +82,12 @@ namespace XUUnity.LightMcp.Editor.Helpers
                     state_changed = click.state_changed,
                     before_signature = click.before_snapshot != null ? click.before_snapshot.signature : "",
                     after_signature = click.after_snapshot != null ? click.after_snapshot.signature : "",
+                    search_target = click.search_target ?? new XUUnityLightMcpUiTargetInfo(),
+                    search_node_count = click.search_node_count,
+                    search_max_depth = click.search_max_depth,
+                    search_max_nodes = click.search_max_nodes,
+                    search_truncated = click.search_truncated,
+                    search_truncation_reason = click.search_truncation_reason ?? "",
                     playmode_state = click.playmode_state ?? "",
                     refusal_code = click.refusal_code ?? ""
                 }

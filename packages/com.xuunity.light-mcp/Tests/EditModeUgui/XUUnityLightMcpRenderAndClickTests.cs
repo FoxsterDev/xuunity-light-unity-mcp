@@ -314,6 +314,44 @@ namespace XUUnity.LightMcp.Tests.EditModeUgui
         }
 
         [Test]
+        public void Click_DoesNotCallABudgetLimitedSearchANotFoundVerdict()
+        {
+            BuildClickableCanvas();
+
+            var payload = Click(
+                "{\"selector\":{\"name\":\"ClaimButton\"},\"action\":\"click\",\"approve\":true,\"maxNodes\":1}");
+
+            Assert.That(payload.refusal_code, Is.EqualTo("ui_selector_search_truncated"));
+            Assert.That(payload.delivered, Is.False);
+            Assert.That(payload.search_truncated, Is.True);
+            Assert.That(payload.search_node_count, Is.EqualTo(1));
+            Assert.That(payload.search_max_nodes, Is.EqualTo(1));
+            Assert.That(payload.search_truncation_reason, Is.EqualTo("max_nodes_reached"));
+            Assert.That(payload.before_snapshot.truncated, Is.True);
+            Assert.That(payload.before_snapshot.truncation_reason, Is.EqualTo("max_nodes_reached"));
+            Assert.That(payload.search_target.searched_scenes, Is.Not.Empty);
+            Assert.That(_clickCount, Is.Zero, "an inconclusive selector search must never deliver a click");
+        }
+
+        [Test]
+        public void Click_DoesNotClaimUniquenessFromABudgetLimitedMatch()
+        {
+            BuildClickableCanvas();
+
+            var payload = Click(
+                "{\"selector\":{\"name\":\"ClaimButton\"},\"action\":\"click\",\"approve\":true,\"maxNodes\":2}");
+
+            Assert.That(payload.refusal_code, Is.EqualTo("ui_selector_search_truncated"));
+            Assert.That(payload.delivered, Is.False);
+            Assert.That(payload.match_count, Is.EqualTo(1));
+            Assert.That(payload.search_truncated, Is.True);
+            Assert.That(payload.search_node_count, Is.EqualTo(2));
+            Assert.That(payload.search_max_nodes, Is.EqualTo(2));
+            Assert.That(payload.search_truncation_reason, Is.EqualTo("max_nodes_reached"));
+            Assert.That(_clickCount, Is.Zero, "a partial search cannot prove that the scanned match is unique");
+        }
+
+        [Test]
         public void RenderAndClickOperationsAreRegisteredAndCapabilityGated()
         {
             foreach (var operation in new[] { "unity.prefab.render", "unity.ui.click" })

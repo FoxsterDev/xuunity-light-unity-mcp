@@ -79,6 +79,8 @@ namespace XUUnity.LightMcp.Editor.Core
             public string targetValue = "";
             public string sceneName = "";
             public bool includeDontDestroyOnLoad = true;
+            public int maxDepth;
+            public int maxNodes;
             public bool expectStateChange = true;
             public bool approve;
             public XUUnityLightMcpUiSelectorArgs selector = null;

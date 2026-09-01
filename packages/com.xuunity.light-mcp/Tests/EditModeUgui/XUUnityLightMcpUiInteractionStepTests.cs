@@ -149,6 +149,26 @@ namespace XUUnity.LightMcp.Tests.EditModeUgui
             Assert.That(_clickCount, Is.Zero);
         }
 
+        [Test]
+        public void Step_PreservesTheInconclusiveSearchEvidenceAndRetryBudget()
+        {
+            var step = NewStep();
+            step.maxNodes = 1;
+            var result = Run(step);
+
+            Assert.That(result.status, Is.EqualTo("failed"));
+            Assert.That(result.error_code, Is.EqualTo("ui_selector_search_truncated"));
+
+            var payload = JsonUtility.FromJson<XUUnityLightMcpUiInteractionStepPayload>(result.payload_json);
+            Assert.That(payload.ui_interaction.refusal_code, Is.EqualTo("ui_selector_search_truncated"));
+            Assert.That(payload.ui_interaction.search_truncated, Is.True);
+            Assert.That(payload.ui_interaction.search_node_count, Is.EqualTo(1));
+            Assert.That(payload.ui_interaction.search_max_nodes, Is.EqualTo(1));
+            Assert.That(payload.ui_interaction.search_truncation_reason, Is.EqualTo("max_nodes_reached"));
+            Assert.That(payload.ui_interaction.search_target.searched_scenes, Is.Not.Empty);
+            Assert.That(_clickCount, Is.Zero);
+        }
+
         static XUUnityLightMcpScenarioStepDefinition NewStep()
         {
             return new XUUnityLightMcpScenarioStepDefinition

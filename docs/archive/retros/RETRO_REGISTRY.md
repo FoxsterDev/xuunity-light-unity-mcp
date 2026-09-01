@@ -1,8 +1,8 @@
 # XUUnity Light Unity MCP Public Retro Registry
 
 Status: active public registry
-Last triage: 2026-08-30 (new public-safe `v0.3.62` consumer incident identifies dynamic Unity Hub licensing IPC handoff and CLI compact-output residuals)
-Current released source line: `v0.3.62`
+Last triage: 2026-09-01 (freshness reconciliation plus the two-sighting capped UI-selector false negative)
+Current released source line: `v0.3.63`
 
 Update this file whenever a public-safe MCP retro is added, moved, renamed, or
 deleted. Host-private and project-specific retros belong in the host's single
@@ -25,6 +25,29 @@ host-local registry.
 - `Completed Public History` is the place to find reusable lessons already
   implemented, applied, superseded, or retained only for history.
 - Prompt templates are listed separately and are not backlog items.
+
+## Re-Evaluation 2026-09-01
+
+- Fetched `origin/master` and confirmed clean local `master`, `origin/master`,
+  and `HEAD` at `a72c79b`. The review covered all 30 commits in the release
+  window, 15 recent tags, nine release/version surfaces, all 52 public retro
+  files, the host-private registry, current status/roadmap/design records, and
+  the relevant source and tests. `v0.3.63` is the current released source line.
+- The decision-verdict envelope, authoritative post-settle verdict, UI
+  semantic/path proof, and infrastructure-versus-product failure clusters
+  remain implemented. Every track from the August 30 Hub/licensing retro was
+  implemented and released in `v0.3.63`, so that retro moves to completed
+  history rather than remaining an open umbrella.
+- The highest-ROI remaining coherent slice is the UI-selector truncation false
+  negative observed independently in the August 12 and August 26 consumer
+  retros. Current source makes direct and scenario `unity_ui_click` return
+  `ui_selector_search_truncated` when a capped tree cannot prove absence or
+  uniqueness, preserves the searched scope/node budget/reason in the receipt,
+  lets scenario authors set `maxDepth`/`maxNodes`, and keeps
+  `ui_node_not_found` only for a complete zero-match search.
+- Click-causality attribution, readiness-log attribution, package-removal
+  verification, active-configuration reporting, SDK orchestration,
+  token-accounting, and live Windows/Linux proof remain separate backlog items.
 
 ## Re-Evaluation 2026-08-29
 
@@ -404,7 +427,7 @@ the entire Windows install root-cause set (python3 delegation, UTF-8 BOM,
 
 | Date | File | Scope | Registry Status | Why It Is Not Completed History |
 | --- | --- | --- | --- | --- |
-| 2026-08-30 | `2026-08-30_hub_licensing_gui_playmode_operator_retro.md` | Dynamic Unity Hub licensing IPC handoff, GUI-first local PlayMode admission, terminal lifecycle aggregation, compact CLI output, and helper-owned licensing-child cleanup | **new public-safe incident; P0/P1/P2 backlog open** | `v0.3.62` correctly classified batch licensing failure, recommended GUI, accepted explicit `-licensingIpc`, preserved a `20/20` PlayMode pass through domain reload, and restored its editor safely. The default GUI launch did not discover the active Hub dynamic channel, compact CLI calls still exposed large nested payloads in this path, final PlayMode state needed one extra status call, and a direct non-MCP launch left a licensing process outside helper ownership. |
+| 2026-08-26 | `2026-08-26_import_worker_bridge_ownership_retro.md` | Import-worker ownership plus UI selector, click-causality, readiness-log, package-removal, and contention follow-ups | **P0 released in `v0.3.60`; selector-truncation P1 implemented in current source; other follow-ups open** | Import-worker bridge ownership and provenance are released. The two-sighting capped-selector false negative now has a typed inconclusive result with scope/budget evidence and bounded recovery; a partial match is also refused because uniqueness is unproven. Non-causal `state_changed`, readiness-log attribution, package-removal verification, and operator-contention follow-ups remain separate work. |
 | 2026-08-20 | `2026-08-20_readiness_verdict_false_positive_retro.md` | Readiness gate: `interactive_compile_block_detected` asserted a compile fact nothing measured, represented several unrelated transient states, contradicted its own `host_prerequisites` block, and recommended destructive recovery | **P0 + both P1 items implemented and live-validated in current source; two P2 residuals open** | Current source uses condition-specific readiness codes, stamps `compile_state=unmeasured`, keeps polling transient attach/import/identity conditions, maps recovery to non-destructive status polling, and aligns the blocking prerequisite with the top-level result. Focused host tests cover every condition plus the stale-log/next-poll bridge-attach race. Unity 2022 package EditMode/PlayMode and Unity 6000 compile/scenario/contract/lifecycle/churn/project-action regression pass; the Unity 6000 lane reproduced and cleared the race. Remaining P2: mark log diagnoses as heuristic/suppress the `-accept-apiupdate` inversion, and echo batch editor-close side effects. |
 | 2026-08-19 | `2026-08-19_anchored_scope_truncation_and_verdict_field_ranking_retro.md` | Console-lane verdict ranking: a truncated search scope that reports zero matches as a negative, and an anchored scope whose fixed cut kept the tail rather than the anchor-adjacent head | **both P1 items implemented in current source; P2/P3 residuals open** | Current source keeps anchored grep windows beside the anchor, exposes `search_verdict`/reason, direction and truncation at the top level, and makes partial zero-matches explicitly inconclusive with a recovery action and partial-scope trust class. Complete anchored zero-matches remain `not_matched`; console tail keeps recent-tail behavior. Focused regression owns early-boot recovery, boundary safety, absolute numbering, negative/inconclusive ranking, and tail compatibility. Remaining: P2 user-controlled window/import-freshness hints and P3 benign settle-warning downgrade. |
 | 2026-05-14 | `2026-05-14_sdk_rollout_mcp_portfolio_retro.md` | SDK/EDM4U rollout validation lane: typed resolver preconditions, package restore, generated-Gradle diff guard, GUI process pool + quit-and-wait closeout, portfolio SDK summary | **generated-diff + typed resolver/package-restore P0 complete in current source; orchestration remains P1** | `v0.3.45`-`v0.3.48` shipped and hardened generated-diff plus callback-backed Android resolution. Current source adds fail-closed closed-project `unity.sdk.package_restore` with an idle-stable registered package graph, atomic package/dependency receipt, and proven process exit. Still open: GUI process pool, batch resolve, closeout orchestration, and portfolio summary. Device lanes remain ROADMAP Wave 5. |
@@ -425,9 +448,9 @@ the entire Windows install root-cause set (python3 delegation, UTF-8 BOM,
 
 | Date | File | Scope | Registry Status | Notes |
 | --- | --- | --- | --- | --- |
+| 2026-08-30 | `2026-08-30_hub_licensing_gui_playmode_operator_retro.md` | Dynamic Unity Hub licensing IPC handoff, GUI-first local PlayMode admission, terminal lifecycle aggregation, compact CLI output, and helper-owned licensing-child cleanup | implemented, validated, and released in `v0.3.63` | All retro tracks shipped. Full host `979/979`, public site `42/42`, release gates, and a live macOS Hub launch passed; Windows/Linux Hub behavior remains fixture-backed rather than live-host proven, and Unity Package CI retains its documented runner-license waiver. |
 | 2026-08-29 | `2026-08-29_consumer_release_rollout_safety_retro.md` | Authoritative consumer discovery, preflight, canary-before-fan-out, resumable evidence, bounded-worker authority, and identity-gated cleanup | implemented, validated, and released in `v0.3.62` | The public helper freezes the denominator and baseline, refuses unsafe mutation, proves one published-package canary before fan-out, and preserves exact per-project resume/cleanup evidence. Focused `23/23`, full host, release/docs/public-safety, and site UI evidence are recorded in the `v0.3.62` changelog. |
 | 2026-08-27 | `2026-08-27_editor_launch_and_gui_lane_retro.md` | Editor launch arguments/blocker evidence, scenario authoring diagnostics, deterministic UI lanes, output separation, and modal-blocked quit recovery | implemented, locally Unity-validated, and released in `v0.3.61` | Host `966/966`; clean Unity 2022 and 6000 licensing-channel launches; package EditMode `91/91` and PlayMode `5/5` on both; supported consumers pass Unity 2022 package tests and Unity 6000 compile/apply-gate/GUI/restore scenarios. Commit/tag gates, GitHub Release, and public-site synchronization completed on 2026-08-27; dirty consumer package files were preserved. |
-| 2026-08-26 | `2026-08-26_import_worker_bridge_ownership_retro.md` | Unity Asset Import Worker bridge ownership, compile-health provenance, and bootstrap journal attribution | P0 cluster implemented, validated, and released in `v0.3.60` | Import workers exit before bridge initialization; the host refuses explicit, log-inferred, or process-table-proven non-main writers and will not turn their compile fields into a green verdict. Bootstrap journal entries identify pid, process class, and log path. The focused host, two-version package, release, and public-site checks are recorded in the `v0.3.60` changelog. |
 | 2026-08-17 | `2026-08-17_playmode_liveness_and_compile_gate_deadlock_retro.md` | Play-mode liveness, compile-gate ownership, diagnostic provenance, compact project-action envelopes, and catalog-action consistency | implemented, locally Unity-validated, and released in `v0.3.58` | All nine P0-P2 items shipped. `CHANGELOG.md` records local Unity 2022/6000 uGUI and no-uGUI package proof for the release. Unity Package CI remains explicitly waived until runner license secrets exist; that evidence gap is release infrastructure, not unfinished retro work. |
 | 2026-08-06 | `2026-08-06_structural_compile_diagnostics_retro.md` | Structural `.asmdef` and assembly-resolution failures hidden behind stale C# diagnostics | implemented and live-validated in current source | Refresh, compile, and direct-test post-settle envelopes scan only the current bridge-generation log scope, prioritize typed structural errors, preserve them in compact output, refuse stale/unscoped promotion, and direct operators to inspect `.asmdef` evidence before cache cleanup. Unity `2022.3.62f3` duplicate-reference injection and green recovery passed. |
 | 2026-08-03 | `2026-08-03_multi_scene_ui_targeting_and_session_scoped_evidence_retro.md` | Interactive-lane evidence gaps: UI target scope, session-scoped log queries, live-editor verdict buckets, play-mode-aware errors, screenshot budget | implemented and released through `v0.3.55` | All seven priority items shipped. `unity_status` compact was deliberately dropped because `unity_status_summary` already owns that projection; changing `unity_status` would silently alter the default for existing callers. Host contracts and live additive-scene proof pass. |

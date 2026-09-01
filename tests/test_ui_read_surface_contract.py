@@ -205,6 +205,25 @@ class UiReadSurfaceContractTest(unittest.TestCase):
         self.assertIn("ExecuteEvents.Execute(", text)
         self.assertNotIn("Input.simulateMouseWithTouches", text)
 
+    def test_click_is_inconclusive_when_the_search_budget_was_exhausted(self) -> None:
+        operation = read(EDITOR_ROOT / "Ugui" / "XUUnityLightMcpUiClickOperation.cs")
+        models = read(EDITOR_ROOT / "Core" / "XUUnityLightMcpUiReadModels.cs")
+
+        self.assertIn('"ui_selector_search_truncated"', operation)
+        self.assertIn("if (before.Truncated)", operation)
+        self.assertIn("uniqueness is unproven", operation)
+        self.assertIn("Narrow targetKind/targetValue or sceneName, or raise maxDepth/maxNodes", operation)
+        for field in (
+            "search_target",
+            "search_node_count",
+            "search_max_depth",
+            "search_max_nodes",
+            "search_truncated",
+            "search_truncation_reason",
+        ):
+            self.assertIn(f"public ", models)
+            self.assertIn(field, models)
+
     def test_render_is_isolated_and_non_persistent(self) -> None:
         text = read(EDITOR_ROOT / "Ugui" / "XUUnityLightMcpPrefabRenderOperation.cs")
         self.assertIn("EditorSceneManager.NewPreviewScene()", text)

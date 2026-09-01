@@ -832,8 +832,10 @@ TOOLS: dict[str, dict[str, Any]] = {
         "description": (
             "Deliver one guarded semantic click to a unique selector through the EventSystem - never a coordinate "
             "click or OS automation. Refuses ambiguous, hidden, non-interactable, raycast-transparent, and "
-            "handler-less targets, and records the matched node, delivery mechanism, and before/after snapshot "
-            "signatures. Requires explicit approve=true and action='click'. Requires com.unity.ugui."
+            "handler-less targets. A node/depth-budget-limited search is ui_selector_search_truncated because "
+            "absence or uniqueness is unproven; it reports the searched scope plus retry budget. Records the matched node, "
+            "delivery mechanism, and before/after snapshot signatures. Requires explicit approve=true and "
+            "action='click'. Requires com.unity.ugui."
         ),
         "inputSchema": {
             "type": "object",

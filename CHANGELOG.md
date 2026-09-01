@@ -2,6 +2,82 @@
 
 ## Unreleased
 
+## 0.3.64
+
+Release tag: `v0.3.64`
+
+Current Git UPM install URL:
+
+```text
+https://github.com/FoxsterDev/xuunity-mcp.git?path=/packages/com.xuunity.light-mcp#v0.3.64
+```
+
+### Changed
+
+- Released `v0.3.64` package metadata, server metadata, package manifests, and Git UPM examples.
+
+### Why
+
+- Two independent consumer retros showed that a capped UI tree search could
+  report `ui_node_not_found` even though the requested control was simply
+  beyond the scanned prefix. The same incomplete search could also find one
+  candidate without proving that it was unique.
+
+### Fixed
+
+- `unity_ui_click` now refuses an incomplete selector search as
+  `ui_selector_search_truncated`, whether the scanned prefix found zero or one
+  candidate. It never delivers a click when absence or uniqueness is
+  unproven.
+- Direct and scenario click receipts now preserve the searched target and
+  scenes, scanned node count, match count, depth/node limits, truncation flag,
+  and truncation reason.
+
+### Added
+
+- Scenario `ui_click` steps now accept `maxDepth` and `maxNodes`, with the same
+  `12` / `500` defaults as the direct tool. Recovery tells callers to narrow
+  the target or scene, or deliberately raise the budget and retry.
+
+### Benefits
+
+- Automation can distinguish a real complete-search negative from an
+  inconclusive partial search instead of silently skipping an existing button.
+- A single match from a partial tree can no longer be mistaken for a safe
+  unique target, preventing the wrong UI element from receiving the click.
+
+### Validation
+
+- Focused host contracts pass `153/153`; the full host suite completes `981`
+  tests with `14` expected platform skips, and the public site UI suite passes
+  `42/42` browser checks.
+- Clean local-package projects on Unity `2022.3.67f2` and `6000.0.58f2` each
+  pass EditMode `91/91` and PlayMode `18/19` with one expected skip and no
+  failures.
+- The development-system Unity `2022.3.62f3` consumer passes the same
+  EditMode `91/91` and PlayMode `18/19` package gates, then returns to its
+  original `v0.3.63` package pin.
+- The primary Unity `6000.0.58f2` consumer passes its build-configuration
+  compile matrix `6/6`, acceptance scenario `10/10`, contract scenario, both
+  PlayMode lifecycle regressions, final health/settle checks, and corrected
+  project-action catalog consistency lane. Its package pin is restored to
+  `v0.3.63` before release.
+- Release-version consistency, documentation freshness, public-release safety,
+  and diff hygiene pass on the release tree.
+
+### Known limitations
+
+- A truncated selector search is not widened automatically. The caller must
+  narrow the target or scene, or raise `maxDepth` / `maxNodes`, then retry.
+- Guarded click delivery remains a uGUI capability and requires
+  `com.unity.ugui`; UI Toolkit interaction is not added by this release.
+- Live package validation covered macOS Unity `2022` and Unity `6000`. Windows
+  and Linux keep fixture/host coverage rather than a live UI-click run in this
+  cycle.
+- The `Unity Package CI` workflow remains explicitly waived because the hosted
+  runners do not have Unity license credentials. Local Unity validation is the
+  release evidence for this package change.
+
 ## 0.3.63
 
 Release tag: `v0.3.63`

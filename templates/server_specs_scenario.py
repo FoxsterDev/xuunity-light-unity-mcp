@@ -185,6 +185,21 @@ SCENARIO_STEP_SCHEMA: dict[str, Any] = {
                 "diagnostics. Resolving it creates and immediately destroys one hidden probe GameObject in Play Mode."
             ),
         },
+        "maxDepth": {
+            "type": "integer",
+            "minimum": 1,
+            "default": 12,
+            "description": "ui_click only. Maximum hierarchy depth to inspect while searching for selector matches.",
+        },
+        "maxNodes": {
+            "type": "integer",
+            "minimum": 1,
+            "default": 500,
+            "description": (
+                "ui_click only. Maximum nodes to inspect. If this budget is exhausted before the search is "
+                "complete, the step fails as ui_selector_search_truncated instead of claiming absence or uniqueness."
+            ),
+        },
         "selector": {
             "type": "object",
             "description": "ui_click only. Must resolve to exactly one node; an ambiguous selector is refused.",

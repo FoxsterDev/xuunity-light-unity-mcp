@@ -70,6 +70,13 @@ namespace XUUnity.LightMcp.Editor.Ugui
                 IncludeText = true
             });
             payload.before_snapshot = Summarize(before);
+            payload.search_target = before.Target;
+            payload.search_node_count = before.Nodes.Count;
+            payload.search_max_depth = Math.Max(1, args.maxDepth);
+            payload.search_max_nodes = Math.Max(1, args.maxNodes);
+            payload.search_truncated = before.Truncated;
+            payload.search_truncation_reason = before.TruncationReason;
+            payload.warnings.AddRange(before.Warnings);
 
             foreach (var diagnostic in before.Errors)
             {
@@ -90,6 +97,23 @@ namespace XUUnity.LightMcp.Editor.Ugui
             }
 
             var matches = XUUnityLightMcpUiSelectorMatcher.Match(before.Nodes, args.selector, 8, out _);
+            if (before.Truncated)
+            {
+                payload.match_count = matches.Count;
+                var matchEvidence = matches.Count == 0
+                    ? "The selector matched no node in the scanned prefix, so absence is unproven."
+                    : $"The selector matched {matches.Count} node(s) in the scanned prefix, so uniqueness is unproven.";
+                var scopeGap = XUUnityLightMcpUiTreeBuilder.DescribeSearchedScope(before.Target);
+                return Refuse(
+                    request,
+                    payload,
+                    "ui_selector_search_truncated",
+                    $"{matchEvidence} The search scanned {before.Nodes.Count} node(s) "
+                    + $"with maxDepth={payload.search_max_depth} and maxNodes={payload.search_max_nodes} "
+                    + $"and stopped because {before.TruncationReason}. {scopeGap} "
+                    + "Narrow targetKind/targetValue or sceneName, or raise maxDepth/maxNodes, then retry.");
+            }
+
             if (matches.Count == 0)
             {
                 var scopeGap = XUUnityLightMcpUiTreeBuilder.DescribeSearchedScope(before.Target);
@@ -236,7 +260,8 @@ namespace XUUnity.LightMcp.Editor.Ugui
             var summary = new XUUnityLightMcpUiClickSnapshotRef
             {
                 node_count = result.Nodes.Count,
-                truncated = result.Truncated
+                truncated = result.Truncated,
+                truncation_reason = result.TruncationReason
             };
 
             var builder = new System.Text.StringBuilder();
