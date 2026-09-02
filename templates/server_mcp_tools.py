@@ -473,6 +473,47 @@ def describe_required_argument(tool: dict[str, Any], name: str) -> str:
     return f"{name} ({'; '.join(str(part) for part in parts)})" if parts else name
 
 
+def validate_declared_argument_types(tool_name: str, tool: dict[str, Any], args: dict[str, Any]) -> None:
+    """Reject schema-known type mismatches before a Unity request can widen or mutate scope.
+
+    MCP clients normally validate JSON Schema, but the server cannot rely on that.  In
+    particular, Unity's ``JsonUtility`` turns a scalar supplied for ``string[]`` into
+    ``null``.  A scalar ``testNames`` therefore used to become an unfiltered full-suite
+    run instead of a focused run.  Keep this intentionally small and deterministic: it
+    validates the primitive schema types used by bridge tools and array item types.
+    """
+
+    properties = tool.get("inputSchema", {}).get("properties", {})
+    type_checks: dict[str, Callable[[Any], bool]] = {
+        "array": lambda value: isinstance(value, list),
+        "object": lambda value: isinstance(value, dict),
+        "string": lambda value: isinstance(value, str),
+        "integer": lambda value: isinstance(value, int) and not isinstance(value, bool),
+        "number": lambda value: isinstance(value, (int, float)) and not isinstance(value, bool),
+        "boolean": lambda value: isinstance(value, bool),
+    }
+    for name, value in args.items():
+        if value is None or name not in properties:
+            continue
+        spec = properties.get(name) or {}
+        expected = spec.get("type")
+        checker = type_checks.get(str(expected or ""))
+        if checker is not None and not checker(value):
+            raise JsonRpcError(
+                -32602,
+                f"{tool_name}.{name} must be {expected}. Nothing was executed.",
+            )
+        if expected != "array" or not isinstance(value, list):
+            continue
+        item_type = str((spec.get("items") or {}).get("type") or "")
+        item_checker = type_checks.get(item_type)
+        if item_checker is not None and any(not item_checker(item) for item in value):
+            raise JsonRpcError(
+                -32602,
+                f"{tool_name}.{name} must be an array of {item_type} values. Nothing was executed.",
+            )
+
+
 def call_tool(
     name: str,
     arguments: dict[str, Any] | None,
@@ -495,6 +536,7 @@ def call_tool(
         return special_handler(args)
 
     tool = tools[name]
+    validate_declared_argument_types(name, tool, args)
     project_root = args.get("projectRoot")
     if not isinstance(project_root, str) or not project_root.strip():
         raise JsonRpcError(-32602, "projectRoot is required.")

@@ -307,6 +307,20 @@ namespace XUUnity.LightMcp.Tests.EditMode
         }
 
         [Test]
+        public void ConsoleTail_DefaultCopySuppressesStackTraceUnlessRequested()
+        {
+            var item = new XUUnityLightMcpConsoleItem
+            {
+                type = "error",
+                message = "signal",
+                stack_trace = "large stack"
+            };
+
+            Assert.That(XUUnityLightMcpConsoleTailOperation.CopyItem(item, false).stack_trace, Is.Empty);
+            Assert.That(XUUnityLightMcpConsoleTailOperation.CopyItem(item, true).stack_trace, Is.EqualTo("large stack"));
+        }
+
+        [Test]
         public void ConsoleTailByteBudget_DropsOldestItemsFirstWithAccounting()
         {
             var items = new List<XUUnityLightMcpConsoleItem>();
@@ -814,6 +828,38 @@ namespace XUUnity.LightMcp.Tests.EditMode
             Assert.That(step.kind, Is.EqualTo("project_defined_hook_poll_until"));
             Assert.That(step.startPayloadJson, Does.Contain("\"action\":\"start_flow\""));
             Assert.That(step.pollPayloadJson, Does.Contain("\"action\":\"snapshot_flow\""));
+        }
+
+        [Test]
+        public void ScenarioProjectActionNormalizer_PromotesPlainHookObjectPayload()
+        {
+            var argsJson = "{\"scenario\":{\"name\":\"plain_hook\",\"steps\":[{\"kind\":\"project_defined_hook\",\"hookName\":\"example.ui_smoke\",\"payload\":{\"action\":\"apply\",\"profile\":\"dev\"}}]}}";
+
+            var normalized = XUUnityLightMcpScenarioProjectActionNormalizer.TryNormalizeArgsJson(
+                argsJson,
+                out var normalizedArgsJson,
+                out var errorCode,
+                out var errorMessage);
+
+            Assert.That(normalized, Is.True, $"{errorCode}: {errorMessage}");
+            var args = JsonUtility.FromJson<XUUnityLightMcpScenarioValidateArgs>(normalizedArgsJson);
+            Assert.That(args.scenario.steps[0].hookPayloadJson, Does.Contain("\"action\":\"apply\""));
+            Assert.That(args.scenario.steps[0].hookPayloadJson, Does.Contain("\"profile\":\"dev\""));
+        }
+
+        [Test]
+        public void ScenarioProjectActionNormalizer_RejectsAmbiguousPlainHookPayloadAliases()
+        {
+            var argsJson = "{\"scenario\":{\"name\":\"plain_hook\",\"steps\":[{\"kind\":\"project_defined_hook\",\"hookName\":\"example.ui_smoke\",\"payload\":{\"action\":\"apply\"},\"hookPayloadJson\":\"{}\"}]}}";
+
+            var normalized = XUUnityLightMcpScenarioProjectActionNormalizer.TryNormalizeArgsJson(
+                argsJson,
+                out _,
+                out var errorCode,
+                out _);
+
+            Assert.That(normalized, Is.False);
+            Assert.That(errorCode, Is.EqualTo("project_hook_payload_ambiguous"));
         }
 
         [Test]

@@ -34,6 +34,7 @@ for candidate in (TEMPLATES_DIR, RUNNER_DIR):
 import run_multi_project
 import server_batch_orchestrator
 import server_bridge_payloads
+import server_bridge_journal
 import server_core
 import server_editor_host_paths  # noqa: E402
 import server_health
@@ -787,6 +788,29 @@ class AnchorTrustBoundaryTests(unittest.TestCase):
     def tearDown(self) -> None:
         self._temp.cleanup()
 
+    def test_anchor_from_previous_editor_process_cannot_produce_a_negative_verdict(self) -> None:
+        log = self.root / "Editor.log"
+        prefix = "previous session\n"
+        write_log(log, prefix + "current session without marker\n")
+
+        payload = server_health.grep_editor_log_payload(
+            self.root,
+            log,
+            pattern="ABSENT",
+            since="playmode_start",
+            bridge_state={
+                "editor_pid": 222,
+                "editor_log_offset_at_playmode_start": len(prefix),
+                "editor_log_playmode_anchor_editor_pid": 111,
+                "editor_log_path": str(log),
+            },
+        )
+
+        self.assertEqual("anchor_process_mismatch", payload["since_anchor"]["resolved"])
+        self.assertFalse(payload["since_anchor"]["anchored"])
+        self.assertTrue(payload["since_anchor_degraded"])
+        self.assertNotEqual("not_matched", payload["search_verdict"])
+
     def test_an_anchor_adjacent_cut_cannot_fabricate_a_regex_match(self) -> None:
         """Cutting `ERRORDETAIL` after `ERROR` must not make an `ERROR$` regex match a line that never ended."""
 
@@ -1090,6 +1114,46 @@ class AnchorTrustBoundaryTests(unittest.TestCase):
                 self.assertNotIn("session_start", since["description"])
                 for anchor_name in server_health.SINCE_ANCHORS:
                     self.assertIn(anchor_name, since["description"])
+
+
+class RequestAttributionTests(unittest.TestCase):
+    def test_status_counter_distinguishes_own_foreign_and_unattributed_requests(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            server_bridge_journal.write_host_request_journal_event(
+                root,
+                "request_submitted",
+                {
+                    "request_submitted_unix": time.time(),
+                    "client_session_id": server_bridge_journal.current_client_session_id(),
+                },
+            )
+            server_bridge_journal.write_host_request_journal_event(
+                root,
+                "request_submitted",
+                {"request_submitted_unix": time.time(), "client_session_id": "another-client"},
+            )
+            server_bridge_journal.write_host_request_journal_event(
+                root,
+                "request_submitted",
+                {"request_submitted_unix": time.time(), "client_session_id": ""},
+            )
+            server_bridge_journal.write_host_request_journal_event(
+                root,
+                "request_submitted",
+                {
+                    "request_submitted_unix": "malformed",
+                    "event_at_utc": "1970-01-01T00:00:00Z",
+                    "client_session_id": "old-client",
+                },
+            )
+
+            summary = server_bridge_journal.summarize_request_attribution(root)
+
+        self.assertEqual(1, summary["own_requests_since_client_start"])
+        self.assertEqual(1, summary["foreign_requests_since_client_start"])
+        self.assertEqual(1, summary["unattributed_requests_since_client_start"])
+        self.assertTrue(summary["foreign_request_activity_detected"])
 
 
 class PostSettleCompileTrustTests(unittest.TestCase):

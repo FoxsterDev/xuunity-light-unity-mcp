@@ -42,7 +42,10 @@ namespace XUUnity.LightMcp.Editor.Operations
             var includeTypes = NormalizeIncludeTypes(args.includeTypes);
 
             var allItems = XUUnityLightMcpConsoleBuffer.Snapshot();
-            var filtered = allItems.Where(item => includeTypes.Contains(item.type)).ToList();
+            var filtered = allItems
+                .Where(item => includeTypes.Contains(item.type))
+                .Select(item => CopyItem(item, args.includeStackTraces))
+                .ToList();
 
             var truncated = filtered.Count > limit;
             if (filtered.Count > limit)
@@ -65,6 +68,7 @@ namespace XUUnity.LightMcp.Editor.Operations
             {
                 project_root = XUUnityLightMcpFileIpcPaths.ProjectRootPath,
                 source = "console",
+                include_stack_traces = args.includeStackTraces,
                 items = bounded,
                 truncated = truncated,
                 result_trust_class = "console_buffer_may_be_stale",
@@ -98,6 +102,17 @@ namespace XUUnity.LightMcp.Editor.Operations
                 return -1;
             }
             return requested == 0 ? DefaultMaxPayloadBytes : requested;
+        }
+
+        internal static XUUnityLightMcpConsoleItem CopyItem(XUUnityLightMcpConsoleItem item, bool includeStackTrace)
+        {
+            return new XUUnityLightMcpConsoleItem
+            {
+                type = item?.type ?? "unknown",
+                message = item?.message ?? "",
+                timestamp = item?.timestamp ?? "",
+                stack_trace = includeStackTrace ? item?.stack_trace ?? "" : ""
+            };
         }
 
         internal static int EstimateConsoleItemBytes(XUUnityLightMcpConsoleItem item)

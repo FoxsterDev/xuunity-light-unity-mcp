@@ -23,6 +23,7 @@ from server_bridge_final_status import (
 from server_bridge_journal import (
     bridge_identity_changed,
     bridge_identity_from_state,
+    current_client_session_id,
     emit_request_not_submitted_ack,
     emit_request_submission_ack,
     record_request_delivery_event,
@@ -153,6 +154,7 @@ class FileIpcBridgeTransport(BridgeTransportAdapter):
 
         request = {
             "request_id": request_id,
+            "client_session_id": current_client_session_id(),
             "operation": operation,
             "project_root": str(project_root),
             "created_at_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
@@ -375,6 +377,7 @@ class TcpLoopbackBridgeTransport(BridgeTransportAdapter):
         observed_reset_state: dict[str, Any] | None = None
         request = {
             "request_id": request_id,
+            "client_session_id": current_client_session_id(),
             "operation": operation,
             "project_root": str(project_root),
             "created_at_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),

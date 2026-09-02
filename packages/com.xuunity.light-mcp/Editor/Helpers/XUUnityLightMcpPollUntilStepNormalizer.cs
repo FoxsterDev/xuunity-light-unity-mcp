@@ -36,6 +36,15 @@ namespace XUUnity.LightMcp.Editor.Helpers
                     }
                 }
 
+                if (string.Equals(operation, "project_defined_hook", StringComparison.Ordinal))
+                {
+                    if (!TryNormalizeProjectHookPayload(step, out errorCode, out errorMessage))
+                    {
+                        return false;
+                    }
+                    continue;
+                }
+
                 if (!string.Equals(operation, "project_defined_hook_poll_until", StringComparison.Ordinal))
                 {
                     continue;
@@ -48,6 +57,49 @@ namespace XUUnity.LightMcp.Editor.Helpers
                 }
             }
 
+            return true;
+        }
+
+        static bool TryNormalizeProjectHookPayload(
+            LightJsonNode step,
+            out string errorCode,
+            out string errorMessage)
+        {
+            errorCode = "";
+            errorMessage = "";
+            var hasPayload = step.Object.TryGetValue("payload", out var payload);
+            var hasPayloadJson = step.Object.TryGetValue("payloadJson", out var payloadJson);
+            var hasHookPayloadJson = step.Object.ContainsKey("hookPayloadJson");
+
+            if ((hasPayload && (hasPayloadJson || hasHookPayloadJson)) || (hasPayloadJson && hasHookPayloadJson))
+            {
+                errorCode = "project_hook_payload_ambiguous";
+                errorMessage = "project_defined_hook accepts one payload field; use hookPayloadJson (or object payload), not multiple payload fields.";
+                return false;
+            }
+
+            if (hasPayload)
+            {
+                if (payload.Kind != LightJsonKind.Object)
+                {
+                    errorCode = "project_hook_payload_invalid";
+                    errorMessage = "project_defined_hook payload must be a JSON object; use hookPayloadJson for encoded JSON.";
+                    return false;
+                }
+                step.Object["hookPayloadJson"] = LightJsonNode.String(payload.ToJson());
+                step.Object.Remove("payload");
+            }
+            else if (hasPayloadJson)
+            {
+                if (payloadJson.Kind != LightJsonKind.String)
+                {
+                    errorCode = "project_hook_payload_invalid";
+                    errorMessage = "project_defined_hook payloadJson must be a string; prefer hookPayloadJson.";
+                    return false;
+                }
+                step.Object["hookPayloadJson"] = payloadJson;
+                step.Object.Remove("payloadJson");
+            }
             return true;
         }
 

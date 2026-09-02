@@ -1,7 +1,7 @@
 # XUUnity Light Unity MCP Smoke Tests
 
 Date: `2026-07-15`
-Status: `current source after v0.3.65`
+Status: `current source after v0.3.66`
 
 This file defines the public reusable smoke-test contract for the lightweight
 Unity MCP lane.
@@ -314,13 +314,14 @@ Pass criteria:
   use `unity_playmode_state` before gating a PlayMode-sensitive mutation
 - if scenario-driven refresh is used, nested refresh payload should expose the
   same settled contract class rather than only raw `*_requested` transport timing
-- if a passed `project_defined_hook` reports an `*_applied` mutation and the
-  immediately following `project_refresh` times out, the compact scenario
+- if a passed `project_defined_hook` reports an `*_applied` mutation and a
+  later refresh or compile gate fails after only passed wait/status steps, the compact scenario
   verdict remains `inconclusive`/`failed` at scenario level but reports
   `failure_class=applied_mutation_settle_timeout`,
   `trust_class=mutation_applied_unsettled`, and
   `applied_mutation_settle_summary`. Treat the mutation as applied and the
-  settle as unproven; verify the editor is settled before the next mutation.
+  settle as unproven; `should_retry=false` and verify mutated state before any
+  reapply.
   This remains a compatibility diagnosis for older scenarios; new profile
   lanes should use the apply-then-gate contract above and avoid this shape.
 - any other scenario whose first failure is a `project_refresh` step with
@@ -343,6 +344,11 @@ When a direct EditMode or PlayMode request supplies one or more test, group,
 category, or assembly filters, `total=0` is not passing validation even if the
 outer MCP request completed successfully. Inspect the persisted test-result
 artifact for the counts and filter summary.
+
+MCP `testNames`, `groupNames`, `categories`, `assemblies`, and
+`assemblyNames` filters are arrays of strings. A scalar such as
+`"testNames": "Namespace.Test"` is rejected with `-32602` before Unity runs;
+it is never widened to an unfiltered suite.
 
 After C# test sources were added or changed outside the Unity editor, run one
 `request-project-refresh`, wait for the editor to settle, and retry the exact
@@ -510,8 +516,9 @@ Pass criteria:
   exact Unity main process, project root, and unique log path;
 - credential-shaped process arguments are redacted before ledger persistence,
   and the overall deadline can stop execution before fan-out;
-- compact summary output names the canary, denominator, first unproven project,
-  artifact paths, and next action; full evidence stays behind `--output full`.
+- compact summary output is the default and names the canary, denominator,
+  first unproven project, artifact paths, and next action; full evidence stays
+  behind `--output full`.
 
 ### 6. PlayMode Lifecycle Retry Smoke
 
@@ -876,6 +883,8 @@ Pass criteria:
 - against an editor that never recorded the anchor, the call still answers but
   reports `since_anchor.resolved = anchor_unavailable` and
   `since_anchor_degraded = true` rather than silently widening to the full tail
+- an anchor recorded by a different editor PID resolves to
+  `anchor_process_mismatch`; its zero-match result is inconclusive
 
 For the truncation branch, generate more than the fixed grep window of log text
 after the anchor, with one marker near the anchor and another after the window.
@@ -890,6 +899,8 @@ Pass criteria:
   `result_trust_class = session_scoped_editor_log_partial_scope`
 - the inconclusive payload names a `recommended_next_action`; it never presents
   `match_count = 0` as proof of absence
+- raising `maxSearchChars` on the same tool call reaches the later marker and
+  changes the verdict to `matched`
 - a small complete anchored scope with no marker reports
   `search_verdict = not_matched`
 - `unity_console_tail` still keeps the recent end of a truncated anchored scope
@@ -941,6 +952,10 @@ Pass criteria:
 - retrying the same direct or scenario click with a narrowed
   `targetKind`/`targetValue`/`sceneName` or a sufficient `maxNodes` reaches the
   target; only a complete zero-match search may return `ui_node_not_found`
+- an inert click may report `delivered=true` but must report `effective=false`,
+  `success=false`, `status=delivered_no_observable_effect`, and warning
+  `ui_click_no_state_change`; only an observed semantic change sets
+  `effective=true`
 
 ### 24. Play-Mode Liveness Assertion Smoke
 

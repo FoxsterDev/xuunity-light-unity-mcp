@@ -78,7 +78,13 @@ namespace XUUnity.LightMcp.Editor.Bridge
                 operationName = request.operation ?? "";
                 startedAtUtc = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ");
                 XUUnityLightMcpBridgeRuntimeState.MarkRequestStarted(requestId, operationName, remainingPendingRequests + 1);
-                XUUnityLightMcpRequestJournal.WriteRequestStarted(requestId, operationName, startedAtUtc, remainingPendingRequests + 1);
+                XUUnityLightMcpRequestJournal.WriteRequestStarted(
+                    requestId,
+                    request.client_session_id,
+                    operationName,
+                    startedAtUtc,
+                    remainingPendingRequests + 1
+                );
 
                 if (XUUnityLightMcpCapabilityRegistry.TryGetRequiredCapability(request.operation, out _)
                     && !XUUnityLightMcpHealthProbe.IsOperationSupported(request.operation, out var unavailableReason))

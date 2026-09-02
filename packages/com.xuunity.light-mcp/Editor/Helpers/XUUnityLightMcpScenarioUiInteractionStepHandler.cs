@@ -79,6 +79,8 @@ namespace XUUnity.LightMcp.Editor.Helpers
                     target_path = click.target_node != null ? click.target_node.path : "",
                     target_component = click.target_component ?? "",
                     handler_path = click.delivered_to_path ?? "",
+                    effective = click.effective,
+                    no_observable_effect = click.no_observable_effect,
                     state_changed = click.state_changed,
                     before_signature = click.before_snapshot != null ? click.before_snapshot.signature : "",
                     after_signature = click.after_snapshot != null ? click.after_snapshot.signature : "",

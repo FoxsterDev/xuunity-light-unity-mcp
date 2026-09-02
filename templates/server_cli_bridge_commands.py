@@ -406,6 +406,7 @@ def cmd_request_console_grep(args):
                 ignore_case=bool(args.ignore_case),
                 include_stack_traces=bool(args.include_stack_traces),
                 limit=max(1, int(args.limit or 20)),
+                max_chars=max(4096, min(10000000, int(args.max_search_chars or 500000))),
                 since=str(getattr(args, "since", "") or ""),
                 bridge_state=anchor_bridge_state,
                 host_session_state=anchor_host_session_state,
@@ -493,6 +494,7 @@ def cmd_request_console_tail(args):
     bridge_args = {
         "limit": limit,
         "includeTypes": args.include_type or None,
+        "includeStackTraces": bool(args.include_stack_traces),
         "source": "console",
     }
     if max_payload_bytes is not None:

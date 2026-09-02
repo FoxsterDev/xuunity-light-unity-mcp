@@ -310,6 +310,10 @@ Mini-playbook after wrapper churn:
     informational
 12. if `operator_verdict.status=unity_completion_unproven`, inspect the
     surfaced recovery evidence before deciding whether a bounded retry is safe
+13. inspect `foreign_requests_since_client_start`; when non-zero, do not
+    attribute all editor activity to the current terminal
+14. if a project action reports `mutation_status=applied` with settle/delivery
+    unproven, verify project state and do not replay the mutation
 
 Mini-playbook after `devmode` with an already-open editor:
 

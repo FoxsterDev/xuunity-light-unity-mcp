@@ -15,6 +15,7 @@ if str(TEMPLATES_DIR) not in sys.path:
 
 import server
 import server_batch_lanes
+import server_batch_orchestrator
 import server_bridge_journal
 import server_mcp_tools
 import server_project_actions
@@ -197,9 +198,11 @@ class ServerProtocolAndParserTests(unittest.TestCase):
         console_tool = next(tool for tool in response["result"]["tools"] if tool["name"] == "unity_console_grep")
         self.assertIn("source", console_tool["inputSchema"]["properties"])
         self.assertEqual("editor_log", console_tool["inputSchema"]["properties"]["source"]["default"])
+        self.assertEqual(500000, console_tool["inputSchema"]["properties"]["maxSearchChars"]["default"])
         console_tail_tool = next(tool for tool in response["result"]["tools"] if tool["name"] == "unity_console_tail")
         self.assertIn("source", console_tail_tool["inputSchema"]["properties"])
         self.assertEqual("editor_log", console_tail_tool["inputSchema"]["properties"]["source"]["default"])
+        self.assertFalse(console_tail_tool["inputSchema"]["properties"]["includeStackTraces"]["default"])
         scene_open_tool = next(tool for tool in response["result"]["tools"] if tool["name"] == "unity_scene_open")
         self.assertIn("scenePath", scene_open_tool["inputSchema"]["properties"])
         self.assertIn("allowDirtySceneDiscard", scene_open_tool["inputSchema"]["properties"])
@@ -329,6 +332,53 @@ class ServerProtocolAndParserTests(unittest.TestCase):
         self.assertEqual("editor_log", structured["source"])
         self.assertEqual(1, structured["match_count"])
 
+    def test_unity_console_grep_can_continue_a_truncated_anchor_with_larger_search_budget(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            project_root = Path(tmp_dir) / "FakeProject"
+            project_root.mkdir()
+            log_path = project_root / "Editor.log"
+            prefix = "old\n"
+            log_path.write_text(prefix + ("noise\n" * 900) + "LATE MARKER\n", encoding="utf-8")
+            anchor_state = {
+                "editor_log_offset_at_playmode_start": len(prefix),
+                "editor_log_path": str(log_path),
+            }
+
+            def call(max_search_chars: int) -> dict[str, object]:
+                with (
+                    mock.patch.object(server, "ensure_project_root", return_value=project_root),
+                    mock.patch.object(
+                        server_batch_orchestrator,
+                        "editor_log_anchor_state",
+                        return_value=(anchor_state, {}, True),
+                    ),
+                ):
+                    return server.handle_json_rpc_message(
+                        {
+                            "jsonrpc": "2.0",
+                            "id": max_search_chars,
+                            "method": "tools/call",
+                            "params": {
+                                "name": "unity_console_grep",
+                                "arguments": {
+                                    "projectRoot": str(project_root),
+                                    "source": "editor_log",
+                                    "editorLogPath": str(log_path),
+                                    "pattern": "LATE MARKER",
+                                    "since": "playmode_start",
+                                    "maxSearchChars": max_search_chars,
+                                },
+                            },
+                        },
+                        {"initialized": True, "protocolVersion": server.PROTOCOL_VERSION},
+                    )
+
+            partial = call(4096)["result"]["structuredContent"]
+            continued = call(8192)["result"]["structuredContent"]
+
+        self.assertEqual("inconclusive", partial["search_verdict"])
+        self.assertEqual("matched", continued["search_verdict"])
+
     def test_unity_console_grep_explicit_console_false_empty_warns(self) -> None:
         invoke_calls: list[tuple[str, dict[str, object], int]] = []
 
@@ -454,6 +504,7 @@ class ServerProtocolAndParserTests(unittest.TestCase):
 
         self.assertEqual(1, len(invoke_calls))
         self.assertEqual("unity.console.tail", invoke_calls[0][0])
+        self.assertFalse(invoke_calls[0][1]["includeStackTraces"])
         structured = response["result"]["structuredContent"]
         self.assertEqual("console", structured["source"])
         self.assertEqual("console_buffer_may_be_stale", structured["result_trust_class"])
@@ -807,6 +858,38 @@ actions:
                 action_payload={},
             )
         self.assertEqual("mutation_settle_target_required", ctx.exception.code)
+
+    def test_plain_project_hook_object_payload_is_promoted_instead_of_dropped(self) -> None:
+        scenario = server_project_actions.normalize_poll_until_scenario(
+            {
+                "name": "plain_hook_payload",
+                "steps": [
+                    {
+                        "kind": "project_defined_hook",
+                        "hookName": "example.hook",
+                        "payload": {"action": "apply", "profile": "dev"},
+                    }
+                ],
+            }
+        )
+        step = scenario["steps"][0]
+        self.assertNotIn("payload", step)
+        self.assertEqual({"action": "apply", "profile": "dev"}, json.loads(step["hookPayloadJson"]))
+
+    def test_plain_project_hook_rejects_ambiguous_payload_aliases(self) -> None:
+        with self.assertRaises(server.ToolInvocationError) as ctx:
+            server_project_actions.normalize_poll_until_scenario(
+                {
+                    "steps": [
+                        {
+                            "kind": "project_defined_hook",
+                            "payload": {"action": "apply"},
+                            "hookPayloadJson": "{}",
+                        }
+                    ]
+                }
+            )
+        self.assertEqual("project_hook_payload_ambiguous", ctx.exception.code)
 
     def test_catalog_payload_action_conflict_is_listed_and_refused_at_invoke(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

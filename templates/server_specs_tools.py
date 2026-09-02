@@ -1354,6 +1354,11 @@ TOOLS: dict[str, dict[str, Any]] = {
                     "description": "Optional Editor.log path when source=editor_log. Defaults to the host-managed project log path.",
                 },
                 "limit": {"type": "integer", "default": 50, "minimum": 1},
+                "includeStackTraces": {
+                    "type": "boolean",
+                    "default": False,
+                    "description": "Include Console stack traces. They are suppressed by default so recent messages stay signal-first."
+                },
                 "maxPayloadBytes": {
                     "type": "integer",
                     "default": 16384,
@@ -1432,6 +1437,16 @@ TOOLS: dict[str, dict[str, Any]] = {
                 "ignoreCase": {"type": "boolean", "default": True},
                 "includeStackTraces": {"type": "boolean", "default": False},
                 "limit": {"type": "integer", "default": 20, "minimum": 1},
+                "maxSearchChars": {
+                    "type": "integer",
+                    "default": 500000,
+                    "minimum": 4096,
+                    "maximum": 10000000,
+                    "description": (
+                        "Maximum Editor.log characters searched from a resolved anchor. Raise this after an "
+                        "inconclusive scope_truncated result to keep the continuation inside the MCP tool."
+                    )
+                },
                 "includeTypes": {
                     "type": "array",
                     "items": {"type": "string"},

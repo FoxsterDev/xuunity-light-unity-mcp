@@ -792,9 +792,10 @@ def build_applied_mutation_settle_summary(steps: list[Any], cleanup_start_index:
     """Surface an applied project-hook mutation separately from its settle timeout.
 
     A project-defined hook can apply a profile or environment change that causes
-    a domain reload.  If the immediately following refresh times out, the
-    scenario remains failed/inconclusive: the editor has not been proven settled.
-    It must not, however, imply that the preceding hook mutation failed.
+    a domain reload. If a later refresh or compile gate fails after only passive
+    wait/status steps, the scenario remains failed/inconclusive: the editor has
+    not been proven settled. It must not imply that the mutation failed or is safe
+    to replay.
     """
     first_failed_index, first_failed = _first_failed_raw_step(steps)
     if first_failed is None or first_failed_index <= 0:
@@ -809,14 +810,35 @@ def build_applied_mutation_settle_summary(steps: list[Any], cleanup_start_index:
 
     failed_kind = str(first_failed.get("kind") or "")
     failed_error_code = str(first_failed.get("error_code") or "")
-    if failed_kind != "project_refresh" or failed_error_code != "project_refresh_timeout":
+    settle_failure = (
+        (failed_kind == "project_refresh" and failed_error_code == "project_refresh_timeout")
+        or failed_kind == "compile_player_scripts"
+    )
+    if not settle_failure:
         return {}
 
-    mutation_step = steps[first_failed_index - 1]
-    if not isinstance(mutation_step, dict):
+    mutation_step: dict[str, Any] | None = None
+    mutation_index = -1
+    for candidate_index in range(first_failed_index - 1, -1, -1):
+        candidate = steps[candidate_index]
+        if not isinstance(candidate, dict):
+            return {}
+        candidate_kind = str(candidate.get("kind") or "")
+        candidate_status = str(candidate.get("status") or "")
+        if candidate_kind == "project_defined_hook" and candidate_status == "passed":
+            mutation_step = candidate
+            mutation_index = candidate_index
+            break
+        if candidate_kind not in {"wait", "status"} or candidate_status != "passed":
+            return {}
+    if mutation_step is None:
         return {}
-    if str(mutation_step.get("kind") or "") != "project_defined_hook" or str(mutation_step.get("status") or "") != "passed":
-        return {}
+
+    intermediate_kinds = [
+        str(step.get("kind") or "")
+        for step in steps[mutation_index + 1 : first_failed_index]
+        if isinstance(step, dict)
+    ]
 
     mutation_payload = _parse_step_payload_json(mutation_step)
     mutation_outcome = str(mutation_payload.get("outcome") or mutation_step.get("outcome") or "")
@@ -828,11 +850,12 @@ def build_applied_mutation_settle_summary(steps: list[Any], cleanup_start_index:
         "mutation_step_id": str(mutation_step.get("stepId") or mutation_step.get("step_id") or ""),
         "mutation_kind": str(mutation_step.get("kind") or ""),
         "mutation_outcome": truncate_text(mutation_outcome, 120),
-        "settle_status": "timed_out",
+        "settle_status": "timed_out" if failed_error_code.endswith("_timeout") else "failed",
         "settle_step_id": str(first_failed.get("stepId") or first_failed.get("step_id") or ""),
         "settle_kind": failed_kind,
         "settle_error_code": failed_error_code,
         "settle_completion": "unproven",
+        "intermediate_settle_steps": intermediate_kinds,
         "recommended_next_action": "verify_editor_settled_before_next_mutation",
     }
 

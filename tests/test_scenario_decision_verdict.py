@@ -430,7 +430,7 @@ class ScenarioDecisionVerdictTests(unittest.TestCase):
         self.assertEqual("set_profile", verdict["first_failure"]["mutation_step_id"])
         self.assertTrue(verdict["first_failure"]["settle_timeout_after_applied_mutation"])
 
-    def test_decision_verdict_does_not_overclassify_non_adjacent_or_unproven_mutations(self) -> None:
+    def test_decision_verdict_does_not_overclassify_unproven_mutations(self) -> None:
         base_payload = {
             "project_root": "/tmp/FakeProject",
             "run_id": "run-no-applied-mutation-settle-timeout",
@@ -453,11 +453,6 @@ class ScenarioDecisionVerdictTests(unittest.TestCase):
         }
 
         for steps in (
-            [
-                applied_hook,
-                {"stepId": "observe", "kind": "status", "status": "passed"},
-                refresh_timeout,
-            ],
             [
                 {
                     **applied_hook,

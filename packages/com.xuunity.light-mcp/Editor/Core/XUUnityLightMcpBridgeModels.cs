@@ -18,7 +18,7 @@ namespace XUUnity.LightMcp.Editor.Core
         [Serializable]
         internal sealed class XUUnityLightMcpBridgeState
         {
-            public int bridge_version = 9;
+            public int bridge_version = 10;
             public string project_root = "";
             public int editor_pid;
             public string bridge_process_class = "";
@@ -104,8 +104,10 @@ namespace XUUnity.LightMcp.Editor.Core
             public string editor_log_path = "";
             public long editor_log_offset_at_playmode_start;
             public string editor_log_playmode_started_utc = "";
+            public int editor_log_playmode_anchor_editor_pid;
             public long editor_log_offset_at_bridge_generation_start;
             public int editor_log_offset_bridge_generation;
+            public int editor_log_bridge_generation_anchor_editor_pid;
             public string last_error = "";
             public string health_status = "";
             public int supported_operation_count;
@@ -117,6 +119,7 @@ namespace XUUnity.LightMcp.Editor.Core
         internal sealed class XUUnityLightMcpRequest
         {
             public string request_id = "";
+            public string client_session_id = "";
             public string operation = "";
             public string project_root = "";
             public string created_at_utc = "";
@@ -254,6 +257,7 @@ namespace XUUnity.LightMcp.Editor.Core
             public string bridge_session_id = "";
             public int bridge_generation;
             public string request_id = "";
+            public string client_session_id = "";
             public string operation = "";
             public string operation_status = "";
             public int pending_request_count;

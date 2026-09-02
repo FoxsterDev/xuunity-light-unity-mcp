@@ -53,6 +53,10 @@ SINCE_ANCHOR_STATE_KEYS = {
     "playmode_start": "editor_log_offset_at_playmode_start",
     "bridge_generation": "editor_log_offset_at_bridge_generation_start",
 }
+SINCE_ANCHOR_PID_STATE_KEYS = {
+    "playmode_start": "editor_log_playmode_anchor_editor_pid",
+    "bridge_generation": "editor_log_bridge_generation_anchor_editor_pid",
+}
 API_UPDATER_RECOMMENDED_ACTION = "relaunch_noninteractive_accept_apiupdate"
 # Mirrors XUUnityLightMcpConsoleNoise.BuildPipelineProgressPattern in the editor package. Build-pipeline
 # progress lines match whatever feature name the compile job carries, so a feature-keyword grep drowns in
@@ -285,7 +289,7 @@ def _count_lines_before_offset(log_path: Path, offset: int) -> int:
     return newlines + 1
 
 
-def _request_started_log_anchor(journal_events: list[dict[str, Any]] | None) -> tuple[int, str]:
+def _request_started_log_anchor(journal_events: list[dict[str, Any]] | None) -> tuple[int, str, int]:
     """The Editor.log length and path the editor recorded when it began handling the request.
 
     The editor writes both into the `request_started` journal event, so the anchor costs one stat per request
@@ -299,8 +303,8 @@ def _request_started_log_anchor(journal_events: list[dict[str, Any]] | None) -> 
             continue
         offset = _int_or_zero(event.get("editor_log_offset_bytes"))
         if offset > 0:
-            return offset, str(event.get("editor_log_path") or "")
-    return 0, ""
+            return offset, str(event.get("editor_log_path") or ""), _int_or_zero(event.get("editor_pid"))
+    return 0, "", 0
 
 
 def _request_started_stamp_utc(journal_events: list[dict[str, Any]] | None) -> str:
@@ -447,18 +451,42 @@ def resolve_editor_log_since_anchor(
         return anchor
 
     journal_log_path = ""
+    anchor_editor_pid = 0
     if requested == "request_id":
         if not str(since_request_id or "").strip():
             anchor["resolved"] = "anchor_argument_missing"
             anchor["anchor_argument_missing_reason"] = "since=request_id also needs sinceRequestId"
             return anchor
         anchor["since_request_id"] = str(since_request_id).strip()
-        offset, journal_log_path = _request_started_log_anchor(journal_events)
+        offset, journal_log_path, anchor_editor_pid = _request_started_log_anchor(journal_events)
         source = "request_journal.request_started.editor_log_offset_bytes"
     else:
         state_key = SINCE_ANCHOR_STATE_KEYS[requested]
         offset = _int_or_zero((bridge_state or {}).get(state_key))
+        anchor_editor_pid = _int_or_zero(
+            (bridge_state or {}).get(SINCE_ANCHOR_PID_STATE_KEYS[requested])
+        )
         source = f"bridge_state.{state_key}"
+
+    current_editor_pid = _int_or_zero((bridge_state or {}).get("editor_pid"))
+    if offset > 0 and anchor_editor_pid > 0 and current_editor_pid > 0 and anchor_editor_pid != current_editor_pid:
+        anchor.update(
+            {
+                "resolved": "anchor_process_mismatch",
+                "anchor_source": source,
+                "anchor_editor_pid": anchor_editor_pid,
+                "current_editor_pid": current_editor_pid,
+                "anchor_process_mismatch_reason": (
+                    "the anchor was recorded by a different Unity editor process; applying its byte offset to "
+                    "the current process log could turn an incomplete search into a false negative"
+                ),
+                "recommended_next_action": (
+                    "capture a new request_id, playmode_start, or bridge_generation anchor from the current "
+                    "editor process, then retry the grep"
+                ),
+            }
+        )
+        return anchor
 
     stamped_log = journal_log_path or str((bridge_state or {}).get("editor_log_path") or "")
     if requested == "request_id" and offset > 0 and not stamped_log:

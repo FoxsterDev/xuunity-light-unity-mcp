@@ -2,6 +2,83 @@
 
 ## Unreleased
 
+## 0.3.66
+
+Release tag: `v0.3.66`
+
+Current Git UPM install URL:
+
+```text
+https://github.com/FoxsterDev/xuunity-mcp.git?path=/packages/com.xuunity.light-mcp#v0.3.66
+```
+
+### Changed
+
+- Released `v0.3.66` package metadata, server metadata, package manifests, and Git UPM examples.
+- Batch helper CLIs now emit compact decision summaries by default; full nested
+  evidence remains available with `--output full`.
+
+### Why
+
+- Two consumer retros found several trustworthy-looking but incomplete
+  outcomes: delivered UI clicks with no visible effect, malformed scalar test
+  filters that widened to a full suite, log anchors reused across editor
+  processes, unattributed requests from another client, and applied mutations
+  reported as not completed after lifecycle churn.
+
+### Fixed
+
+- UI click receipts separate event delivery from observable semantic effect.
+  Delivered no-ops return `success=false`,
+  `status=delivered_no_observable_effect`, and `ui_click_no_state_change`
+  remediation.
+- Declared MCP argument types are validated before execution, so scalar test
+  filters cannot silently become an unfiltered test run.
+- Editor-log anchors carry their writer PID and refuse cross-process offsets;
+  `maxSearchChars` provides an in-tool continuation for truncated anchored
+  grep, while Console tail suppresses stack traces unless requested.
+- Requests carry a stable host `client_session_id` through transport, Unity
+  journal events, and domain reloads. Status reports own, foreign, and
+  unattributed request counts, and completed journal rows now carry the real
+  editor PID.
+- Applied project-hook mutations remain applied through passive wait/status
+  steps and a later refresh or compile-settle failure. Mutation replay is
+  disabled until state is verified, including lifecycle-recovered delivery
+  ambiguity.
+- Plain `project_defined_hook` object payloads are promoted to
+  `hookPayloadJson`; conflicting or invalid aliases fail explicitly instead of
+  validating and then disappearing at runtime.
+
+### Benefits
+
+- Operators can distinguish transport success from product effect, current
+  client work from foreign editor activity, and a real negative log search
+  from an inconclusive process/window mismatch.
+- Test selection and mutating project actions now fail closed, preventing broad
+  accidental suites and duplicate state changes.
+
+### Validation
+
+- Release-version consistency, documentation freshness, and public-release
+  safety pass. The full host suite passes `992` tests with `14` expected
+  platform skips, including live loopback transport coverage.
+- The public site suite passes `42/42` browser checks.
+- Clean Unity `2022.3.67f2` and `6000.0.58f2` projects pass EditMode `95/95` in
+  both uGUI and no-uGUI lanes. uGUI PlayMode passes `18` tests with one expected
+  skip; dependency-free PlayMode passes `5/5`, with authoritative post-settle
+  compilation green in every lane.
+
+### Known limitations
+
+- Click effectiveness is based on the existing semantic snapshot comparison;
+  custom UI effects without a modeled state change need log or project-hook
+  evidence.
+- `maxSearchChars` remains bounded at 10,000,000 characters; a larger log needs
+  a nearer request/session anchor or direct artifact inspection.
+- The `Unity Package CI` workflow remains explicitly waived because hosted
+  runners do not have Unity license credentials. Local Unity validation is the
+  release evidence for package changes.
+
 ## 0.3.65
 
 Release tag: `v0.3.65`

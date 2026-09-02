@@ -8,6 +8,7 @@ namespace XUUnity.LightMcp.Editor.Core
         {
             public int limit = 50;
             public string[] includeTypes = null;
+            public bool includeStackTraces;
             public string source = "console";
             public int maxPayloadBytes;
         }
@@ -44,6 +45,7 @@ namespace XUUnity.LightMcp.Editor.Core
             public string exclude_pattern = "";
             public bool regex;
             public bool ignore_case;
+            public bool include_stack_traces;
             public int match_count;
             public int excluded_count;
             public int build_pipeline_suppressed_count;

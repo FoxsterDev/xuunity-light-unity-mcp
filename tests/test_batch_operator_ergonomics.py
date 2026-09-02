@@ -297,6 +297,43 @@ class BatchOperatorErgonomicsTests(unittest.TestCase):
         self.assertEqual("passed_with_verified_mutation_delta", safe["operator_verdict"])
         self.assertTrue(safe["mutation_decision_ready"])
 
+    def test_applied_mutation_survives_passive_settle_steps_and_failed_compile_gate(self) -> None:
+        summary = server_summaries.build_scenario_result_summary(
+            {
+                "project_root": "/tmp/FakeProject",
+                "run_id": "run-domain-reload",
+                "scenario_name": "ApplyThenGate",
+                "status": "failed",
+                "recovery_attempt_count": 1,
+                "steps": [
+                    {
+                        "stepId": "apply_profile",
+                        "kind": "project_defined_hook",
+                        "status": "passed",
+                        "payload_json": json.dumps({"outcome": "profile_applied"}),
+                    },
+                    {"stepId": "reload_wait", "kind": "wait", "status": "passed"},
+                    {"stepId": "settle_status", "kind": "status", "status": "passed"},
+                    {
+                        "stepId": "compile_gate",
+                        "kind": "compile_player_scripts",
+                        "status": "failed",
+                        "error_code": "editor_busy",
+                    },
+                ],
+            },
+            {"passed", "failed"},
+        )
+
+        applied = summary["applied_mutation_settle_summary"]
+        self.assertEqual("applied", applied["mutation_status"])
+        self.assertEqual(["wait", "status"], applied["intermediate_settle_steps"])
+        verdict = server_project_actions.build_project_action_mutation_verdict(summary)
+        self.assertEqual("unity_completed_host_delivery_unproven", verdict["operator_verdict"])
+        self.assertEqual("unity_completed_host_delivery_unproven", verdict["mutation_trust_class"])
+        self.assertFalse(verdict["should_retry"])
+        self.assertEqual("verify_mutated_state_before_any_reapply", verdict["recommended_next_action"])
+
     def test_profile_mutation_summary_warns_when_restore_is_missing(self) -> None:
         summary = server_summaries.build_scenario_result_summary(
             {
@@ -490,6 +527,11 @@ class BatchOperatorErgonomicsTests(unittest.TestCase):
             with self.subTest(command=command[0]):
                 parsed = parser.parse_args([*command, "--output", "compact"])
                 self.assertEqual("compact", parsed.output)
+
+    def test_batch_commands_default_to_compact_output(self) -> None:
+        parser = server.build_parser()
+        parsed = parser.parse_args(["batch-compile", "--project-root", "/tmp/FakeProject", "--target", "Android"])
+        self.assertEqual("compact", parsed.output)
 
 
 if __name__ == "__main__":

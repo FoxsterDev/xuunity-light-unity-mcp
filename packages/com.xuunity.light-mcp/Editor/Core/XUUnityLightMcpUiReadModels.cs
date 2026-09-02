@@ -305,6 +305,8 @@ namespace XUUnity.LightMcp.Editor.Core
         public bool delivered;
         public string delivered_to_path = "";
         public string delivery_mechanism = "";
+        public bool effective;
+        public bool no_observable_effect;
         public bool state_changed;
         public string playmode_state = "";
         public XUUnityLightMcpUiClickSnapshotRef before_snapshot = new();
@@ -326,6 +328,8 @@ namespace XUUnity.LightMcp.Editor.Core
         public string target_path = "";
         public string target_component = "";
         public string handler_path = "";
+        public bool effective;
+        public bool no_observable_effect;
         public bool state_changed;
         public string before_signature = "";
         public string after_signature = "";

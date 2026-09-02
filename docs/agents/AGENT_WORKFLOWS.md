@@ -176,10 +176,14 @@ Claude Code, Claude Desktop, Cursor, and Windsurf:
   "tool": "unity_tests_run_editmode",
   "arguments": {
     "projectRoot": "$PROJECT_ROOT",
+    "testNames": ["Namespace.FullyQualifiedTestName"],
     "timeoutMs": 180000
   }
 }
 ```
+
+All test filter fields are arrays of strings. Never pass a scalar test name;
+the server rejects the wrong shape before executing anything.
 
 Codex-style or custom stdio MCP clients can call the same tools through the
 standard MCP JSON-RPC envelope:
@@ -246,7 +250,7 @@ Minimum evidence object:
   "workflowId": "post_change_validation",
   "projectRoot": "$PROJECT_ROOT",
   "unityVersion": "6000.0.58f2",
-  "packageVersion": "0.3.65",
+  "packageVersion": "0.3.66",
   "packageSourceMode": "git",
   "verdict": "pass",
   "checks": [
@@ -1009,7 +1013,7 @@ Production route:
 
 ```bash
 # First synchronize release-facing version references, for example with
-# --version 0.3.65 when preparing the next patch release.
+# --version 0.3.66 when preparing the next patch release.
 python3 scripts/tools/sync_release_version.py --version <next-version>
 python3 scripts/testing/check_release_version_consistency.py
 scripts/testing/run_host_python_tests.sh

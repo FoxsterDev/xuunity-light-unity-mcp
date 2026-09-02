@@ -229,10 +229,16 @@ namespace XUUnity.LightMcp.Editor.Ugui
                 payload.before_snapshot.signature,
                 payload.after_snapshot.signature,
                 StringComparison.Ordinal);
+            payload.effective = payload.delivered && payload.state_changed;
+            payload.no_observable_effect = payload.delivered && !payload.state_changed;
 
-            payload.success = payload.delivered;
-            payload.status = payload.delivered ? "delivered" : "not_delivered";
-            payload.proof_class = payload.delivered
+            payload.success = payload.effective;
+            payload.status = payload.effective
+                ? "effective"
+                : payload.delivered
+                    ? "delivered_no_observable_effect"
+                    : "not_delivered";
+            payload.proof_class = payload.effective
                 ? XUUnityLightMcpUiRead.ProofSemanticTree
                 : XUUnityLightMcpUiRead.ProofSemanticPartial;
             if (!payload.delivered)
@@ -240,6 +246,15 @@ namespace XUUnity.LightMcp.Editor.Ugui
                 payload.errors.Add(XUUnityLightMcpUiTreeBuilder.Diagnostic(
                     "ui_click_not_delivered",
                     "The event system accepted the target but no handler consumed the click."));
+            }
+            else if (payload.no_observable_effect)
+            {
+                payload.warnings.Add(XUUnityLightMcpUiTreeBuilder.Diagnostic(
+                    "ui_click_no_state_change",
+                    "The handler consumed the synthetic pointer event, but the UI tree did not change. "
+                    + "A handler may reject synthetic input when it validates pointerCurrentRaycast identity, "
+                    + "or the effect may only be visible in logs or non-UI state. Verify with a UI query, "
+                    + "an anchored log assertion, or a project-defined hook that calls the production API."));
             }
 
             return Respond(request, payload);
@@ -288,6 +303,8 @@ namespace XUUnity.LightMcp.Editor.Ugui
         {
             payload.success = false;
             payload.delivered = false;
+            payload.effective = false;
+            payload.no_observable_effect = false;
             payload.status = "refused";
             payload.refusal_code = code;
             payload.proof_class = XUUnityLightMcpUiRead.ProofError;

@@ -95,6 +95,8 @@ namespace XUUnity.LightMcp.Tests.EditModeUgui
                 Is.EqualTo(XUUnityLightMcpUiRead.InteractionSchemaVersion));
             Assert.That(payload.ui_interaction.interaction_id, Is.EqualTo("close_button"));
             Assert.That(payload.ui_interaction.delivered, Is.True);
+            Assert.That(payload.ui_interaction.effective, Is.True);
+            Assert.That(payload.ui_interaction.no_observable_effect, Is.False);
             Assert.That(payload.ui_interaction.state_changed, Is.True, "the label text changed, so the tree signature must differ");
             Assert.That(payload.ui_interaction.delivery_mechanism, Is.EqualTo("event_system_pointer_click_handler"));
             Assert.That(payload.ui_interaction.before_signature, Is.Not.EqualTo(payload.ui_interaction.after_signature));
@@ -129,6 +131,8 @@ namespace XUUnity.LightMcp.Tests.EditModeUgui
 
             var payload = JsonUtility.FromJson<XUUnityLightMcpUiInteractionStepPayload>(result.payload_json);
             Assert.That(payload.ui_interaction.delivered, Is.True);
+            Assert.That(payload.ui_interaction.effective, Is.False);
+            Assert.That(payload.ui_interaction.no_observable_effect, Is.True);
             Assert.That(payload.ui_interaction.state_changed, Is.False);
         }
 

@@ -554,6 +554,28 @@ def normalize_poll_until_steps(steps: list[Any]) -> list[Any]:
         if operation and not str(normalized.get("kind") or "").strip():
             normalized["kind"] = operation
 
+        if operation == "project_defined_hook":
+            if "payload" in normalized:
+                if "hookPayloadJson" in normalized or "payloadJson" in normalized:
+                    raise ToolInvocationError(
+                        "project_hook_payload_ambiguous",
+                        "project_defined_hook accepts one payload field; use hookPayloadJson (or object payload), not both.",
+                    )
+                payload = normalized.pop("payload")
+                if not isinstance(payload, dict):
+                    raise ToolInvocationError(
+                        "project_hook_payload_invalid",
+                        "project_defined_hook payload must be a JSON object; use hookPayloadJson for encoded JSON.",
+                    )
+                normalized["hookPayloadJson"] = json.dumps(payload, ensure_ascii=True, separators=(",", ":"))
+            elif "payloadJson" in normalized:
+                if "hookPayloadJson" in normalized:
+                    raise ToolInvocationError(
+                        "project_hook_payload_ambiguous",
+                        "project_defined_hook accepts one encoded payload field; use hookPayloadJson, not payloadJson and hookPayloadJson.",
+                    )
+                normalized["hookPayloadJson"] = normalized.pop("payloadJson")
+
         if operation == "project_defined_hook_poll_until":
             if "startPayload" in normalized and "startPayloadJson" not in normalized:
                 start_payload = normalized.pop("startPayload")
@@ -767,6 +789,32 @@ MUTATION_DELTA_CONTRACT_DOC = "docs/operations/SMOKE_TESTS.md#4c-mutating-projec
 
 def build_project_action_mutation_verdict(scenario_summary: dict[str, Any]) -> dict[str, Any]:
     if not bool(scenario_summary.get("succeeded")):
+        applied_settle = scenario_summary.get("applied_mutation_settle_summary")
+        if isinstance(applied_settle, dict) and str(applied_settle.get("mutation_status") or "") == "applied":
+            delivery_unproven = int(scenario_summary.get("recovery_attempt_count") or 0) > 0 or bool(
+                scenario_summary.get("scenario_result_reconciled_from_persisted")
+            )
+            return {
+                "operator_verdict": (
+                    "unity_completed_host_delivery_unproven"
+                    if delivery_unproven
+                    else "mutation_applied_settle_unproven"
+                ),
+                "mutation_trust_class": (
+                    "unity_completed_host_delivery_unproven"
+                    if delivery_unproven
+                    else "mutation_applied_settle_unproven"
+                ),
+                "mutation_decision_ready": False,
+                "destructive_drop_detected": False,
+                "should_retry": False,
+                "applied_mutation_settle_summary": dict(applied_settle),
+                "mutation_warning": (
+                    "Unity reported that the mutation was applied, but the later settle/delivery path was not "
+                    "proven. Replaying the mutation could duplicate or reverse state."
+                ),
+                "recommended_next_action": "verify_mutated_state_before_any_reapply",
+            }
         return {
             "operator_verdict": "mutation_not_completed",
             "mutation_trust_class": "not_evaluated",

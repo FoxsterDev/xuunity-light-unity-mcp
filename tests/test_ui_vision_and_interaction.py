@@ -960,6 +960,14 @@ class CrossLanguageContractTests(unittest.TestCase):
         self.assertIn("playmode_state = CurrentPlayModeState()", text)
         self.assertIn("EditorApplication.isPaused", text)
 
+    def test_the_click_operation_ranks_observable_effect_above_delivery(self) -> None:
+        text = self.read("Ugui/XUUnityLightMcpUiClickOperation.cs")
+
+        self.assertIn("payload.effective = payload.delivered && payload.state_changed", text)
+        self.assertIn('"delivered_no_observable_effect"', text)
+        self.assertIn('"ui_click_no_state_change"', text)
+        self.assertNotIn("payload.success = payload.delivered;", text)
+
     def test_scenario_click_preserves_search_budget_and_truncation_evidence(self) -> None:
         handler = self.read("Helpers/XUUnityLightMcpScenarioUiInteractionStepHandler.cs")
 

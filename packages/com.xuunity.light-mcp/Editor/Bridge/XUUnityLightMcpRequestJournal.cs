@@ -1,6 +1,7 @@
 using System;
 using System.Diagnostics;
 using System.IO;
+using UnityEditor;
 using UnityEngine;
 using XUUnity.LightMcp.Editor.Core;
 
@@ -8,6 +9,8 @@ namespace XUUnity.LightMcp.Editor.Bridge
 {
     internal static class XUUnityLightMcpRequestJournal
     {
+        const string ClientSessionKeyPrefix = "XUUnityLightMcp.RequestClientSession.";
+
         public static void WriteBootstrapAttached(string processClass)
         {
             using var process = Process.GetCurrentProcess();
@@ -21,13 +24,20 @@ namespace XUUnity.LightMcp.Editor.Bridge
             });
         }
 
-        public static void WriteRequestStarted(string requestId, string operation, string startedAtUtc, int pendingRequestCount)
+        public static void WriteRequestStarted(
+            string requestId,
+            string clientSessionId,
+            string operation,
+            string startedAtUtc,
+            int pendingRequestCount)
         {
+            RememberClientSession(requestId, clientSessionId);
             WriteEvent(new XUUnityLightMcpRequestJournalEvent
             {
                 event_type = "request_started",
                 event_at_utc = UtcNow(),
                 request_id = requestId ?? "",
+                client_session_id = clientSessionId ?? "",
                 operation = operation ?? "",
                 pending_request_count = Math.Max(0, pendingRequestCount),
                 started_at_utc = startedAtUtc ?? "",
@@ -55,6 +65,7 @@ namespace XUUnity.LightMcp.Editor.Bridge
                 started_at_utc = startedAtUtc ?? "",
                 completed_at_utc = completedAtUtc ?? "",
             });
+            ForgetClientSession(requestId);
         }
 
         public static void WriteRequestAbandoned(
@@ -107,9 +118,15 @@ namespace XUUnity.LightMcp.Editor.Bridge
         {
             XUUnityLightMcpFileIpcPaths.EnsureDirectories();
 
+            using var process = Process.GetCurrentProcess();
             payload.project_root = XUUnityLightMcpFileIpcPaths.ProjectRootPath;
+            payload.editor_pid = process.Id;
             payload.bridge_session_id = XUUnityLightMcpBridgeRuntimeState.BridgeSessionId;
             payload.bridge_generation = XUUnityLightMcpBridgeRuntimeState.BridgeGeneration;
+            if (string.IsNullOrWhiteSpace(payload.client_session_id))
+            {
+                payload.client_session_id = ResolveClientSession(payload.request_id);
+            }
             payload.event_id = BuildEventId(payload.event_type);
 
             var path = Path.Combine(XUUnityLightMcpFileIpcPaths.RequestJournalDirectory, $"{payload.event_id}.json");
@@ -137,6 +154,31 @@ namespace XUUnity.LightMcp.Editor.Bridge
         static string UtcNow()
         {
             return DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ");
+        }
+
+        static void RememberClientSession(string requestId, string clientSessionId)
+        {
+            if (string.IsNullOrWhiteSpace(requestId) || string.IsNullOrWhiteSpace(clientSessionId))
+            {
+                return;
+            }
+
+            SessionState.SetString(ClientSessionKeyPrefix + requestId, clientSessionId);
+        }
+
+        static string ResolveClientSession(string requestId)
+        {
+            return string.IsNullOrWhiteSpace(requestId)
+                ? ""
+                : SessionState.GetString(ClientSessionKeyPrefix + requestId, "");
+        }
+
+        static void ForgetClientSession(string requestId)
+        {
+            if (!string.IsNullOrWhiteSpace(requestId))
+            {
+                SessionState.EraseString(ClientSessionKeyPrefix + requestId);
+            }
         }
     }
 }

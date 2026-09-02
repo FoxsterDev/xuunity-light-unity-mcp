@@ -21,6 +21,7 @@ from server_registry import (
 
 # Core imports
 from server_core import ToolInvocationError, launcher_command_name, quoted_shell_path, read_json, write_json
+from server_bridge_journal import summarize_request_attribution
 from server_specs import (
     OPERATION_LIFECYCLE_POLICIES,
     SCENARIO_DEFINITION_SCHEMA,
@@ -29,6 +30,7 @@ from server_specs import (
     TOOLS,
 )
 from server_health import (
+    EDITOR_LOG_GREP_MAX_CHARS,
     FRESH_HEARTBEAT_MAX_AGE_SECONDS,
     annotate_console_grep_false_empty,
     annotate_console_tail_payload,
@@ -300,7 +302,7 @@ from server_batch_recovery import (
 PROTOCOL_VERSION = "2025-06-18"
 SERVER_INFO = {
     "name": "xuunity-mcp",
-    "version": "0.3.65",
+    "version": "0.3.66",
 }
 
 # === Block A: Registry & Discovery Helpers ===
@@ -677,7 +679,7 @@ def build_status_summary_from_context(
     *,
     include_full_payload: bool = True,
 ) -> dict[str, Any]:
-    return build_status_summary(
+    summary = build_status_summary(
         project_root,
         payload if isinstance(payload, dict) else {},
         read_best_effort_bridge_state=current_project_context_bridge_state,
@@ -690,6 +692,8 @@ def build_status_summary_from_context(
         include_full_payload=include_full_payload,
         host_editor_session_state=try_read_host_editor_session_state(project_root),
     )
+    summary.update(summarize_request_attribution(project_root))
+    return summary
 
 
 def recommended_recovery_command_for_project(project_root: Path, next_action: str) -> str:
@@ -1666,6 +1670,11 @@ def call_unity_console_grep_tool(arguments: dict[str, Any]) -> dict[str, Any]:
     limit = arguments.get("limit", 20)
     if not isinstance(limit, int):
         raise JsonRpcError(-32602, "limit must be an integer.")
+    max_search_chars = arguments.get("maxSearchChars", EDITOR_LOG_GREP_MAX_CHARS)
+    if not isinstance(max_search_chars, int) or isinstance(max_search_chars, bool):
+        raise JsonRpcError(-32602, "maxSearchChars must be an integer.")
+    if max_search_chars < 4096 or max_search_chars > 10000000:
+        raise JsonRpcError(-32602, "maxSearchChars must be between 4096 and 10000000.")
 
     regex = arguments.get("regex", False)
     ignore_case = arguments.get("ignoreCase", True)
@@ -1709,6 +1718,7 @@ def call_unity_console_grep_tool(arguments: dict[str, Any]) -> dict[str, Any]:
                 include_stack_traces=include_stack_traces,
                 include_build_pipeline_noise=include_build_pipeline_noise,
                 limit=max(1, limit),
+                max_chars=max_search_chars,
                 since=since,
                 bridge_state=anchor_bridge_state,
                 host_session_state=anchor_host_session_state,
@@ -1772,6 +1782,9 @@ def call_unity_console_tail_tool(arguments: dict[str, Any]) -> dict[str, Any]:
         raise JsonRpcError(-32602, "maxPayloadBytes must be an integer when provided.")
 
     include_types = _optional_string_list_argument(arguments, "includeTypes")
+    include_stack_traces = arguments.get("includeStackTraces", False)
+    if not isinstance(include_stack_traces, bool):
+        raise JsonRpcError(-32602, "includeStackTraces must be a boolean.")
     since = _editor_log_since_argument(arguments)
     since_request_id = str(arguments.get("sinceRequestId") or "").strip()
     project_root = ensure_project_root(project_root_value)
@@ -1803,6 +1816,7 @@ def call_unity_console_tail_tool(arguments: dict[str, Any]) -> dict[str, Any]:
     bridge_args = {
         "limit": max(1, limit),
         "includeTypes": include_types or None,
+        "includeStackTraces": include_stack_traces,
         "source": "console",
     }
     if max_payload_bytes is not None:

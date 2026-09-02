@@ -206,6 +206,28 @@ class SchemaRequiredListsAreHonestTests(unittest.TestCase):
         self.assertEqual(["a"], server_mcp_tools.missing_required_arguments(tool, {"b": 1}))
 
 
+class DeclaredArgumentTypeTests(unittest.TestCase):
+    def test_scalar_test_names_is_refused_before_project_resolution_or_unity(self) -> None:
+        with self.assertRaises(server_mcp_tools.JsonRpcError) as caught:
+            call(
+                "unity_tests_run_editmode",
+                {"projectRoot": "/tmp/does-not-matter", "testNames": "Namespace.Test"},
+            )
+
+        message = str(caught.exception)
+        self.assertIn("unity_tests_run_editmode.testNames must be array", message)
+        self.assertIn("Nothing was executed", message)
+
+    def test_test_filter_arrays_reject_non_string_items(self) -> None:
+        with self.assertRaises(server_mcp_tools.JsonRpcError) as caught:
+            call(
+                "unity_tests_run_playmode",
+                {"projectRoot": "/tmp/does-not-matter", "testNames": ["Namespace.Test", 7]},
+            )
+
+        self.assertIn("array of string values", str(caught.exception))
+
+
 if __name__ == "__main__":
     unittest.main()
 

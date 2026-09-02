@@ -188,6 +188,12 @@ Current request journal baseline includes:
 - `request_abandoned`
 - `request_reclassified`
 
+Every host process stamps a stable `client_session_id` into submitted requests.
+Unity preserves that id across domain reloads and writes it, plus the real
+editor PID, on lifecycle journal events. Compact status counts own, foreign,
+and unattributed submissions since the current client process started so an
+operator can distinguish its work from another terminal or MCP client.
+
 This is intentionally a first protocol layer, not the final reconnect model.
 
 Licensing IPC provenance is host-owned and fail-closed. Candidate discovery is
@@ -203,6 +209,12 @@ Wrapper compact output is a terminal protocol, not a footer. It suppresses the
 child payload and stderr, emits one JSON envelope with an 8192-byte ceiling,
 and retains only decision fields plus artifact pointers. Full evidence remains
 an explicit opt-in.
+
+UI click delivery and click effectiveness are separate facts. `delivered=true`
+means the event reached the target; `effective=true` requires an observable
+semantic state change. A delivered no-op returns
+`status=delivered_no_observable_effect`, `success=false`, and remediation for
+raycast, log, or project-hook verification.
 
 Known current weakness:
 

@@ -70,6 +70,8 @@ def ui_interaction_contract() -> dict[str, Any]:
             "target_path": "the matched node path",
             "handler_path": "the ancestor that actually handled the click",
             "state_changed": "whether the UI tree signature differed after delivery",
+            "effective": "true only when the click was delivered and produced an observable UI-tree change",
+            "no_observable_effect": "true when delivery occurred but the before/after UI signatures are identical",
             "playmode_state": "edit, playing, or paused at delivery time",
             "refusal_code": "set when the operation refused before delivery",
         },
@@ -131,6 +133,8 @@ def normalize_ui_interaction(
     refusal_code = _text(raw, "refusal_code", "refusalCode")
     delivered = bool(raw.get("delivered", False))
     state_changed = bool(raw.get("state_changed", raw.get("stateChanged", False)))
+    effective = bool(raw.get("effective", delivered and state_changed))
+    no_observable_effect = bool(raw.get("no_observable_effect", delivered and not state_changed))
     playmode_state = _text(raw, "playmode_state", "playmodeState").lower()
 
     if refusal_code:
@@ -170,6 +174,8 @@ def normalize_ui_interaction(
             "target_component": _text(raw, "target_component", "targetComponent"),
             "handler_path": _text(raw, "handler_path", "handlerPath"),
             "state_changed": state_changed,
+            "effective": effective,
+            "no_observable_effect": no_observable_effect,
             "before_signature": _text(raw, "before_signature", "beforeSignature"),
             "after_signature": _text(raw, "after_signature", "afterSignature"),
             "playmode_state": playmode_state,

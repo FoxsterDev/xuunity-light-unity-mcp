@@ -16,7 +16,7 @@ def add_batch_operator_arguments(command_parser: argparse.ArgumentParser) -> Non
     command_parser.add_argument("--side-effect-mode", choices=["git", "off"], default="git")
     command_parser.add_argument("--side-effect-allow-file")
     command_parser.add_argument("--batch-fallback-mode", choices=["auto", "off", "require-batch"], default="auto")
-    command_parser.add_argument("--output", choices=BATCH_OUTPUT_MODES, default="full")
+    command_parser.add_argument("--output", choices=BATCH_OUTPUT_MODES, default="compact")
     command_parser.add_argument("--refresh-license", action="store_true")
     command_parser.add_argument(
         "--progress-interval-seconds",
@@ -241,6 +241,12 @@ def build_parser() -> argparse.ArgumentParser:
     console_grep_cmd.add_argument("--include-type", action="append", default=[])
     console_grep_cmd.add_argument("--limit", type=int, default=20)
     console_grep_cmd.add_argument(
+        "--max-search-chars",
+        type=int,
+        default=500000,
+        help="Editor.log characters to search from the anchor (4096..10000000).",
+    )
+    console_grep_cmd.add_argument(
         "--since",
         choices=["playmode_start", "bridge_generation", "request_id"],
         default="",
@@ -255,6 +261,7 @@ def build_parser() -> argparse.ArgumentParser:
     console_tail_cmd.add_argument("--source", choices=["console", "editor_log"], default="editor_log")
     console_tail_cmd.add_argument("--editor-log-path")
     console_tail_cmd.add_argument("--include-type", action="append", default=[])
+    console_tail_cmd.add_argument("--include-stack-traces", action="store_true")
     console_tail_cmd.add_argument("--limit", type=int, default=50)
     console_tail_cmd.add_argument(
         "--max-payload-bytes",
