@@ -1,8 +1,8 @@
 # XUUnity Light Unity MCP Public Retro Registry
 
 Status: active public registry
-Last triage: 2026-09-01 (freshness reconciliation plus the two-sighting capped UI-selector false negative)
-Current released source line: `v0.3.63`
+Last triage: 2026-09-02 (released the mutation-trust/request-attribution cluster in `v0.3.66`; the separate batch summary-shape and compile-evidence retro remains active)
+Current released source line: `v0.3.66`
 
 Update this file whenever a public-safe MCP retro is added, moved, renamed, or
 deleted. Host-private and project-specific retros belong in the host's single
@@ -25,6 +25,25 @@ host-local registry.
 - `Completed Public History` is the place to find reusable lessons already
   implemented, applied, superseded, or retained only for history.
 - Prompt templates are listed separately and are not backlog items.
+
+## Re-Evaluation 2026-09-02 (`v0.3.66` release closeout)
+
+- The mutation-trust/request-attribution retro's reusable tool findings are
+  implemented, validated, and released in `v0.3.66`: applied project-hook
+  mutations survive passive waits and lifecycle recovery without inviting a
+  replay; every request carries a domain-reload-stable `client_session_id`;
+  completed journal events carry the real editor PID; anchored log searches
+  reject cross-process offsets and accept a bounded `maxSearchChars` recovery.
+- The related scenario-authoring risk is closed by promoting a single plain
+  project-hook `payload` object to `hookPayloadJson` and rejecting invalid or
+  conflicting aliases. The dead-editor `ensure-ready` episode remains an
+  operator error because the preceding status result already supplied the
+  fail-closed recovery action; it is not carried as an unimplemented tool fix.
+- Release evidence: host `992` passed with 14 expected platform skips, public
+  site `42/42`, and clean Unity `2022.3.67f2` plus `6000.0.58f2` matrices passed
+  EditMode `95/95` in uGUI and no-uGUI lanes, uGUI PlayMode 18 passed with one
+  expected skip, and dependency-free PlayMode `5/5` with green post-settle
+  compilation. Hosted Unity Package CI retains its documented license waiver.
 
 ## Re-Evaluation 2026-09-01
 
@@ -427,7 +446,6 @@ the entire Windows install root-cause set (python3 delegation, UTF-8 BOM,
 
 | Date | File | Scope | Registry Status | Why It Is Not Completed History |
 | --- | --- | --- | --- | --- |
-| 2026-09-02 | `2026-09-02_mutation_trust_and_request_attribution_retro.md` | Mutation trust class after a lifecycle reset, request initiator attribution, second sighting of the anchored-window residual, plus scenario-authoring validator warnings | **intake; two new P1 findings, one second-sighting escalation, three P2 candidates** | A mutating project action whose hook reported `environment_applied` surfaced as `mutation_trust_class: not_evaluated` / `operator_verdict: mutation_not_completed` after the domain reload reset the response channel (journal `request_delivery_unproven`, `reason: response_channel_reset_before_host_delivery`); the shipped `unity_completed_host_delivery_unproven` trust class does not reach the project-action envelope, and the current wording invites re-applying a mutation that already landed. Seventeen requests reached the bridge from a concurrent actor with no initiator field anywhere in the journal or status surfaces. The 2026-08-19 anchored-window P2 gets its second sighting: ranking was correct (`search_verdict: inconclusive`, 1.66 MB unsearched) but `inconclusive` is a dead end without an operator-controlled window, and both sightings ended in a shell fallback. P2 candidates: validator warnings for a `project_defined_hook` step carrying `payload` and for a poll-until step with no `continueWhen`, plus `ensure-ready` fast-fail on a dead editor pid. Nothing implemented yet. |
 | 2026-08-26 | `2026-08-26_import_worker_bridge_ownership_retro.md` | Import-worker ownership plus UI selector, click-causality, readiness-log, package-removal, and contention follow-ups | **P0 released in `v0.3.60`; selector-truncation P1 implemented in current source; other follow-ups open** | Import-worker bridge ownership and provenance are released. The two-sighting capped-selector false negative now has a typed inconclusive result with scope/budget evidence and bounded recovery; a partial match is also refused because uniqueness is unproven. Non-causal `state_changed`, readiness-log attribution, package-removal verification, and operator-contention follow-ups remain separate work. |
 | 2026-08-20 | `2026-08-20_readiness_verdict_false_positive_retro.md` | Readiness gate: `interactive_compile_block_detected` asserted a compile fact nothing measured, represented several unrelated transient states, contradicted its own `host_prerequisites` block, and recommended destructive recovery | **P0 + both P1 items implemented and live-validated in current source; two P2 residuals open** | Current source uses condition-specific readiness codes, stamps `compile_state=unmeasured`, keeps polling transient attach/import/identity conditions, maps recovery to non-destructive status polling, and aligns the blocking prerequisite with the top-level result. Focused host tests cover every condition plus the stale-log/next-poll bridge-attach race. Unity 2022 package EditMode/PlayMode and Unity 6000 compile/scenario/contract/lifecycle/churn/project-action regression pass; the Unity 6000 lane reproduced and cleared the race. Remaining P2: mark log diagnoses as heuristic/suppress the `-accept-apiupdate` inversion, and echo batch editor-close side effects. |
 | 2026-08-19 | `2026-08-19_anchored_scope_truncation_and_verdict_field_ranking_retro.md` | Console-lane verdict ranking: a truncated search scope that reports zero matches as a negative, and an anchored scope whose fixed cut kept the tail rather than the anchor-adjacent head | **both P1 items implemented in current source; P2/P3 residuals open** | Current source keeps anchored grep windows beside the anchor, exposes `search_verdict`/reason, direction and truncation at the top level, and makes partial zero-matches explicitly inconclusive with a recovery action and partial-scope trust class. Complete anchored zero-matches remain `not_matched`; console tail keeps recent-tail behavior. Focused regression owns early-boot recovery, boundary safety, absolute numbering, negative/inconclusive ranking, and tail compatibility. Remaining: P2 user-controlled window/import-freshness hints and P3 benign settle-warning downgrade. **Second sighting 2026-09-02**: ranking behaved correctly on an anchored 2.16 MB scope with 1.66 MB unsearched, and the answer still required a shell fallback, so the P2 window residual is proposed for P1. |
@@ -449,6 +467,7 @@ the entire Windows install root-cause set (python3 delegation, UTF-8 BOM,
 
 | Date | File | Scope | Registry Status | Notes |
 | --- | --- | --- | --- | --- |
+| 2026-09-02 | `2026-09-02_mutation_trust_and_request_attribution_retro.md` | Mutation trust across lifecycle recovery, stable client attribution, process-aware anchored log recovery, and project-hook payload normalization | implemented, validated, and released in `v0.3.66` | Applied mutations remain applied and replay-disabled through passive wait/status plus later refresh or compile-settle failures; transport, Unity journal, and status surfaces preserve `client_session_id` and real editor PID; cross-process anchors fail closed and `maxSearchChars` gives bounded in-tool recovery; plain hook payload objects are promoted while conflicting aliases are rejected. The dead-editor episode was correctly diagnosed before the operator ignored its recovery action, so no speculative fast-fail change was made. |
 | 2026-08-30 | `2026-08-30_hub_licensing_gui_playmode_operator_retro.md` | Dynamic Unity Hub licensing IPC handoff, GUI-first local PlayMode admission, terminal lifecycle aggregation, compact CLI output, and helper-owned licensing-child cleanup | implemented, validated, and released in `v0.3.63` | All retro tracks shipped. Full host `979/979`, public site `42/42`, release gates, and a live macOS Hub launch passed; Windows/Linux Hub behavior remains fixture-backed rather than live-host proven, and Unity Package CI retains its documented runner-license waiver. |
 | 2026-08-29 | `2026-08-29_consumer_release_rollout_safety_retro.md` | Authoritative consumer discovery, preflight, canary-before-fan-out, resumable evidence, bounded-worker authority, and identity-gated cleanup | implemented, validated, and released in `v0.3.62` | The public helper freezes the denominator and baseline, refuses unsafe mutation, proves one published-package canary before fan-out, and preserves exact per-project resume/cleanup evidence. Focused `23/23`, full host, release/docs/public-safety, and site UI evidence are recorded in the `v0.3.62` changelog. |
 | 2026-08-27 | `2026-08-27_editor_launch_and_gui_lane_retro.md` | Editor launch arguments/blocker evidence, scenario authoring diagnostics, deterministic UI lanes, output separation, and modal-blocked quit recovery | implemented, locally Unity-validated, and released in `v0.3.61` | Host `966/966`; clean Unity 2022 and 6000 licensing-channel launches; package EditMode `91/91` and PlayMode `5/5` on both; supported consumers pass Unity 2022 package tests and Unity 6000 compile/apply-gate/GUI/restore scenarios. Commit/tag gates, GitHub Release, and public-site synchronization completed on 2026-08-27; dirty consumer package files were preserved. |
