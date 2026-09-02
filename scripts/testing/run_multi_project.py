@@ -219,12 +219,13 @@ def normalized_matrix(raw_matrix) -> dict:
     status = str(raw_matrix.get("status") or "")
     if status not in {"passed", "failed"}:
         return {}
+    counter_keys = ("total", "passed", "failed", "skipped")
+    if not all(key in raw_matrix for key in counter_keys):
+        return {}
     try:
         counters = {
-            "total": int(raw_matrix.get("total", 0)),
-            "passed": int(raw_matrix.get("passed", 0)),
-            "failed": int(raw_matrix.get("failed", 0)),
-            "skipped": int(raw_matrix.get("skipped", 0)),
+            key: int(raw_matrix[key])
+            for key in counter_keys
         }
     except (TypeError, ValueError):
         return {}
@@ -245,7 +246,23 @@ def decoded_json_mapping(value) -> dict:
     return decoded if isinstance(decoded, dict) else {}
 
 
-def extract_compile_matrix(payload: dict, result_summary: dict) -> tuple[dict, str]:
+def read_json_mapping_file(path_value) -> dict:
+    """Read one wrapper-owned JSON artifact without making it mandatory."""
+    if not isinstance(path_value, (str, os.PathLike)) or not str(path_value):
+        return {}
+    try:
+        decoded = json.loads(Path(path_value).read_text(encoding="utf-8-sig"))
+    except (OSError, TypeError, ValueError):
+        return {}
+    return decoded if isinstance(decoded, dict) else {}
+
+
+def extract_compile_matrix(
+    payload: dict,
+    result_summary: dict,
+    summary_artifact: dict | None = None,
+    result_artifact: dict | None = None,
+) -> tuple[dict, str]:
     """Return matrix evidence from a stable summary or the GUI bridge payload."""
     candidates = [(result_summary.get("matrix"), "batch_result_summary")]
     for container in (payload, result_summary):
@@ -257,6 +274,15 @@ def extract_compile_matrix(payload: dict, result_summary: dict) -> tuple[dict, s
         if bridge_response:
             candidates.append((bridge_response.get("matrix"), "bridge_response_matrix"))
             candidates.append((bridge_response.get("payload_json"), "gui_fallback_matrix"))
+
+    for artifact, source in (
+        (summary_artifact, "summary_file_matrix"),
+        (result_artifact, "result_file_matrix"),
+    ):
+        if not isinstance(artifact, dict):
+            continue
+        candidates.append((artifact.get("matrix"), source))
+        candidates.append((artifact, source))
 
     for candidate, source in candidates:
         candidate_mapping = decoded_json_mapping(candidate)
@@ -299,8 +325,15 @@ def compile_evidence_from_run(
     recover_rc: int,
     batch_rc: int,
     execution_lane: str,
+    summary_artifact: dict | None = None,
+    result_artifact: dict | None = None,
 ) -> dict:
-    matrix, evidence_source = extract_compile_matrix(payload, result_summary)
+    matrix, evidence_source = extract_compile_matrix(
+        payload,
+        result_summary,
+        summary_artifact,
+        result_artifact,
+    )
     succeeded = bool(payload.get("succeeded"))
     passed = (
         recover_rc == 0
@@ -380,6 +413,8 @@ def build_batch_status(
 
     result_summary = payload.get("result_summary") if isinstance(payload, dict) else {}
     result_summary = result_summary if isinstance(result_summary, dict) else {}
+    summary_artifact = read_json_mapping_file(payload.get("summary_file")) if isinstance(payload, dict) else {}
+    result_artifact = read_json_mapping_file(payload.get("result_file")) if isinstance(payload, dict) else {}
     stderr_tail = ""
     if stderr_file.is_file():
         stderr_lines = stderr_file.read_text(encoding="utf-8", errors="replace").splitlines()
@@ -416,19 +451,44 @@ def build_batch_status(
         result_summary.get("license_blocker_code") if isinstance(result_summary, dict) else "",
         payload.get("license_blocker_code") if isinstance(payload, dict) else "",
     )
-    unity_outcome = first_string(result_summary.get("unity_outcome") if isinstance(result_summary, dict) else "")
-    transport_outcome = first_string(
-        result_summary.get("transport_outcome") if isinstance(result_summary, dict) else ""
+    outcome_sources = (
+        ("result_summary", result_summary),
+        ("compact_payload", payload),
+        ("summary_file", summary_artifact),
     )
+
+    def first_sourced_string(key):
+        for source, container in outcome_sources:
+            if not isinstance(container, dict):
+                continue
+            value = first_string(container.get(key))
+            if value:
+                return value, source
+        return "", "unavailable"
+
+    unity_outcome, unity_outcome_source = first_sourced_string("unity_outcome")
+    transport_outcome, transport_outcome_source = first_sourced_string("transport_outcome")
+    if not unity_outcome:
+        result_status = first_string(result_artifact.get("status"))
+        result_trust = first_string(result_artifact.get("post_settle_compile_trust_class"))
+        validation_evidence = first_string(result_artifact.get("validation_evidence"))
+        if result_status in {"passed", "failed"} and (
+            result_trust == "confirmed" or validation_evidence == "unity_mcp"
+        ):
+            unity_outcome = result_status
+            unity_outcome_source = "result_file"
     compile_evidence = compile_evidence_from_run(
         payload=payload,
         result_summary=result_summary,
         recover_rc=recover_rc,
         batch_rc=batch_rc,
         execution_lane=effective_execution_lane,
+        summary_artifact=summary_artifact,
+        result_artifact=result_artifact,
     )
     matrix = compile_evidence["matrix"]
     matrix_status = str(matrix.get("status") or "")
+    matrix_counters_status = "measured" if matrix else "unavailable"
     gui_fallback_pass = (
         bool(payload.get("succeeded")) if isinstance(payload, dict) else False
     ) and unity_outcome == "passed" and transport_outcome == "gui_operation_completed" and effective_execution_lane == "gui"
@@ -483,14 +543,19 @@ def build_batch_status(
         "live_project_editor_pids": live_editor_pids,
         "compile_evidence": compile_evidence,
         "unity_outcome": unity_outcome,
+        "unity_outcome_source": unity_outcome_source,
         "transport_outcome": transport_outcome,
+        "transport_outcome_source": transport_outcome_source,
         "matrix_status": matrix_status,
-        "total": int(matrix.get("total", 0)),
-        "passed": int(matrix.get("passed", 0)),
-        "failed": int(matrix.get("failed", 0)),
-        "skipped": int(matrix.get("skipped", 0)),
+        "matrix_counters_status": matrix_counters_status,
+        "total": int(matrix["total"]) if matrix else None,
+        "passed": int(matrix["passed"]) if matrix else None,
+        "failed": int(matrix["failed"]) if matrix else None,
+        "skipped": int(matrix["skipped"]) if matrix else None,
         "summary_file": str(payload.get("summary_file", "")) if isinstance(payload, dict) else "",
+        "summary_file_loaded": bool(summary_artifact),
         "result_file": str(payload.get("result_file", "")) if isinstance(payload, dict) else "",
+        "result_file_loaded": bool(result_artifact),
         "log_path": str(payload.get("log_path", "")) if isinstance(payload, dict) else "",
         "stderr_tail": stderr_tail,
     }
@@ -587,6 +652,10 @@ def emit_batch_final_summary(results_dir: str) -> int:
             )
         elif not ok:
             overall_failed += 1
+        def rendered_counter(key):
+            value = item.get(key)
+            return "unavailable" if value is None else value
+
         fields = [
             item.get("project", ""),
             f"recover_rc={item.get('recover_rc', 0)}",
@@ -603,10 +672,11 @@ def emit_batch_final_summary(results_dir: str) -> int:
             f"transport={item.get('transport_outcome', '')}",
             f"unity={item.get('unity_outcome', '')}",
             f"matrix_status={item.get('matrix_status', '')}",
-            f"total={item.get('total', 0)}",
-            f"passed={item.get('passed', 0)}",
-            f"failed={item.get('failed', 0)}",
-            f"skipped={item.get('skipped', 0)}",
+            f"matrix_counters={item.get('matrix_counters_status', 'unavailable')}",
+            f"total={rendered_counter('total')}",
+            f"passed={rendered_counter('passed')}",
+            f"failed={rendered_counter('failed')}",
+            f"skipped={rendered_counter('skipped')}",
             f"result_file={item.get('result_file', '')}",
         ]
         print("|".join(fields))

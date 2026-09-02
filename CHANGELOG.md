@@ -2,6 +2,64 @@
 
 ## Unreleased
 
+## 0.3.67
+
+Release tag: `v0.3.67`
+
+Current Git UPM install URL:
+
+```text
+https://github.com/FoxsterDev/xuunity-mcp.git?path=/packages/com.xuunity.light-mcp#v0.3.67
+```
+
+### Why
+
+- A successful GUI-fallback compile matrix could return Unity's authoritative
+  `passed` result with all six configurations green, while the multi-project
+  runner reported `failed_wrapper_unity_unproven`, printed `total=0`, and
+  exited with code 1. The runner understood the older full response but not the
+  compact response that batch commands now emit by default.
+
+### Fixed
+
+- The multi-project compile runner resolves outcome evidence in a stable order:
+  nested `result_summary`, compact top-level fields, the named summary artifact,
+  then a Unity-confirmed result artifact. Reusing an already-open editor no
+  longer changes a passing GUI-fallback matrix into a wrapper failure merely
+  because that lane returned the compact response shape.
+- Per-project status records identify which source supplied the Unity outcome,
+  transport outcome, and matrix. Missing matrix counters are now reported as
+  `unavailable` instead of measured zeroes.
+- Regression coverage exercises compact top-level success, summary-artifact
+  recovery, confirmed result-artifact recovery, and unavailable-counter output.
+
+### Benefits
+
+- A successful Unity compile matrix remains successful at the portfolio layer,
+  so release and maintenance workflows no longer stop on a false wrapper
+  failure or require manual inspection of the result JSON.
+
+### Validation
+
+- Release consistency, documentation freshness, and public-safety checks pass.
+- The focused multi-project runner suites pass `12/12` tests, including compact
+  top-level, summary-artifact, and confirmed result-artifact recovery.
+- Full host discovery passes `996` tests with `14` expected platform skips,
+  including live TCP loopback transport coverage.
+- Public documentation UI checks pass `42/42` in desktop and narrow Chromium
+  viewports.
+- A fresh local Unity package-matrix attempt was blocked before package tests by
+  the host Unity Licensing Client channel. The package C# source is unchanged
+  from `v0.3.66`; this release relies on that release's green Unity 2022.3 and
+  Unity 6000 package evidence for the unchanged package lane.
+
+### Known limitations
+
+- Compile-matrix warning totals and rebuilt-versus-cache-hit assembly counts
+  remain separate open evidence gaps; this patch fixes verdict aggregation only.
+- The `Unity Package CI` workflow remains explicitly waived because hosted
+  runners do not have Unity license credentials.
+
 ## 0.3.66
 
 Release tag: `v0.3.66`

@@ -1,7 +1,7 @@
 # XUUnity Light Unity MCP Smoke Tests
 
 Date: `2026-07-15`
-Status: `current source after v0.3.66`
+Status: `current source after v0.3.67`
 
 This file defines the public reusable smoke-test contract for the lightweight
 Unity MCP lane.
@@ -490,6 +490,10 @@ Pass criteria:
   not fall back to broad project auto-discovery;
 - compact batch rows state whether license evidence came from cache and, when
   available, its age in seconds.
+- a passing compact GUI-fallback row remains `passed_via_gui_fallback` whether
+  its evidence is present at the payload top level or recovered from the named
+  summary/result artifact;
+- unavailable matrix counters print `unavailable`, never measured zeroes.
 
 ### 5c. Published-Package Consumer Rollout
 

@@ -275,6 +275,218 @@ class MultiProjectBatchRunnerTests(unittest.TestCase):
             self.assertIn("license_from_cache=true", completed.stdout)
             self.assertIn("license_probe_age_seconds=", completed.stdout)
 
+    def test_compact_gui_fallback_success_counts_as_success(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            temp_root = Path(temp_dir)
+            stdout_file = temp_root / "batch_stdout.json"
+            stderr_file = temp_root / "batch_stderr.log"
+            status_file = temp_root / "status.json"
+            stdout_file.write_text(
+                json.dumps(
+                    {
+                        "payload_mode": "compact_batch_cli",
+                        "succeeded": True,
+                        "requested_execution_lane": "batch",
+                        "effective_execution_lane": "gui",
+                        "batch_fallback_mode": "auto",
+                        "lane_fallback_reason": "licensing_client_ipc_failure",
+                        "unity_outcome": "passed",
+                        "transport_outcome": "gui_operation_completed",
+                        "matrix": {
+                            "status": "passed",
+                            "total": 6,
+                            "passed": 6,
+                            "failed": 0,
+                            "skipped": 0,
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            stderr_file.write_text("", encoding="utf-8")
+
+            run_multi_project.build_batch_status(
+                "ConsumerProject",
+                str(temp_root / "ConsumerProject"),
+                stdout_file,
+                stderr_file,
+                status_file,
+                0,
+                0,
+                "auto",
+            )
+
+            status = json.loads(status_file.read_text(encoding="utf-8"))
+            self.assertEqual("passed_via_gui_fallback", status["operator_verdict"])
+            self.assertEqual("passed", status["unity_outcome"])
+            self.assertEqual("compact_payload", status["unity_outcome_source"])
+            self.assertEqual("gui_operation_completed", status["transport_outcome"])
+            self.assertEqual("compact_payload", status["transport_outcome_source"])
+            self.assertEqual("measured", status["matrix_counters_status"])
+            self.assertEqual(6, status["total"])
+            self.assertEqual(6, status["passed"])
+            self.assertEqual(0, status["failed"])
+
+    def test_compact_gui_fallback_recovers_summary_file_evidence(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            temp_root = Path(temp_dir)
+            summary_file = temp_root / "batch_summary.json"
+            stdout_file = temp_root / "batch_stdout.json"
+            stderr_file = temp_root / "batch_stderr.log"
+            status_file = temp_root / "status.json"
+            summary_file.write_text(
+                json.dumps(
+                    {
+                        "unity_outcome": "passed",
+                        "transport_outcome": "gui_operation_completed",
+                        "matrix": {
+                            "status": "passed",
+                            "total": 6,
+                            "passed": 6,
+                            "failed": 0,
+                            "skipped": 0,
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            stdout_file.write_text(
+                json.dumps(
+                    {
+                        "payload_mode": "compact_batch_cli",
+                        "succeeded": True,
+                        "requested_execution_lane": "batch",
+                        "effective_execution_lane": "gui",
+                        "batch_fallback_mode": "auto",
+                        "summary_file": str(summary_file),
+                    }
+                ),
+                encoding="utf-8",
+            )
+            stderr_file.write_text("", encoding="utf-8")
+
+            run_multi_project.build_batch_status(
+                "ConsumerProject",
+                str(temp_root / "ConsumerProject"),
+                stdout_file,
+                stderr_file,
+                status_file,
+                0,
+                0,
+                "auto",
+            )
+
+            status = json.loads(status_file.read_text(encoding="utf-8"))
+            self.assertEqual("passed_via_gui_fallback", status["operator_verdict"])
+            self.assertEqual("summary_file", status["unity_outcome_source"])
+            self.assertEqual("summary_file", status["transport_outcome_source"])
+            self.assertEqual("summary_file_matrix", status["compile_evidence"]["evidence_source"])
+            self.assertTrue(status["summary_file_loaded"])
+            self.assertEqual(6, status["total"])
+
+    def test_compact_gui_fallback_recovers_confirmed_result_file_evidence(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            temp_root = Path(temp_dir)
+            result_file = temp_root / "batch_result.json"
+            stdout_file = temp_root / "batch_stdout.json"
+            stderr_file = temp_root / "batch_stderr.log"
+            status_file = temp_root / "status.json"
+            result_file.write_text(
+                json.dumps(
+                    {
+                        "status": "passed",
+                        "total": 6,
+                        "passed": 6,
+                        "failed": 0,
+                        "skipped": 0,
+                        "validation_evidence": "unity_mcp",
+                        "post_settle_compile_trust_class": "confirmed",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            stdout_file.write_text(
+                json.dumps(
+                    {
+                        "payload_mode": "compact_batch_cli",
+                        "succeeded": True,
+                        "requested_execution_lane": "batch",
+                        "effective_execution_lane": "gui",
+                        "batch_fallback_mode": "auto",
+                        "transport_outcome": "gui_operation_completed",
+                        "result_file": str(result_file),
+                    }
+                ),
+                encoding="utf-8",
+            )
+            stderr_file.write_text("", encoding="utf-8")
+
+            run_multi_project.build_batch_status(
+                "ConsumerProject",
+                str(temp_root / "ConsumerProject"),
+                stdout_file,
+                stderr_file,
+                status_file,
+                0,
+                0,
+                "auto",
+            )
+
+            status = json.loads(status_file.read_text(encoding="utf-8"))
+            self.assertEqual("passed_via_gui_fallback", status["operator_verdict"])
+            self.assertEqual("result_file", status["unity_outcome_source"])
+            self.assertEqual("compact_payload", status["transport_outcome_source"])
+            self.assertEqual("result_file_matrix", status["compile_evidence"]["evidence_source"])
+            self.assertTrue(status["result_file_loaded"])
+            self.assertEqual(6, status["total"])
+
+    def test_unavailable_matrix_counters_are_not_reported_as_zero(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            temp_root = Path(temp_dir)
+            stdout_file = temp_root / "batch_stdout.json"
+            stderr_file = temp_root / "batch_stderr.log"
+            status_file = temp_root / "ConsumerProject_status.json"
+            stdout_file.write_text(
+                json.dumps(
+                    {
+                        "payload_mode": "compact_batch_cli",
+                        "succeeded": True,
+                        "requested_execution_lane": "batch",
+                        "effective_execution_lane": "gui",
+                        "batch_fallback_mode": "auto",
+                        "unity_outcome": "passed",
+                        "transport_outcome": "gui_operation_completed",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            stderr_file.write_text("", encoding="utf-8")
+
+            run_multi_project.build_batch_status(
+                "ConsumerProject",
+                str(temp_root / "ConsumerProject"),
+                stdout_file,
+                stderr_file,
+                status_file,
+                0,
+                0,
+                "auto",
+            )
+
+            status = json.loads(status_file.read_text(encoding="utf-8"))
+            self.assertEqual("unavailable", status["matrix_counters_status"])
+            self.assertIsNone(status["total"])
+            self.assertIsNone(status["passed"])
+            self.assertIsNone(status["failed"])
+            self.assertIsNone(status["skipped"])
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                exit_code = run_multi_project.emit_batch_final_summary(str(temp_root))
+            self.assertEqual(1, exit_code)
+            self.assertIn("matrix_counters=unavailable", output.getvalue())
+            self.assertIn("total=unavailable", output.getvalue())
+            self.assertNotIn("total=0", output.getvalue())
+
     def test_require_batch_mode_forwards_and_fails_when_batchmode_unavailable(self) -> None:
         with TemporaryDirectory() as temp_dir:
             temp_root = Path(temp_dir)

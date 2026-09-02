@@ -1,7 +1,7 @@
 # XUUnity Light Unity MCP Chat Retro — Batch Summary Shape and Compile-Warning Evidence
 
 Date: `2026-09-02`
-Status: `intake; one P0 latent defect, two P1 evidence gaps, two P2 candidates`
+Status: `P0 and summary-artifact P2 implemented for v0.3.67; two P1 evidence gaps and one P2 dead-flag candidate remain`
 Lane: `batch-build-config-compile-matrix` via the multi-project sweep runner, GUI fallback throughout
 Server metadata observed in session: `xuunity-mcp 0.3.65`
 
@@ -15,10 +15,10 @@ batch **summary** layer rather than the compile lane.
 
 | Finding | Attribution | One-line basis |
 | --- | --- | --- |
-| P0-1 the sweep runner reports `failed_wrapper_unity_unproven` / `total=0` on the wrapper's **default** output shape | **product defect, latent** | `--output` defaults to `compact` (`server_cli_parser.py:19`); the compact projection flattens summary fields to the payload top level and drops the nested `result_summary` (`server_batch_reporting.py:70-122`); the runner reads `result_summary` only from `payload["result_summary"]` (`run_multi_project.py:381`) and reads `unity_outcome`/`transport_outcome` from `result_summary` only (`run_multi_project.py:419-422`), unlike the five neighbouring lane/license fields which already have a payload fallback (`398-417`). Verdict then falls through the cascade to `failed_wrapper_unity_unproven` (`446-461`). |
+| P0-1 the sweep runner reports `failed_wrapper_unity_unproven` / `total=0` on the wrapper's **default** output shape | **implemented for v0.3.67** | The runner now resolves nested, compact top-level, named summary-file, and confirmed result-file evidence in order. Four regression cases cover compact GUI success, both artifact fallbacks, and `unavailable` rather than false-zero counters. |
 | P1-1 no warning surface anywhere in the batch compile artifacts | **product gap** | Per-config result keys are `status`, `error_count`, `errors`, `compiled_assembly_count`, `duration_seconds`, plus target/define metadata. Zero occurrences of `warn` in either the result JSON or the summary JSON. A warning-cleanup task therefore cannot be answered from any compact surface. |
 | P1-2 `compiled_assembly_count` cannot distinguish a real compile from a cache hit | **product gap** | One project's run reported `compiled_assembly_count` 85 (Android) / 82 (iOS) per config while the raw log held **374** real `Csc` invocations and **330** `[CacheHit …]` invocations. Another project in the same sweep: 73 real, 0 cache hits, count 66/63. Nothing in the artifacts expresses that ratio. |
-| P2-1 the runner never loads the `summary_file` it is handed | **product defect** | The compact payload names `summary_file`; that file exists (7009 bytes) and contains `unity_outcome: passed` and `transport_outcome: gui_operation_completed`. The runner has the path and never reads it. |
+| P2-1 the runner never loads the `summary_file` it is handed | **implemented for v0.3.67** | The runner reads the named summary artifact as the third precedence source and records `summary_file_loaded` plus the selected evidence source. |
 | P2-2 `--output` is parsed but never consumed | **product defect, dead flag** | `add_batch_operator_arguments` registers `--output` on the batch subcommands, but `grep` for `args.output` across `templates/*.py` yields only `args.output_path` / `args.output_dir`. Operators cannot select the shape the runner needs. |
 
 The single most valuable fix is P0-1, and it is small: the two fields that lost their value are the
