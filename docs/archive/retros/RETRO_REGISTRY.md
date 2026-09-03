@@ -531,6 +531,7 @@ the entire Windows install root-cause set (python3 delegation, UTF-8 BOM,
 | 2026-05-07 | `2026-05-07_token_stability_and_summary_first_recovery_retro.md` | token stability and summary-first recovery | implemented history | Sanitized from host-private single-project evidence; private source removed after promotion. |
 | undated | `xuunity_mcp_chat_retro.md` | legacy general MCP chat/session postmortem (PASS/EXCELLENT) | history; asks shipped | Both improvement asks are shipped: `no_tests` treated as an acceptable status (`run_multi_project.py` `acceptable_test_statuses={"passed","no_tests"}`) and compact-by-default final/latest surfaces (`v0.3.44`). Legacy wrapper terminology predates the current MCP tool surface; kept as history. |
 | undated | `xuunity_mcp_install_retro.md` | legacy end-to-end install/verify/Android-compile success record (v0.3.21) | history; no open items | Clean happy-path install postmortem with zero open items; the described flow still exists and was hardened through `v0.3.42`-`v0.3.44`. No backlog to implement. |
+| 2026-09-03 | `2026-09-03_greenfield_hardening_operator_retro.md` | staleness surfacing (editor domain + AssetDatabase), compact build envelope, advisory de-duplication | open | Written against `v0.3.67` during a full-day greenfield hardening session. P1s are both about currency: a green player compile hides a stale editor domain, and asset-reading project actions can return confident wrong verdicts. Re-check against `v0.3.68` before implementing. |
 
 ## Prompt Templates
 
