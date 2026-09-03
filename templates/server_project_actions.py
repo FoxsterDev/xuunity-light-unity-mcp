@@ -1000,22 +1000,7 @@ def render_project_hook_class(
     mutating: bool = False,
     ui_fixture: bool = False,
 ) -> str:
-    mutation_delta_field = "            public MutationDelta mutation_delta;\n" if mutating else ""
-    mutation_delta_type = "" if not mutating else """
-        [Serializable]
-        private sealed class MutationDelta
-        {
-            public string schema_version = "xuunity.mutation-delta.v1";
-            public string unit = "objects";
-            public string target = "project_specific_state";
-            public int before_count;
-            public int after_count;
-            public int added_count;
-            public int removed_count;
-            public int changed_count;
-        }
-
-"""
+    mutation_delta_field = "            public XUUnityLightMcpMutationDelta mutation_delta;\n" if mutating else ""
     ui_fixture_field = "            public UiFixture ui_fixture = new UiFixture();\n" if ui_fixture else ""
     ui_fixture_type = "" if not ui_fixture else """
         [Serializable]
@@ -1088,7 +1073,7 @@ namespace {namespace}
             public string[] available_actions = Array.Empty<string>();
 {mutation_delta_field}{ui_fixture_field}        }}
 
-{mutation_delta_type}{ui_fixture_type}        public string HookName => "{hook_name}";
+{ui_fixture_type}        public string HookName => "{hook_name}";
 
         public XUUnityLightMcpScenarioHookResult Execute(string payloadJson)
         {{
@@ -1196,7 +1181,7 @@ def render_project_hook_activation_checklist(
     ui_fixture: bool = False,
 ) -> str:
     mutating_note = (
-        "- This action declares mutations. Keep a non-mutating list/preflight action nearby, require explicit approval before real mutation, and populate `mutation_delta` with measured before/after/added/removed/changed counts. The scaffold leaves it null so placeholder zeros cannot be trusted.\n"
+        "- This action declares mutations. Keep a non-mutating list/preflight action nearby, require explicit approval before real mutation, and populate `mutation_delta` with `XUUnityLightMcpMutationDelta.Create(...)` using measured before/after/added/removed/changed counts. The scaffold leaves it null so placeholder zeros cannot be trusted.\n"
         if mutating
         else "- This activation action is non-mutating; keep it as the first validation path for the hook.\n"
     )

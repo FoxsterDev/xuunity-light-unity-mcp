@@ -79,6 +79,8 @@ namespace XUUnity.LightMcp.Editor.Core
             public string playmode_loop_liveness = "";
             public string playmode_liveness_warning = "";
             public string playmode_liveness_remediation = "";
+            public long console_error_count_total;
+            public string console_error_counter_session_id = "";
             public string heartbeat_utc = "";
             public string last_pump_utc = "";
             public string last_processed_request_id = "";
@@ -96,6 +98,8 @@ namespace XUUnity.LightMcp.Editor.Core
             public string active_test_last_finished_test = "";
             public string active_test_last_progress_at_utc = "";
             public int active_test_runtime_timeout_ms;
+            public long active_test_console_error_count_since_request_start;
+            public string active_test_console_error_count_trust_class = "";
             public string last_completed_operation = "";
             public string last_completed_operation_status = "";
             public double last_completed_operation_duration_seconds;
@@ -206,6 +210,8 @@ namespace XUUnity.LightMcp.Editor.Core
             public string playmode_loop_liveness = "";
             public string playmode_liveness_warning = "";
             public string playmode_liveness_remediation = "";
+            public long console_error_count_total;
+            public string console_error_counter_session_id = "";
             public string last_pump_utc = "";
             public string last_processed_request_id = "";
             public int pending_request_count;

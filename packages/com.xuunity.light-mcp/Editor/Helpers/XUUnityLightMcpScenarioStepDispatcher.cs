@@ -66,6 +66,16 @@ namespace XUUnity.LightMcp.Editor.Helpers
                     return ProcessProjectActionStep(step, stepResult);
                 case XUUnityLightMcpUiRead.InteractionStepKind:
                     return XUUnityLightMcpScenarioUiInteractionStepHandler.ProcessUiClickStep(step, stepResult);
+                case XUUnityLightMcpUiRead.ExistsStepKind:
+                    return XUUnityLightMcpScenarioUiInteractionStepHandler.ProcessUiReadStep(
+                        step,
+                        stepResult,
+                        "unity.ui.exists");
+                case XUUnityLightMcpUiRead.GetTextStepKind:
+                    return XUUnityLightMcpScenarioUiInteractionStepHandler.ProcessUiReadStep(
+                        step,
+                        stepResult,
+                        "unity.ui.get_text");
                 case "project_defined_hook":
                     return ProcessProjectDefinedHookStep(step, stepResult);
                 case "project_defined_hook_poll_until":

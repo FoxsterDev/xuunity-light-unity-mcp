@@ -15,6 +15,89 @@ import server_summaries
 
 
 class ScenarioDecisionVerdictTests(unittest.TestCase):
+    def test_throttled_step_downgrades_scenario_trust_and_names_remedy(self) -> None:
+        payload = {
+            "project_root": "/tmp/FakeProject",
+            "run_id": "run-throttled",
+            "scenario_name": "throttled",
+            "status": "passed",
+            "steps": [
+                {
+                    "stepId": "capture",
+                    "kind": "game_view_screenshot",
+                    "status": "passed",
+                    "playmode_state": "playing",
+                    "playmode_loop_liveness": "throttled",
+                    "editor_application_focused": False,
+                    "playmode_liveness_warning": "playmode_throttled_editor_unfocused",
+                    "playmode_liveness_remediation": "focus_the_unity_editor_or_set_interaction_mode_to_no_throttling",
+                    "result_trust_class": "playmode_throttled",
+                }
+            ],
+        }
+
+        verdict = server_summaries.build_scenario_decision_verdict(payload, {"passed", "failed"})
+
+        self.assertEqual("passed", verdict["verdict"])
+        self.assertEqual("playmode_throttled", verdict["trust_class"])
+        self.assertEqual(
+            "focus_the_unity_editor_or_set_interaction_mode_to_no_throttling",
+            verdict["recommended_next_action"],
+        )
+        self.assertEqual(["capture"], verdict["playmode_liveness_summary"]["throttled_step_ids"])
+
+    def test_unproven_playing_step_downgrades_scenario_trust(self) -> None:
+        payload = {
+            "project_root": "/tmp/FakeProject",
+            "run_id": "run-unproven",
+            "scenario_name": "unproven",
+            "status": "passed",
+            "steps": [
+                {
+                    "stepId": "query",
+                    "kind": "ui_exists",
+                    "status": "passed",
+                    "playmode_state": "playing",
+                    "playmode_loop_liveness": "unknown",
+                    "editor_application_focused": True,
+                    "result_trust_class": "playmode_liveness_unproven",
+                }
+            ],
+        }
+
+        verdict = server_summaries.build_scenario_decision_verdict(payload, {"passed", "failed"})
+
+        self.assertEqual("passed", verdict["verdict"])
+        self.assertEqual("playmode_liveness_unproven", verdict["trust_class"])
+        self.assertEqual("wait_for_playmode_liveness_sample_and_retry", verdict["recommended_next_action"])
+        self.assertEqual(["query"], verdict["playmode_liveness_summary"]["unproven_step_ids"])
+
+    def test_unproven_playmode_control_step_does_not_poison_runtime_evidence_trust(self) -> None:
+        payload = {
+            "project_root": "/tmp/FakeProject",
+            "run_id": "run-control-transition",
+            "scenario_name": "control-transition",
+            "status": "passed",
+            "steps": [
+                {
+                    "stepId": "wait-play",
+                    "kind": "wait_for_playmode_state",
+                    "status": "passed",
+                    "playmode_state": "playing",
+                    "playmode_loop_liveness": "unknown",
+                    "editor_application_focused": True,
+                    "result_trust_class": "playmode_liveness_unproven",
+                }
+            ],
+        }
+
+        verdict = server_summaries.build_scenario_decision_verdict(payload, {"passed", "failed"})
+
+        self.assertEqual("passed", verdict["verdict"])
+        self.assertEqual("authoritative", verdict["trust_class"])
+        self.assertFalse(verdict["playmode_liveness_summary"]["unproven"])
+        self.assertEqual([], verdict["playmode_liveness_summary"]["unproven_step_ids"])
+
     def _call_run_and_wait(self, project_root: Path, arguments: dict) -> dict:
         return server.handle_json_rpc_message(
             {

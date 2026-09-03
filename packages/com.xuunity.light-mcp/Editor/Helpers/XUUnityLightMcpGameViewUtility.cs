@@ -123,6 +123,66 @@ namespace XUUnity.LightMcp.Editor.Helpers
             return BuildSizeData(currentSize, GetActiveGroupName(), false);
         }
 
+        public static bool TryGetExistingRenderTargetSize(out int width, out int height)
+        {
+            width = 0;
+            height = 0;
+            try
+            {
+                var gameViewType = Type.GetType("UnityEditor.GameView,UnityEditor");
+                var renderTextureField = gameViewType?.GetField("m_RenderTexture", AllBindings);
+                if (gameViewType == null || renderTextureField == null)
+                {
+                    return false;
+                }
+
+                var lastFocusedProperty = gameViewType.GetProperty("lastFocusedGameView", AllBindings);
+                var lastFocusedGetter = lastFocusedProperty?.GetGetMethod(true);
+                var lastFocused = lastFocusedGetter != null && lastFocusedGetter.IsStatic
+                    ? lastFocusedProperty.GetValue(null, null)
+                    : null;
+                if (TryReadRenderTargetSize(lastFocused, renderTextureField, out width, out height))
+                {
+                    return true;
+                }
+
+                var focusedWindow = EditorWindow.focusedWindow;
+                if (gameViewType.IsInstanceOfType(focusedWindow)
+                    && TryReadRenderTargetSize(focusedWindow, renderTextureField, out width, out height))
+                {
+                    return true;
+                }
+
+                foreach (var candidate in Resources.FindObjectsOfTypeAll(gameViewType))
+                {
+                    if (TryReadRenderTargetSize(candidate, renderTextureField, out width, out height))
+                    {
+                        return true;
+                    }
+                }
+            }
+            catch
+            {
+            }
+
+            return false;
+        }
+
+        static bool TryReadRenderTargetSize(object candidate, FieldInfo renderTextureField, out int width, out int height)
+        {
+            width = 0;
+            height = 0;
+            var renderTexture = candidate == null ? null : renderTextureField.GetValue(candidate) as RenderTexture;
+            if (renderTexture == null || !renderTexture.IsCreated())
+            {
+                return false;
+            }
+
+            width = renderTexture.width;
+            height = renderTexture.height;
+            return width > 0 && height > 0;
+        }
+
         public static XUUnityLightMcpGameViewData SetFixedResolution(
             int width,
             int height,
@@ -258,6 +318,12 @@ namespace XUUnity.LightMcp.Editor.Helpers
                     file_path = fullPath,
                     width = width,
                     height = height,
+                    render_width = width,
+                    render_height = height,
+                    screen_width = Screen.width,
+                    screen_height = Screen.height,
+                    render_target_available = true,
+                    render_target_differs_from_screen = width != Screen.width || height != Screen.height,
                     image_base64 = imageBase64,
                     image_included = imageBase64.Length > 0,
                     image_requested = includeImage,

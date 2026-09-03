@@ -186,6 +186,9 @@ namespace XUUnity.LightMcp.Editor.Core
             public string last_started_test = "";
             public string last_finished_test = "";
             public bool lifecycle_churn_observed;
+            public long console_error_count_since_request_start;
+            public string console_error_count_trust_class = "";
+            public bool console_error_pressure_detected;
             public string validation_evidence = "unity_mcp";
         }
 
@@ -234,5 +237,7 @@ namespace XUUnity.LightMcp.Editor.Core
             public bool playmode_state_accounting_consistent;
             public string playmode_state_accounting_note = "";
             public bool lifecycle_churn_observed;
+            public long console_error_count_at_request_start;
+            public string console_error_counter_session_id_at_request_start = "";
         }
 }

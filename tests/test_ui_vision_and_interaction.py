@@ -933,6 +933,17 @@ class CrossLanguageContractTests(unittest.TestCase):
         self.assertIn(kind, step_schema["kind"]["enum"])
         self.assertIn(kind, step_schema["operation"]["enum"])
 
+    def test_the_ui_read_step_kinds_match_between_python_and_csharp(self) -> None:
+        text = self.read("Core/XUUnityLightMcpUiReadModels.cs")
+        step_schema = server_specs.SCENARIO_STEP_SCHEMA["properties"]
+        for constant, expected in (("ExistsStepKind", "ui_exists"), ("GetTextStepKind", "ui_get_text")):
+            with self.subTest(kind=expected):
+                match = re.search(rf'{constant}\s*=\s*"([^"]+)"', text)
+                self.assertIsNotNone(match)
+                self.assertEqual(expected, match.group(1))
+                self.assertIn(expected, step_schema["kind"]["enum"])
+                self.assertIn(expected, step_schema["operation"]["enum"])
+
     def test_the_step_is_dispatched_and_validated_in_the_editor_package(self) -> None:
         dispatcher = self.read("Helpers/XUUnityLightMcpScenarioStepDispatcher.cs")
         validator = self.read("Helpers/XUUnityLightMcpScenarioValidator.cs")
@@ -955,10 +966,10 @@ class CrossLanguageContractTests(unittest.TestCase):
         self.assertIn('"unity.ui.click"', text)
         self.assertNotIn("UnityEngine.UI", text)
 
-    def test_the_click_operation_reports_the_playmode_state_itself(self) -> None:
+    def test_the_click_operation_reports_point_of_use_liveness_itself(self) -> None:
         text = self.read("Ugui/XUUnityLightMcpUiClickOperation.cs")
-        self.assertIn("playmode_state = CurrentPlayModeState()", text)
-        self.assertIn("EditorApplication.isPaused", text)
+        self.assertIn("XUUnityLightMcpPlayModeStateOperation.PopulateLivenessEvidence(payload)", text)
+        self.assertNotIn("CurrentPlayModeState()", text)
 
     def test_the_click_operation_ranks_observable_effect_above_delivery(self) -> None:
         text = self.read("Ugui/XUUnityLightMcpUiClickOperation.cs")

@@ -82,6 +82,8 @@ namespace XUUnity.LightMcp.Editor.Core
             public int maxDepth;
             public int maxNodes;
             public bool expectStateChange = true;
+            public bool expectedExists = true;
+            public string expectedText = "";
             public bool approve;
             public XUUnityLightMcpUiSelectorArgs selector = null;
         }
@@ -138,7 +140,7 @@ namespace XUUnity.LightMcp.Editor.Core
         }
 
         [Serializable]
-        internal sealed class XUUnityLightMcpScenarioStepResult
+        internal sealed class XUUnityLightMcpScenarioStepResult : XUUnityLightMcpPlayModeLivenessEvidence
         {
             public string stepId = "";
             public string kind = "";

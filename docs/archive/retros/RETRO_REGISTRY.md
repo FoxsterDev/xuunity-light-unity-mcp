@@ -1,8 +1,8 @@
 # XUUnity Light Unity MCP Public Retro Registry
 
 Status: active public registry
-Last triage: 2026-09-03 (added the greenfield scene-authoring operator retro; two P0 editor-truth observability candidates are untriaged)
-Current release candidate: `v0.3.67`
+Last triage: 2026-09-03 (greenfield scene-authoring findings implemented and moved to completed history)
+Current release candidate: `v0.3.68`
 
 Update this file whenever a public-safe MCP retro is added, moved, renamed, or
 deleted. Host-private and project-specific retros belong in the host's single
@@ -25,6 +25,27 @@ host-local registry.
 - `Completed Public History` is the place to find reusable lessons already
   implemented, applied, superseded, or retained only for history.
 - Prompt templates are listed separately and are not backlog items.
+
+## Re-Evaluation 2026-09-03 (greenfield authoring)
+
+- All required P0-P2 findings from the greenfield scene-authoring retro are
+  implemented in current source. UI reads/clicks, screenshots, and scenario
+  steps carry point-of-use liveness/trust; screenshot and UI evidence names the
+  Game View render target separately from `Screen.*`.
+- The existing guarded `ui_click` scenario step is joined by `ui_exists` and
+  `ui_get_text`. The host exposes the full scenario schema, accepts a
+  project-scoped scenario file for validation, reports request-scoped console
+  pressure on test verdicts, accepts scalar setup `projectRoot`, and provides
+  an approval-gated project-hook scaffold. Project hooks can construct the
+  shared mutation proof with `XUUnityLightMcpMutationDelta.Create(...)`.
+- Local Unity `2022.3.67f2` and `6000.0.58f2` clean-consumer validation passes
+  compile, interactive acceptance, core EditMode `99/99`, and PlayMode `5/5`;
+  a uGUI-enabled Unity 2022 consumer passes the corrected package-runner
+  EditMode lane `138/138`. The optional editor-focus mutation operation was not added: every
+  affected result now
+  names the safe focus/no-throttling remediation without broadening the MCP's
+  editor-control authority. Full host discovery passes `1007` tests with `14`
+  expected platform skips, including live loopback transport coverage.
 
 ## Re-Evaluation 2026-09-02 (`v0.3.66` release closeout)
 
@@ -446,7 +467,6 @@ the entire Windows install root-cause set (python3 delegation, UTF-8 BOM,
 
 | Date | File | Scope | Registry Status | Why It Is Not Completed History |
 | --- | --- | --- | --- | --- |
-| 2026-09-03 | `2026-09-03_greenfield_scene_authoring_operator_retro.md` | Greenfield authoring lane: editor-truth observability during scene/prefab/UI creation from an empty project | **new; untriaged** | Two P0 candidates: (a) play-mode liveness is only reported by `unity_playmode_state`, so `ui_click`, `game_view_screenshot` and scenario steps silently no-op while the editor is unfocused; (b) the editor `Screen.*` size and the screenshot render target diverge with no tool reporting the effective render size, so layout logic can be validated against a different frame than the one captured. P1: `ui_click`/`ui_exists` scenario step kinds, scenario step-kind discoverability, `scenario_validate` file-path parity, console-error pressure in the test envelope. P2: a `mutation_delta` builder for project hooks, `xuunity_setup_plan` `projectRoot` parity, `project-hook-scaffold` as an MCP tool. |
 | 2026-09-02 | `2026-09-02_batch_summary_shape_and_compile_evidence_retro.md` | Sweep-runner verdict versus the wrapper's default compact batch payload shape, plus the missing compile-warning and rebuilt-versus-cached evidence surfaces | **P0 and summary-artifact P2 implemented for `v0.3.67`; two P1 gaps and one P2 candidate remain** | Current source reads outcome and matrix evidence from nested summary, compact top level, named summary file, then a Unity-confirmed result file. Passing compact GUI-fallback results stay `passed_via_gui_fallback`, evidence sources are recorded, and absent counters print `unavailable` instead of zero. Regression tests cover all four cases. Still open: warning aggregation, rebuilt-versus-cache-hit counts, and the parsed-but-unused `--output` selector/full-shape pin. |
 | 2026-08-26 | `2026-08-26_import_worker_bridge_ownership_retro.md` | Import-worker ownership plus UI selector, click-causality, readiness-log, package-removal, and contention follow-ups | **P0 released in `v0.3.60`; selector-truncation P1 implemented in current source; other follow-ups open** | Import-worker bridge ownership and provenance are released. The two-sighting capped-selector false negative now has a typed inconclusive result with scope/budget evidence and bounded recovery; a partial match is also refused because uniqueness is unproven. Non-causal `state_changed`, readiness-log attribution, package-removal verification, and operator-contention follow-ups remain separate work. |
 | 2026-08-20 | `2026-08-20_readiness_verdict_false_positive_retro.md` | Readiness gate: `interactive_compile_block_detected` asserted a compile fact nothing measured, represented several unrelated transient states, contradicted its own `host_prerequisites` block, and recommended destructive recovery | **P0 + both P1 items implemented and live-validated in current source; two P2 residuals open** | Current source uses condition-specific readiness codes, stamps `compile_state=unmeasured`, keeps polling transient attach/import/identity conditions, maps recovery to non-destructive status polling, and aligns the blocking prerequisite with the top-level result. Focused host tests cover every condition plus the stale-log/next-poll bridge-attach race. Unity 2022 package EditMode/PlayMode and Unity 6000 compile/scenario/contract/lifecycle/churn/project-action regression pass; the Unity 6000 lane reproduced and cleared the race. Remaining P2: mark log diagnoses as heuristic/suppress the `-accept-apiupdate` inversion, and echo batch editor-close side effects. |
@@ -469,6 +489,7 @@ the entire Windows install root-cause set (python3 delegation, UTF-8 BOM,
 
 | Date | File | Scope | Registry Status | Notes |
 | --- | --- | --- | --- | --- |
+| 2026-09-03 | `2026-09-03_greenfield_scene_authoring_operator_retro.md` | Greenfield authoring lane: point-of-use editor truth, ordered UI scenarios, test pressure, and project-hook bootstrap | implemented and locally Unity-validated in current source | All required P0-P2 findings are closed: liveness/trust and render-versus-Screen evidence travel with the operation that needs them; scenarios expose guarded click/existence/text reads plus schema/file validation; test verdicts surface console pressure; setup has scalar-root parity; and the guarded scaffold plus package mutation-delta builder make the project-local authoring lane discoverable. Clean Unity `2022.3.67f2` and `6000.0.58f2` compile/acceptance, core EditMode `99/99`, and PlayMode `5/5` pass; a uGUI-enabled Unity 2022 consumer passes the corrected package-runner EditMode lane `138/138`. The optional focus-mutation operation was deliberately omitted in favor of explicit remediation. |
 | 2026-09-02 | `2026-09-02_mutation_trust_and_request_attribution_retro.md` | Mutation trust across lifecycle recovery, stable client attribution, process-aware anchored log recovery, and project-hook payload normalization | implemented, validated, and released in `v0.3.66` | Applied mutations remain applied and replay-disabled through passive wait/status plus later refresh or compile-settle failures; transport, Unity journal, and status surfaces preserve `client_session_id` and real editor PID; cross-process anchors fail closed and `maxSearchChars` gives bounded in-tool recovery; plain hook payload objects are promoted while conflicting aliases are rejected. The dead-editor episode was correctly diagnosed before the operator ignored its recovery action, so no speculative fast-fail change was made. |
 | 2026-08-30 | `2026-08-30_hub_licensing_gui_playmode_operator_retro.md` | Dynamic Unity Hub licensing IPC handoff, GUI-first local PlayMode admission, terminal lifecycle aggregation, compact CLI output, and helper-owned licensing-child cleanup | implemented, validated, and released in `v0.3.63` | All retro tracks shipped. Full host `979/979`, public site `42/42`, release gates, and a live macOS Hub launch passed; Windows/Linux Hub behavior remains fixture-backed rather than live-host proven, and Unity Package CI retains its documented runner-license waiver. |
 | 2026-08-29 | `2026-08-29_consumer_release_rollout_safety_retro.md` | Authoritative consumer discovery, preflight, canary-before-fan-out, resumable evidence, bounded-worker authority, and identity-gated cleanup | implemented, validated, and released in `v0.3.62` | The public helper freezes the denominator and baseline, refuses unsafe mutation, proves one published-package canary before fan-out, and preserves exact per-project resume/cleanup evidence. Focused `23/23`, full host, release/docs/public-safety, and site UI evidence are recorded in the `v0.3.62` changelog. |

@@ -2,6 +2,87 @@
 
 ## Unreleased
 
+## 0.3.68
+
+Release tag: `v0.3.68`
+
+Current Git UPM install URL:
+
+```text
+https://github.com/FoxsterDev/xuunity-mcp.git?path=/packages/com.xuunity.light-mcp#v0.3.68
+```
+
+### Why
+
+- Play Mode-dependent operations could report a missing UI control or capture a
+  screenshot while an unfocused Unity Editor was not advancing frames. The
+  dedicated state tool knew the loop was throttled, but that truth did not
+  travel with the action where a developer needed it.
+- Unity's editor `Screen.*` dimensions can differ from the Game View render
+  target. Without both measurements, a captured layout could appear to prove
+  behavior that actually ran against a different frame size.
+- Greenfield authoring also required operators to hand-compose UI actions,
+  project-hook boilerplate, and console diagnosis outside the persisted
+  scenario/test evidence path.
+
+### Changed
+
+- Released `v0.3.68` package metadata, server metadata, package manifests, and Git UPM examples.
+
+### Added
+
+- UI read/click payloads, Game View screenshots, and persisted scenario steps
+  now report point-of-use player-loop liveness, editor focus, remediation, and
+  a result trust class. Throttled Play Mode evidence is explicitly downgraded.
+- UI and screenshot evidence separates the effective Game View render target
+  from Unity `Screen.*` dimensions and flags mismatches.
+- Scenarios support `ui_exists` and `ui_get_text` alongside guarded `ui_click`.
+  `unity_scenario_capabilities` exposes the complete schema, and scenario
+  validation accepts a project-scoped JSON file path.
+- EditMode and PlayMode test envelopes report console-error pressure since the
+  request baseline, including a lower-bound trust class across domain reloads.
+- The package exposes `XUUnityLightMcpMutationDelta.Create(...)`; the host adds
+  approval-gated `xuunity_project_hook_scaffold` and scalar
+  `xuunity_setup_plan.projectRoot` support.
+- The package self-test runner includes the optional uGUI EditMode assembly
+  whenever that dependency is present, closing a silent coverage gap.
+
+### Documentation
+
+- Added the greenfield project-hook authoring contract and the liveness/render
+  evidence boundaries to the integration, smoke, architecture, status,
+  roadmap, and continuation guides.
+
+### Benefits
+
+- UI interactions and captures now explain when the player loop is not live,
+  so an unfocused Editor is not misdiagnosed as broken game logic.
+- Scenario authors can keep boot, UI assertions, interaction, and capture in one
+  ordered evidence record, while project-specific scene creation stays behind
+  an explicit approval-gated hook.
+- Test stalls expose concurrent console-error pressure, and package consumers
+  no longer silently omit the optional uGUI EditMode assembly from self-tests.
+
+### Validation
+
+- Full host discovery passes `1007` tests with `14` expected platform skips,
+  including live localhost TCP framing coverage.
+- Clean Unity `2022.3.67f2` and `6000.0.58f2` core consumers pass
+  compile/interactive acceptance, EditMode `99/99`, and PlayMode `5/5`, with
+  verified editor closeout. A separate uGUI-enabled Unity 2022 consumer passes
+  the corrected package-runner EditMode lane `138/138`.
+- Release-document freshness and public-safety checks pass; public site UI and
+  accessibility checks pass `42/42` across desktop, mobile, and narrow
+  Chromium viewports.
+
+### Known limitations
+
+- XUUnity reports editor-focus and player-loop remediation but does not
+  automatically focus Unity or mutate operating-system focus state.
+- The hosted `Unity Package CI` workflow remains explicitly waived because its
+  runners do not have Unity license credentials. Local clean-project Unity
+  validation is the package evidence for this release.
+
 ## 0.3.67
 
 Release tag: `v0.3.67`

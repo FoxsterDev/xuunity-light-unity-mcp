@@ -278,7 +278,7 @@ namespace XUUnity.LightMcp.Tests.EditModeUgui
 
             Assert.That(payload.success, Is.True, payload.refusal_code);
             Assert.That(payload.delivered, Is.True);
-            Assert.That(payload.status, Is.EqualTo("delivered"));
+            Assert.That(payload.status, Is.EqualTo("effective"));
             Assert.That(payload.delivery_mechanism, Is.EqualTo("event_system_pointer_click_handler"));
             Assert.That(payload.event_system_scope, Is.EqualTo("eventsystem_current_at_delivery"));
             Assert.That(_clickCount, Is.EqualTo(1), "the click must be delivered exactly once");
@@ -372,7 +372,11 @@ namespace XUUnity.LightMcp.Tests.EditModeUgui
             _canvasRoot.GetComponent<RectTransform>().sizeDelta = new Vector2(1080f, 1920f);
 
             var claim = NewButton("ClaimButton", interactable: true);
-            claim.onClick.AddListener(() => _clickCount++);
+            claim.onClick.AddListener(() =>
+            {
+                _clickCount++;
+                claim.interactable = false;
+            });
 
             NewButton("DisabledButton", interactable: false);
 

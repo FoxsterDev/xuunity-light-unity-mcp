@@ -61,6 +61,27 @@ EDITOR_RELAUNCH_ATTRIBUTION_FIELDS = (
     "cold_start_reason",
 )
 
+SCENARIO_STEP_LIVENESS_FIELDS = (
+    "playmode_state",
+    "playmode_frame_count",
+    "playmode_frames_advanced_last_interval",
+    "playmode_frame_sample_interval_seconds",
+    "editor_application_focused",
+    "playmode_loop_liveness",
+    "playmode_liveness_warning",
+    "playmode_liveness_remediation",
+    "result_trust_class",
+)
+
+SCENARIO_LIVENESS_DECISION_KINDS = frozenset(
+    {
+        "game_view_screenshot",
+        "ui_click",
+        "ui_exists",
+        "ui_get_text",
+    }
+)
+
 
 def normalize_scenario_payload(payload: dict[str, Any], scenario_terminal_statuses: set[str]) -> dict[str, Any]:
     normalized = dict(payload)
@@ -106,6 +127,9 @@ def summarize_scenario_step(step: dict[str, Any] | None) -> dict[str, Any] | Non
         summary["error_code"] = error_code
     if error_message:
         summary["error_message"] = truncate_text(error_message, 320)
+    for key in SCENARIO_STEP_LIVENESS_FIELDS:
+        if key in step:
+            summary[key] = step.get(key)
 
     playmode_set_summary = _extract_playmode_set_summary(step, payload)
     if playmode_set_summary:
@@ -119,6 +143,46 @@ def summarize_scenario_step(step: dict[str, Any] | None) -> dict[str, Any] | Non
             summary["stale_playmode_state_detected"] = True
             summary["recommended_next_action"] = "exit_playmode_then_rerun_if_fresh_start_required"
     return summary
+
+
+def build_scenario_liveness_summary(steps: list[Any]) -> dict[str, Any]:
+    observed: list[dict[str, Any]] = []
+    for step in steps:
+        if not isinstance(step, dict) or not str(step.get("playmode_loop_liveness") or ""):
+            continue
+        observed.append(
+            {
+                "step_id": str(step.get("stepId") or step.get("step_id") or ""),
+                "kind": str(step.get("kind") or ""),
+                "playmode_state": str(step.get("playmode_state") or ""),
+                "playmode_loop_liveness": str(step.get("playmode_loop_liveness") or ""),
+                "playmode_liveness_warning": str(step.get("playmode_liveness_warning") or ""),
+                "playmode_liveness_remediation": str(step.get("playmode_liveness_remediation") or ""),
+                "result_trust_class": str(step.get("result_trust_class") or ""),
+            }
+        )
+
+    throttled = [item for item in observed if item["playmode_loop_liveness"] == "throttled"]
+    unproven = [
+        item
+        for item in observed
+        if item["kind"] in SCENARIO_LIVENESS_DECISION_KINDS
+        and item["playmode_state"] == "playing"
+        and (
+            item["playmode_loop_liveness"] == "unknown"
+            or item["result_trust_class"] == "playmode_liveness_unproven"
+        )
+    ]
+    actionable = throttled[-1] if throttled else unproven[-1] if unproven else {}
+    return {
+        "observed_step_count": len(observed),
+        "throttled": bool(throttled),
+        "throttled_step_ids": [item["step_id"] for item in throttled],
+        "unproven": bool(unproven),
+        "unproven_step_ids": [item["step_id"] for item in unproven],
+        "warning": str(actionable.get("playmode_liveness_warning") or ""),
+        "remediation": str(actionable.get("playmode_liveness_remediation") or ""),
+    }
 
 
 def build_project_defined_hook_summary(steps: list[Any]) -> dict[str, Any]:
@@ -1159,6 +1223,9 @@ def build_scenario_result_summary(payload: dict[str, Any], scenario_terminal_sta
         "first_failed_step": first_failed_step,
         "steps": compact_steps,
     }
+    liveness_summary = build_scenario_liveness_summary(step_items)
+    if liveness_summary["observed_step_count"] > 0:
+        summary["playmode_liveness_summary"] = liveness_summary
     wait_remaining = scenario_wait_remaining_seconds(summary["waiting_until_utc"])
     if wait_remaining is not None:
         summary["wait_remaining_seconds"] = wait_remaining
@@ -1335,6 +1402,19 @@ def build_scenario_decision_verdict(payload: dict[str, Any], scenario_terminal_s
             playmode_guard_summary.get("recommended_next_action")
             or "exit_playmode_then_rerun_if_fresh_start_required"
         )
+    liveness_summary = summary.get("playmode_liveness_summary")
+    if isinstance(liveness_summary, dict) and bool(liveness_summary.get("throttled")):
+        trust_class = "playmode_throttled"
+        recommended_next_action = str(
+            liveness_summary.get("remediation")
+            or "focus_the_unity_editor_or_set_interaction_mode_to_no_throttling"
+        )
+    elif isinstance(liveness_summary, dict) and bool(liveness_summary.get("unproven")):
+        trust_class = "playmode_liveness_unproven"
+        recommended_next_action = str(
+            liveness_summary.get("remediation")
+            or "wait_for_playmode_liveness_sample_and_retry"
+        )
     refresh_timeout_recovery = summary.get("refresh_timeout_recovery")
     if (
         isinstance(refresh_timeout_recovery, dict)
@@ -1392,6 +1472,8 @@ def build_scenario_decision_verdict(payload: dict[str, Any], scenario_terminal_s
         "recommended_next_action": recommended_next_action,
         "full_payload_available": True,
     }
+    if isinstance(liveness_summary, dict):
+        envelope["playmode_liveness_summary"] = liveness_summary
 
     for key in (
         "project_root",

@@ -9,6 +9,7 @@ namespace XUUnity.LightMcp.Editor.Bridge
     {
         public const string ThrottledUnfocusedWarning = "playmode_throttled_editor_unfocused";
         public const string ThrottledFocusedWarning = "playmode_throttled";
+        public const string UnprovenUnfocusedWarning = "playmode_liveness_unproven_editor_unfocused";
         public const string ThrottledRemediation = "focus_the_unity_editor_or_set_interaction_mode_to_no_throttling";
 
         const double MIN_SAMPLE_INTERVAL_SECONDS = 1.0d;
@@ -78,6 +79,11 @@ namespace XUUnity.LightMcp.Editor.Bridge
 
         internal static string ResolveWarning(string liveness, bool editorApplicationFocused)
         {
+            if (liveness == "unknown" && !editorApplicationFocused)
+            {
+                return UnprovenUnfocusedWarning;
+            }
+
             if (liveness != "throttled")
             {
                 return "";

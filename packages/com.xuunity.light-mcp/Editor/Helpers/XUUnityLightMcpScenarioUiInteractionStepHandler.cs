@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics;
 using UnityEngine;
 using XUUnity.LightMcp.Editor.Core;
+using XUUnity.LightMcp.Editor.Operations;
 using static XUUnity.LightMcp.Editor.Helpers.XUUnityLightMcpNestedOperationClient;
 
 namespace XUUnity.LightMcp.Editor.Helpers
@@ -10,10 +11,103 @@ namespace XUUnity.LightMcp.Editor.Helpers
     {
         const string ClickOperation = "unity.ui.click";
 
+        public static bool ProcessUiReadStep(
+            XUUnityLightMcpScenarioStepDefinition step,
+            XUUnityLightMcpScenarioStepResult stepResult,
+            string operation)
+        {
+            XUUnityLightMcpPlayModeStateOperation.PopulateLivenessEvidence(stepResult);
+            if (XUUnityLightMcpUiSelectorMatcher.IsEmpty(step.selector))
+            {
+                return Fail(stepResult, "ui_selector_invalid",
+                    $"{step.kind} requires a selector with at least one constraint.");
+            }
+
+            var args = new XUUnityLightMcpUiQueryArgs
+            {
+                targetKind = string.IsNullOrWhiteSpace(step.targetKind) ? XUUnityLightMcpUiRead.TargetActiveScene : step.targetKind,
+                targetValue = step.targetValue ?? "",
+                sceneName = step.sceneName ?? "",
+                includeDontDestroyOnLoad = step.includeDontDestroyOnLoad,
+                maxDepth = step.maxDepth > 0 ? step.maxDepth : XUUnityLightMcpUiRead.DefaultMaxDepth,
+                maxNodes = step.maxNodes > 0 ? step.maxNodes : XUUnityLightMcpUiRead.DefaultMaxNodes,
+                maxMatches = XUUnityLightMcpUiRead.DefaultMaxMatches,
+                includeInactive = false,
+                allowMany = false,
+                selector = step.selector
+            };
+
+            var stopwatch = Stopwatch.StartNew();
+            var response = ExecuteNestedOperation(operation, JsonUtility.ToJson(args));
+            stopwatch.Stop();
+            stepResult.duration_seconds = Math.Round(stopwatch.Elapsed.TotalSeconds, 6);
+
+            if (response == null)
+            {
+                return Fail(stepResult, "null_nested_response", $"Nested operation '{operation}' returned no response.");
+            }
+
+            if (response.status != "ok")
+            {
+                return Fail(
+                    stepResult,
+                    response.error?.code ?? "ui_read_unavailable",
+                    response.error?.message ?? $"Nested operation '{operation}' failed.");
+            }
+
+            var query = string.IsNullOrWhiteSpace(response.payload_json)
+                ? new XUUnityLightMcpUiQueryPayload()
+                : JsonUtility.FromJson<XUUnityLightMcpUiQueryPayload>(response.payload_json) ?? new XUUnityLightMcpUiQueryPayload();
+            var isExists = string.Equals(operation, "unity.ui.exists", StringComparison.Ordinal);
+            var expectedText = step.expectedText ?? "";
+            var payload = new XUUnityLightMcpUiReadStepPayload
+            {
+                operation = operation,
+                expected_exists = step.expectedExists,
+                expected_text = expectedText,
+                query = query
+            };
+
+            payload.met_expectations = query.success;
+            if (isExists)
+            {
+                payload.met_expectations = payload.met_expectations
+                    && query.exists == step.expectedExists
+                    && (!query.truncated || step.expectedExists)
+                    && (!query.out_of_scope || step.expectedExists);
+            }
+            else if (!string.IsNullOrEmpty(expectedText))
+            {
+                payload.met_expectations = payload.met_expectations
+                    && string.Equals(query.text, expectedText, StringComparison.Ordinal);
+            }
+
+            stepResult.payload_json = JsonUtility.ToJson(payload);
+            if (!payload.met_expectations)
+            {
+                var diagnostic = query.errors != null && query.errors.Count > 0 ? query.errors[0] : null;
+                stepResult.status = "failed";
+                stepResult.error_code = diagnostic?.code
+                    ?? (isExists ? "ui_exists_expectation_failed" : "ui_text_expectation_failed");
+                stepResult.error_message = diagnostic?.message
+                    ?? (isExists
+                        ? $"Expected selector exists={step.expectedExists}, observed exists={query.exists}."
+                        : $"Expected text '{expectedText}', observed '{query.text ?? ""}'.");
+                return true;
+            }
+
+            stepResult.status = "passed";
+            stepResult.outcome = isExists
+                ? (query.exists ? "ui_exists_matched" : "ui_absence_confirmed")
+                : "ui_text_captured";
+            return true;
+        }
+
         public static bool ProcessUiClickStep(
             XUUnityLightMcpScenarioStepDefinition step,
             XUUnityLightMcpScenarioStepResult stepResult)
         {
+            XUUnityLightMcpPlayModeStateOperation.PopulateLivenessEvidence(stepResult);
             var interactionId = (step.interactionId ?? "").Trim();
             if (string.IsNullOrEmpty(interactionId))
             {
@@ -91,6 +185,11 @@ namespace XUUnity.LightMcp.Editor.Helpers
                     search_truncated = click.search_truncated,
                     search_truncation_reason = click.search_truncation_reason ?? "",
                     playmode_state = click.playmode_state ?? "",
+                    playmode_loop_liveness = click.playmode_loop_liveness ?? "",
+                    playmode_liveness_warning = click.playmode_liveness_warning ?? "",
+                    playmode_liveness_remediation = click.playmode_liveness_remediation ?? "",
+                    editor_application_focused = click.editor_application_focused,
+                    result_trust_class = click.result_trust_class ?? "",
                     refusal_code = click.refusal_code ?? ""
                 }
             };

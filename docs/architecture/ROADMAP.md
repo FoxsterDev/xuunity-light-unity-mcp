@@ -1,6 +1,6 @@
 # XUUnity Light Unity MCP Roadmap
 
-Date: `2026-08-26`
+Date: `2026-09-03`
 Status: `active public roadmap`
 
 ## North Star
@@ -67,7 +67,7 @@ survival and more about:
 
 Already implemented:
 
-- standalone public repository and current `v0.3.67` Git UPM package path under
+- standalone public repository and current `v0.3.68` Git UPM package path under
   `packages/com.xuunity.light-mcp`
 - bridge enable/disable lifecycle
 - status and capability probing
@@ -99,6 +99,9 @@ Already implemented:
   no-cache-cleanup recovery action
 - play mode control
 - Game View screenshot and resolution control
+- point-of-use player-loop liveness/trust on UI reads, guarded clicks,
+  screenshots, and scenario-step evidence
+- explicit Game View render-target versus Unity `Screen.*` dimensions
 - first scenario automation layer:
   - `unity.scenario.validate`
   - `unity.scenario.run`
@@ -109,12 +112,18 @@ Already implemented:
   `run_start.steps` unless `includeStepPayloads=true`
 - scenario `scene_open` steps and direct `unity_scene_open` / `request-scene-open`
   for deterministic boot-flow validation before Play Mode entry
+- scenario `ui_click`, `ui_exists`, and `ui_get_text` steps, discoverable
+  through `unity_scenario_capabilities`, with file-backed validation input
 - project-defined hook poll-until steps and catalog-backed project-action steps
 - passive project-hook readiness polls tolerate `status: not_started` until an
   explicit pass/fail predicate or timeout, avoiding an early false-negative
 - mutating `unity_project_action_invoke` results promote a versioned
   before/after/add/remove/change delta and remain non-decision-ready when that
   proof is missing, invalid, or reports destructive removal
+- a package-owned `XUUnityLightMcpMutationDelta` builder plus the guarded
+  `xuunity_project_hook_scaffold` authoring entry point
+- request-scoped console-error pressure on direct EditMode/PlayMode test
+  results and timeout verdicts
 - closed-project SDK package restore through `unity_sdk_package_restore` and
   `request-sdk-package-restore`, with an idle-stable Package Manager graph,
   atomic package/dependency receipt, and verified editor-process exit
@@ -166,7 +175,7 @@ This is enough for:
 - controlled screenshot capture
 - early automation experiments
 - repeatable same-host multi-project routing and recovery
-- production Git UPM consumption through `v0.3.67`
+- production Git UPM consumption through `v0.3.68`
 
 This is not yet enough for:
 
@@ -250,7 +259,7 @@ Most valuable next milestone:
 
 Why this is next:
 
-- `v0.3.12` moved the package to the registry-native path and `v0.3.67` is the
+- `v0.3.12` moved the package to the registry-native path and `v0.3.68` is the
   current public Git UPM line
 - macOS validation is strong enough for current same-host use
 - Linux and Windows claims should remain conservative until executed on those hosts
@@ -357,7 +366,7 @@ Current progress:
   `operator_verdict` final-status wording
 - `v0.3.39` adds opt-in compact batch helper CLI output through
   `--output compact`, preserving full output as the default compatibility mode
-- `v0.3.67` keeps compact batch output bounded to whitelisted decision fields
+- `v0.3.68` keeps compact batch output bounded to whitelisted decision fields
   plus artifact pointers and makes the multi-project runner consume nested,
   compact, summary-file, and confirmed result-file evidence without a false
   failure or false-zero matrix counters

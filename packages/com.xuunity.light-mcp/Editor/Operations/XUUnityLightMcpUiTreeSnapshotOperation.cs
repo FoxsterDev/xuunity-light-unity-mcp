@@ -46,6 +46,7 @@ namespace XUUnity.LightMcp.Editor.Operations
                 errors = result.Errors
             };
             payload.component_detail_backends = XUUnityLightMcpUiComponentReaderRegistry.BackendIds();
+            CopyEditorTruth(payload, payload.target);
             payload.success = result.Errors.Count == 0;
             payload.proof_class = XUUnityLightMcpUiProofClass.Resolve(
                 payload.success,
@@ -66,6 +67,17 @@ namespace XUUnity.LightMcp.Editor.Operations
                 OperationName,
                 JsonUtility.ToJson(payload)
             );
+        }
+
+        static void CopyEditorTruth(XUUnityLightMcpUiTreePayload payload, XUUnityLightMcpUiTargetInfo target)
+        {
+            XUUnityLightMcpPlayModeStateOperation.PopulateLivenessEvidence(payload);
+            payload.screen_width = target?.screen_width ?? 0;
+            payload.screen_height = target?.screen_height ?? 0;
+            payload.render_width = target?.render_width ?? 0;
+            payload.render_height = target?.render_height ?? 0;
+            payload.render_target_available = target != null && target.render_target_available;
+            payload.render_target_differs_from_screen = target != null && target.render_target_differs_from_screen;
         }
     }
 

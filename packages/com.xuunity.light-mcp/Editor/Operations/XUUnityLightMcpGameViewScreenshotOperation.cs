@@ -23,6 +23,7 @@ namespace XUUnity.LightMcp.Editor.Operations
                     args.includeImage,
                     args.maxResolution,
                     args.imageBudgetBytes);
+                XUUnityLightMcpPlayModeStateOperation.PopulateLivenessEvidence(payload);
 
                 return XUUnityLightMcpResponseWriter.Success(
                     request.request_id,

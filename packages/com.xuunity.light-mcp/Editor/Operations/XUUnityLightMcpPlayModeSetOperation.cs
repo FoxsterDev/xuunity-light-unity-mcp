@@ -61,6 +61,7 @@ namespace XUUnity.LightMcp.Editor.Operations
                 is_playing_or_will_change_playmode = state.is_playing_or_will_change_playmode,
                 playmode_state = state.playmode_state
             };
+            XUUnityLightMcpPlayModeStateOperation.PopulateLivenessEvidence(payload, state.playmode_state);
 
             return XUUnityLightMcpResponseWriter.Success(
                 request.request_id,

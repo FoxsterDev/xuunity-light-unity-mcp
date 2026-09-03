@@ -44,7 +44,21 @@ namespace XUUnity.LightMcp.Editor.Core
         }
 
         [Serializable]
-        internal sealed class XUUnityLightMcpPlayModeStatePayload
+        internal class XUUnityLightMcpPlayModeLivenessEvidence
+        {
+            public string playmode_state = "edit";
+            public int playmode_frame_count;
+            public int playmode_frames_advanced_last_interval;
+            public double playmode_frame_sample_interval_seconds;
+            public bool editor_application_focused;
+            public string playmode_loop_liveness = "";
+            public string playmode_liveness_warning = "";
+            public string playmode_liveness_remediation = "";
+            public string result_trust_class = "editor_truth_confirmed";
+        }
+
+        [Serializable]
+        internal sealed class XUUnityLightMcpPlayModeStatePayload : XUUnityLightMcpPlayModeLivenessEvidence
         {
             public string backend_id = "xuunity.light_unity_mcp";
             public string project_root = "";
@@ -58,14 +72,6 @@ namespace XUUnity.LightMcp.Editor.Core
             public bool is_playing;
             public bool is_paused;
             public bool is_playing_or_will_change_playmode;
-            public string playmode_state = "edit";
-            public int playmode_frame_count;
-            public int playmode_frames_advanced_last_interval;
-            public double playmode_frame_sample_interval_seconds;
-            public bool editor_application_focused;
-            public string playmode_loop_liveness = "";
-            public string playmode_liveness_warning = "";
-            public string playmode_liveness_remediation = "";
             public string validation_evidence = "unity_mcp";
         }
 
@@ -76,7 +82,7 @@ namespace XUUnity.LightMcp.Editor.Core
         }
 
         [Serializable]
-        internal sealed class XUUnityLightMcpPlayModeSetPayload
+        internal sealed class XUUnityLightMcpPlayModeSetPayload : XUUnityLightMcpPlayModeLivenessEvidence
         {
             public string backend_id = "xuunity.light_unity_mcp";
             public string project_root = "";
@@ -91,7 +97,6 @@ namespace XUUnity.LightMcp.Editor.Core
             public bool is_playing;
             public bool is_paused;
             public bool is_playing_or_will_change_playmode;
-            public string playmode_state = "edit";
             public string validation_evidence = "unity_mcp";
         }
 

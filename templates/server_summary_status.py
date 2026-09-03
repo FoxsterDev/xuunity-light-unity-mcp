@@ -147,6 +147,14 @@ def build_status_summary(
         "active_test_last_progress_age_seconds": None if active_test_progress_age is None else round(active_test_progress_age, 3),
         "active_test_elapsed_runtime_seconds": None if active_test_started_age is None else round(active_test_started_age, 3),
         "active_test_runtime_timeout_ms": int(effective.get("active_test_runtime_timeout_ms") or 0),
+        "active_test_console_error_count_since_request_start": int(
+            effective.get("active_test_console_error_count_since_request_start") or 0
+        ),
+        "active_test_console_error_count_trust_class": str(
+            effective.get("active_test_console_error_count_trust_class") or ""
+        ),
+        "console_error_count_total": int(effective.get("console_error_count_total") or 0),
+        "console_error_counter_session_id": str(effective.get("console_error_counter_session_id") or ""),
         "last_completed_operation": str(effective.get("last_completed_operation") or ""),
         "last_completed_operation_status": str(effective.get("last_completed_operation_status") or ""),
         "last_completed_operation_duration_seconds": round(float(effective.get("last_completed_operation_duration_seconds") or 0.0), 3),

@@ -4,62 +4,44 @@ from typing import Any
 
 SCENARIO_TERMINAL_STATUSES = {"passed", "failed"}
 
+SCENARIO_STEP_KINDS = (
+    "status",
+    "health_probe",
+    "scene_snapshot",
+    "scene_open",
+    "assert_scene",
+    "project_refresh",
+    "console_tail",
+    "console_grep",
+    "playmode_set",
+    "wait",
+    "wait_for_playmode_state",
+    "assert_playmode_state",
+    "game_view_screenshot",
+    "compile_player_scripts",
+    "tests_run_editmode",
+    "tests_run_playmode",
+    "game_view_configure",
+    "project_action",
+    "ui_click",
+    "ui_exists",
+    "ui_get_text",
+    "project_defined_hook",
+    "project_defined_hook_poll_until",
+)
+
 SCENARIO_STEP_SCHEMA: dict[str, Any] = {
     "type": "object",
     "properties": {
         "stepId": {"type": "string"},
         "kind": {
             "type": "string",
-            "enum": [
-                "status",
-                "health_probe",
-                "scene_snapshot",
-                "scene_open",
-                "assert_scene",
-                "project_refresh",
-                "console_tail",
-                "console_grep",
-                "playmode_set",
-                "wait",
-                "wait_for_playmode_state",
-                "assert_playmode_state",
-                "game_view_screenshot",
-                "compile_player_scripts",
-                "tests_run_editmode",
-                "tests_run_playmode",
-                "game_view_configure",
-                "project_action",
-                "ui_click",
-                "project_defined_hook",
-                "project_defined_hook_poll_until",
-            ],
+            "enum": list(SCENARIO_STEP_KINDS),
         },
         "operation": {
             "type": "string",
             "description": "Alias for kind. Supported so scenario JSON can use operation-style step records.",
-            "enum": [
-                "status",
-                "health_probe",
-                "scene_snapshot",
-                "scene_open",
-                "assert_scene",
-                "project_refresh",
-                "console_tail",
-                "console_grep",
-                "playmode_set",
-                "wait",
-                "wait_for_playmode_state",
-                "assert_playmode_state",
-                "game_view_screenshot",
-                "compile_player_scripts",
-                "tests_run_editmode",
-                "tests_run_playmode",
-                "game_view_configure",
-                "project_action",
-                "ui_click",
-                "project_defined_hook",
-                "project_defined_hook_poll_until",
-            ],
+            "enum": list(SCENARIO_STEP_KINDS),
         },
         "action": {
             "type": "string",
@@ -168,20 +150,20 @@ SCENARIO_STEP_SCHEMA: dict[str, Any] = {
             "type": "string",
             "enum": ["active_scene", "all_loaded_scenes", "game_object_path", "game_object_name"],
             "description": (
-                "ui_click only. Where to build the UI tree from before matching the selector. "
+                "UI steps only. Where to build the UI tree from before matching the selector. "
                 "all_loaded_scenes walks every loaded scene plus DontDestroyOnLoad."
             ),
         },
         "targetValue": {"type": "string"},
         "sceneName": {
             "type": "string",
-            "description": "ui_click only. Restrict the searched scope to this loaded scene, by scene name or scene path.",
+            "description": "UI steps only. Restrict the searched scope to this loaded scene, by scene name or scene path.",
         },
         "includeDontDestroyOnLoad": {
             "type": "boolean",
             "default": True,
             "description": (
-                "ui_click only. Include the DontDestroyOnLoad scene in the searched scope and in out-of-scope "
+                "UI steps only. Include the DontDestroyOnLoad scene in the searched scope and in out-of-scope "
                 "diagnostics. Resolving it creates and immediately destroys one hidden probe GameObject in Play Mode."
             ),
         },
@@ -189,20 +171,20 @@ SCENARIO_STEP_SCHEMA: dict[str, Any] = {
             "type": "integer",
             "minimum": 1,
             "default": 12,
-            "description": "ui_click only. Maximum hierarchy depth to inspect while searching for selector matches.",
+            "description": "UI steps only. Maximum hierarchy depth to inspect while searching for selector matches.",
         },
         "maxNodes": {
             "type": "integer",
             "minimum": 1,
             "default": 500,
             "description": (
-                "ui_click only. Maximum nodes to inspect. If this budget is exhausted before the search is "
+                "UI steps only. Maximum nodes to inspect. If this budget is exhausted before the search is "
                 "complete, the step fails as ui_selector_search_truncated instead of claiming absence or uniqueness."
             ),
         },
         "selector": {
             "type": "object",
-            "description": "ui_click only. Must resolve to exactly one node; an ambiguous selector is refused.",
+            "description": "UI steps only. ui_click and ui_get_text require one unambiguous node.",
             "properties": {
                 "name": {"type": "string"},
                 "type": {"type": "string"},
@@ -219,6 +201,15 @@ SCENARIO_STEP_SCHEMA: dict[str, Any] = {
             "type": "boolean",
             "default": True,
             "description": "ui_click only. Fail the step when the UI tree signature is unchanged after delivery.",
+        },
+        "expectedExists": {
+            "type": "boolean",
+            "default": True,
+            "description": "ui_exists only. Assert that the selector's existence equals this value; absence passes only with a complete search.",
+        },
+        "expectedText": {
+            "type": "string",
+            "description": "ui_get_text only. When non-empty, require an exact match; otherwise capture any available semantic text.",
         },
         "approve": {
             "type": "boolean",

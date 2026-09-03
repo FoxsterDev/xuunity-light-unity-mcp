@@ -1,6 +1,6 @@
 # XUUnity Light Unity MCP Continuation
 
-Date: `2026-05-23`
+Date: `2026-09-03`
 Status: `active continuation note`
 
 ## Current Baseline
@@ -36,6 +36,15 @@ It now has:
 - design-plan history for retro-derived implementation plans
 - public package-bump fast-path guidance for lean `com.xuunity.light-mcp`
   version updates
+- point-of-use player-loop liveness/trust evidence on UI reads, guarded clicks,
+  Game View screenshots, and persisted scenario steps
+- explicit Game View render-target dimensions alongside Unity `Screen.*`
+  dimensions and a mismatch verdict
+- scenario `ui_click`, `ui_exists`, and `ui_get_text` steps, a public scenario
+  capability/schema tool, and file-backed validation input
+- request-scoped console-error pressure on EditMode and PlayMode test verdicts
+- package-owned mutation-delta construction plus a guarded MCP project-hook
+  scaffold path and scalar `xuunity_setup_plan.projectRoot` parity
 
 The public `xuunity` protocol layer also now understands validation-lane
 selection.
@@ -56,6 +65,8 @@ External server:
 - `request-final-status`
 - `request-scenario-results-list`
 - `request-scenario-result-latest`
+- `unity_scenario_capabilities`
+- `xuunity_project_hook_scaffold`
 - additive request-scoped `structured_timing` and `artifact_manifest` on
   successful same-host editor responses and `request-final-status`
 - host-local package-source mode switching:
@@ -94,6 +105,9 @@ Scenario second-wave steps:
 - `tests_run_editmode`
 - `game_view_configure`
 - `project_defined_hook`
+- `ui_click`
+- `ui_exists`
+- `ui_get_text`
 
 Public reusable smoke assets:
 - `templates/scenarios/`
@@ -123,7 +137,7 @@ Transport defaults:
 - `file_ipc` remains an explicit fallback/compatibility transport
 
 Latest applied retro:
-- `../archive/retros/2026-05-23_devmode_batch_lifecycle_retro.md`
+- `../archive/retros/2026-09-03_greenfield_scene_authoring_operator_retro.md`
 
 Latest applied design plan:
 - `../architecture/designs/XUUNITY_MCP_DEVMODE_BATCH_LIFECYCLE_HARDENING_DESIGN_2026-05-23.md`

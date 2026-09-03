@@ -46,6 +46,7 @@ class BatchOperatorErgonomicsTests(unittest.TestCase):
         self.assertIn('UNITY_ARGS+=("$1")', script)
         self.assertIn('if (( ${#UNITY_ARGS[@]} > 0 )); then', script)
         self.assertIn('ensure_ready_cmd+=("--unity-arg=$unity_arg")', script)
+        self.assertIn('--assembly-name com.xuunity.light-mcp.Editor.Ugui.Tests', script)
 
     def test_artifact_probe_checks_zip_entries_and_manifest_text(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -394,12 +395,12 @@ class BatchOperatorErgonomicsTests(unittest.TestCase):
         )
         files = {item["path"]: item["content"] for item in result["files"]}
 
-        self.assertIn("xuunity.mutation-delta.v1", files["ExampleCatalogHook.cs"])
-        self.assertIn("removed_count", files["ExampleCatalogHook.cs"])
+        self.assertIn("XUUnityLightMcpMutationDelta mutation_delta", files["ExampleCatalogHook.cs"])
         self.assertIn("- mutation_delta", files["project_actions.fragment.yaml"])
         self.assertIn("measured before/after/added/removed/changed counts", files["ACTIVATION_CHECKLIST.md"])
+        self.assertIn("XUUnityLightMcpMutationDelta.Create", files["ACTIVATION_CHECKLIST.md"])
         self.assertIn("leaves it null", files["ACTIVATION_CHECKLIST.md"])
-        self.assertNotIn("mutation_delta = new MutationDelta", files["ExampleCatalogHook.cs"])
+        self.assertNotIn("private sealed class MutationDelta", files["ExampleCatalogHook.cs"])
 
     def test_config_applying_build_project_action_template_is_generic(self) -> None:
         template_dir = Path(__file__).resolve().parents[1] / "templates" / "project_actions"

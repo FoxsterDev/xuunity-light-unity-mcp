@@ -403,6 +403,27 @@ def normalize_playmode_payload_from_lifecycle(payload: dict[str, Any], lifecycle
     normalized["is_paused"] = bool(settled_state.get("is_paused"))
     normalized["is_playing_or_will_change_playmode"] = bool(settled_state.get("is_playing_or_will_change_playmode"))
     normalized["playmode_state"] = str(settled_state.get("playmode_state") or normalized.get("playmode_state") or "")
+    for key in (
+        "playmode_frame_count",
+        "playmode_frames_advanced_last_interval",
+        "playmode_frame_sample_interval_seconds",
+        "editor_application_focused",
+        "playmode_loop_liveness",
+        "playmode_liveness_warning",
+        "playmode_liveness_remediation",
+    ):
+        if key in settled_state:
+            normalized[key] = settled_state.get(key)
+    liveness = str(normalized.get("playmode_loop_liveness") or "")
+    normalized["result_trust_class"] = (
+        "playmode_throttled"
+        if liveness == "throttled"
+        else "playmode_advancing_confirmed"
+        if liveness == "advancing"
+        else "playmode_liveness_unproven"
+        if str(normalized.get("playmode_state") or "") == "playing"
+        else "editor_truth_confirmed"
+    )
     return normalized
 
 
@@ -710,6 +731,9 @@ def _compact_tests_payload(payload: dict[str, Any], operation: str) -> dict[str,
             "result_path",
             "settle_request_id",
             "persisted_test_result_reconciliation",
+            "console_error_count_since_request_start",
+            "console_error_count_trust_class",
+            "console_error_pressure_detected",
         ),
     )
     failures = payload.get("failures") or payload.get("first_failures")
@@ -750,6 +774,7 @@ def _compact_playmode_payload(payload: dict[str, Any], operation: str) -> dict[s
             "settled_at_utc",
             "refusal_code",
             "recommended_next_action",
+            "result_trust_class",
         ),
     )
     compact.update(_artifact_ref(payload))
@@ -769,6 +794,21 @@ def _compact_screenshot_payload(payload: dict[str, Any], operation: str) -> dict
             "file_path",
             "width",
             "height",
+            "render_width",
+            "render_height",
+            "screen_width",
+            "screen_height",
+            "render_target_available",
+            "render_target_differs_from_screen",
+            "playmode_state",
+            "playmode_frame_count",
+            "playmode_frames_advanced_last_interval",
+            "playmode_frame_sample_interval_seconds",
+            "editor_application_focused",
+            "playmode_loop_liveness",
+            "playmode_liveness_warning",
+            "playmode_liveness_remediation",
+            "result_trust_class",
             "image_included",
             "image_requested",
             "image_omitted_reason",

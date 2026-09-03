@@ -213,8 +213,8 @@
     ]
   },
   "mcp_tools_list": {
-    "sha256": "152ee9db12a2a2e35a714a9186feb9cf612012c370f8169030695731ee0fc365",
-    "tool_count": 65,
+    "sha256": "c533960a1f8ee46451e5aa52c82c6f54e060329d2788f116f1821dc38b715cb4",
+    "tool_count": 67,
     "tool_names": [
       "xuunity_setup_plan",
       "xuunity_setup_apply",
@@ -232,6 +232,7 @@
       "unity_project_refresh",
       "unity_project_action_list",
       "unity_project_action_invoke",
+      "xuunity_project_hook_scaffold",
       "unity_artifact_register",
       "unity_artifact_write_report",
       "unity_ui_reference_register",
@@ -273,6 +274,7 @@
       "unity_compile_matrix",
       "unity_build_player",
       "unity_compile_build_config_matrix",
+      "unity_scenario_capabilities",
       "unity_scenario_validate",
       "unity_scenario_run",
       "unity_scenario_result",

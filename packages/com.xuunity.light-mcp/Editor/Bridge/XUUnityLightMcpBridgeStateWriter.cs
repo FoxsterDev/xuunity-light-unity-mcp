@@ -29,6 +29,10 @@ namespace XUUnity.LightMcp.Editor.Bridge
             var editorFocused = XUUnityLightMcpPlayModeLivenessTracker.EditorApplicationFocused;
             var livenessWarning = XUUnityLightMcpPlayModeLivenessTracker.ResolveWarning(playmodeLiveness, editorFocused);
             XUUnityLightMcpTestRunState.TryLoadActive(out var activeTestRun);
+            XUUnityLightMcpTestRunState.ResolveConsoleErrorPressure(
+                activeTestRun,
+                out var activeTestConsoleErrorCount,
+                out var activeTestConsoleErrorTrustClass);
 
             var state = new XUUnityLightMcpBridgeState
             {
@@ -92,6 +96,8 @@ namespace XUUnity.LightMcp.Editor.Bridge
                 playmode_loop_liveness = playmodeLiveness,
                 playmode_liveness_warning = livenessWarning,
                 playmode_liveness_remediation = XUUnityLightMcpPlayModeLivenessTracker.ResolveRemediation(livenessWarning),
+                console_error_count_total = XUUnityLightMcpConsoleBuffer.ErrorCount,
+                console_error_counter_session_id = XUUnityLightMcpConsoleBuffer.CounterSessionId,
                 heartbeat_utc = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ"),
                 last_pump_utc = XUUnityLightMcpBridgeRuntimeState.LastPumpUtc,
                 last_processed_request_id = XUUnityLightMcpBridgeRuntimeState.LastProcessedRequestId,
@@ -109,6 +115,8 @@ namespace XUUnity.LightMcp.Editor.Bridge
                 active_test_last_finished_test = activeTestRun?.last_finished_test ?? "",
                 active_test_last_progress_at_utc = activeTestRun?.last_progress_at_utc ?? "",
                 active_test_runtime_timeout_ms = Math.Max(0, activeTestRun?.runtime_timeout_ms ?? 0),
+                active_test_console_error_count_since_request_start = activeTestConsoleErrorCount,
+                active_test_console_error_count_trust_class = activeTestConsoleErrorTrustClass,
                 last_completed_operation = XUUnityLightMcpBridgeRuntimeState.LastCompletedOperation,
                 last_completed_operation_status = XUUnityLightMcpBridgeRuntimeState.LastCompletedOperationStatus,
                 last_completed_operation_duration_seconds = XUUnityLightMcpBridgeRuntimeState.LastCompletedOperationDurationSeconds,

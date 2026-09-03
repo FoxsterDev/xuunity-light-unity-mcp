@@ -1539,6 +1539,39 @@ class BridgeRuntimeTests(unittest.TestCase):
         self.assertEqual("unity_completed_confirmed", summary["result_trust_class"])
         self.assertEqual("none", summary["recommended_next_action"])
 
+    def test_test_timeout_promotes_console_error_pressure_and_recovery(self) -> None:
+        summary = server_bridge_runtime.build_test_verdict_summary(
+            project_root=Path("/tmp/FakeProject"),
+            request_id="req-console-pressure",
+            operation="unity.tests.run_editmode",
+            response_payload=None,
+            persisted_test_result={
+                "run_phase": "timed_out",
+                "timeout_classification": "runtime_timeout_after_test_start",
+                "started_at_utc": "2020-01-01T00:00:00Z",
+                "runtime_timeout_ms": 1000,
+                "console_error_count_at_request_start": 10,
+                "console_error_counter_session_id_at_request_start": "same-session",
+            },
+            request_submitted=True,
+            request_started=True,
+            request_completed=False,
+            completion_status="",
+            operation_outcome="started_in_progress",
+            active_state={
+                "playmode_state": "edit",
+                "console_error_count_total": 73,
+                "console_error_counter_session_id": "same-session",
+            },
+            bridge_changed_since_submission=False,
+        )
+
+        self.assertEqual("runtime_timeout", summary["test_verdict"])
+        self.assertEqual(63, summary["console_error_count_since_request_start"])
+        self.assertEqual("complete_since_request_start", summary["console_error_count_trust_class"])
+        self.assertTrue(summary["console_error_pressure_detected"])
+        self.assertEqual("inspect_console_errors_since_request_start", summary["recommended_next_action"])
+
     def test_persisted_test_result_provenance_survives_full_and_compact_final_status(self) -> None:
         summary = server_bridge_runtime.build_test_verdict_summary(
             project_root=Path("/tmp/FakeProject"),

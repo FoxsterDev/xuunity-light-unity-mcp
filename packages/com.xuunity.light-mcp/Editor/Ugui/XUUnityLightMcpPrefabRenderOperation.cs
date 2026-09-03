@@ -346,6 +346,12 @@ namespace XUUnity.LightMcp.Editor.Ugui
             result.Target.resolved_root_count = 1;
             result.Target.capture_width = width;
             result.Target.capture_height = height;
+            result.Target.screen_width = Screen.width;
+            result.Target.screen_height = Screen.height;
+            result.Target.render_width = width;
+            result.Target.render_height = height;
+            result.Target.render_target_available = true;
+            result.Target.render_target_differs_from_screen = width != Screen.width || height != Screen.height;
 
             var rootPath = XUUnityLightMcpUiTreeBuilder.BuildPath(instance.transform);
             result.RootPaths.Add(rootPath);
@@ -376,8 +382,15 @@ namespace XUUnity.LightMcp.Editor.Ugui
                 warnings = result.Warnings,
                 errors = result.Errors,
                 component_detail_backends = XUUnityLightMcpUiComponentReaderRegistry.BackendIds(),
+                screen_width = result.Target.screen_width,
+                screen_height = result.Target.screen_height,
+                render_width = result.Target.render_width,
+                render_height = result.Target.render_height,
+                render_target_available = true,
+                render_target_differs_from_screen = result.Target.render_target_differs_from_screen,
                 success = result.Errors.Count == 0
             };
+            XUUnityLightMcpPlayModeStateOperation.PopulateLivenessEvidence(snapshot);
             snapshot.proof_class = XUUnityLightMcpUiProofClass.Resolve(
                 snapshot.success,
                 result.Nodes.Count,

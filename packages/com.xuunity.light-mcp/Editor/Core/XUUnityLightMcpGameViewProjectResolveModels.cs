@@ -60,7 +60,7 @@ namespace XUUnity.LightMcp.Editor.Core
         }
 
         [Serializable]
-        internal sealed class XUUnityLightMcpGameViewScreenshotPayload
+        internal sealed class XUUnityLightMcpGameViewScreenshotPayload : XUUnityLightMcpPlayModeLivenessEvidence
         {
             public string backend_id = "xuunity.light_unity_mcp";
             public string project_root = "";
@@ -68,6 +68,12 @@ namespace XUUnity.LightMcp.Editor.Core
             public string file_path = "";
             public int width;
             public int height;
+            public int render_width;
+            public int render_height;
+            public int screen_width;
+            public int screen_height;
+            public bool render_target_available;
+            public bool render_target_differs_from_screen;
             public string image_base64 = "";
             public bool image_included;
             public bool image_requested;

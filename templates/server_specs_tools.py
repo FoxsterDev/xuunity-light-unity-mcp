@@ -14,6 +14,10 @@ TOOLS: dict[str, dict[str, Any]] = {
                     "type": "string",
                     "description": "Workspace or repository root to scan for Unity projects."
                 },
+                "projectRoot": {
+                    "type": "string",
+                    "description": "One explicit Unity project root; scalar parity with setup-plan --project-root. Combined with projectRoots when both are supplied."
+                },
                 "projectRoots": {
                     "type": "array",
                     "items": {"type": "string"},
@@ -296,6 +300,40 @@ TOOLS: dict[str, dict[str, Any]] = {
                 }
             },
             "required": ["projectRoot", "actionId"]
+        }
+    },
+    "xuunity_project_hook_scaffold": {
+        "description": (
+            "Preview or write a project-local IXUUnityLightMcpScenarioHook activation bundle: C# hook, "
+            "project_actions.yaml fragment, validation scenario, and checklist. Writes stay under projectRoot "
+            "and occur only when approve=true."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "projectRoot": {"type": "string"},
+                "hookName": {"type": "string"},
+                "actionId": {"type": "string"},
+                "className": {"type": "string"},
+                "namespace": {"type": "string", "default": "Example.Project.Editor"},
+                "outputDir": {
+                    "type": "string",
+                    "description": "Project-relative output directory. Defaults to Assets/Editor/XUUnityLightMcpHooks/<className>."
+                },
+                "mutating": {"type": "boolean", "default": False},
+                "uiFixture": {"type": "boolean", "default": False},
+                "approve": {
+                    "type": "boolean",
+                    "default": False,
+                    "description": "When false, return the complete preview without writing files."
+                },
+                "overwrite": {
+                    "type": "boolean",
+                    "default": False,
+                    "description": "Must be true with approve=true before replacing any existing scaffold file."
+                }
+            },
+            "required": ["projectRoot", "hookName", "actionId", "className"]
         }
     },
     "unity_artifact_register": {
@@ -884,7 +922,8 @@ TOOLS: dict[str, dict[str, Any]] = {
             "Snapshot the live uGUI hierarchy of the active scene or a named subtree as ui.read.v1 nodes: "
             "stable-within-snapshot path, active state, components, effective CanvasGroup alpha, raycast blocking, "
             "canvas sort order, screen-space bounds, and text/font/material where a reader is available. "
-            "Read-only and never OCR-derived; reports proof_class and truncation explicitly."
+            "Read-only and never OCR-derived; reports proof_class, truncation, player-loop liveness, Screen size, "
+            "and the existing Game View render-target size explicitly."
         ),
         "inputSchema": {
             "type": "object",
@@ -932,7 +971,8 @@ TOOLS: dict[str, dict[str, Any]] = {
         "description": (
             "Return the uGUI nodes matching a selector. Selector fields combine with AND: name, type, path, "
             "pathContains, textEquals, textContains, requireVisible, requireInteractable. Ambiguity is reported, "
-            "never hidden."
+            "never hidden. The payload includes player-loop liveness and Screen-versus-render-target evidence so "
+            "a throttled or mismatched editor frame cannot be mistaken for runtime truth."
         ),
         "inputSchema": {
             "type": "object",
@@ -1569,7 +1609,7 @@ TOOLS: dict[str, dict[str, Any]] = {
     },
     "unity_tests_run_editmode": {
         "bridgeOperation": "unity.tests.run_editmode",
-        "description": "Run Unity EditMode tests and return normalized result accounting.",
+        "description": "Run Unity EditMode tests and return normalized result accounting plus console-error pressure observed since request start.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -1602,7 +1642,7 @@ TOOLS: dict[str, dict[str, Any]] = {
     },
     "unity_tests_run_playmode": {
         "bridgeOperation": "unity.tests.run_playmode",
-        "description": "Run Unity PlayMode tests and return normalized result accounting.",
+        "description": "Run Unity PlayMode tests and return normalized result accounting plus console-error pressure observed since request start.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -1703,7 +1743,8 @@ TOOLS: dict[str, dict[str, Any]] = {
             "Capture a screenshot from the Unity Editor Game View. The intended operator path is to read the "
             "returned file_path with an image reader; includeImage inlines base64 only while the encoded PNG "
             "stays inside imageBudgetBytes, and otherwise reports image_omitted_reason=payload_budget rather "
-            "than overflowing the tool result."
+            "than overflowing the tool result. The result distinguishes render_width/render_height from "
+            "screen_width/screen_height, flags any mismatch, and reports player-loop liveness/trust."
         ),
         "inputSchema": {
             "type": "object",
@@ -1854,22 +1895,45 @@ TOOLS: dict[str, dict[str, Any]] = {
             "required": ["projectRoot"]
         }
     },
+    "unity_scenario_capabilities": {
+        "description": (
+            "Return the complete public scenario definition/step schema, valid step kinds, and validate input modes. "
+            "Use this before authoring flows with status, scene, console, playmode, waits, screenshots, compile/tests, "
+            "project actions/hooks, ui_click, ui_exists, or ui_get_text."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "projectRoot": {"type": "string"}
+            },
+            "required": ["projectRoot"]
+        }
+    },
     "unity_scenario_validate": {
         "bridgeOperation": "unity.scenario.validate",
-        "description": "Validate a scripted Unity automation scenario before execution.",
+        "description": (
+            "Validate a scripted Unity automation scenario before execution. Supply exactly one of scenario "
+            "(inline object) or scenarioFile (absolute or project-relative JSON path). Call "
+            "unity_scenario_capabilities for the complete step-kind and field schema."
+        ),
         "inputSchema": {
             "type": "object",
             "properties": {
                 "projectRoot": {"type": "string"},
                 "scenario": SCENARIO_DEFINITION_SCHEMA,
+                "scenarioFile": {
+                    "type": "string",
+                    "description": "Absolute or project-relative JSON path under projectRoot."
+                },
                 "timeoutMs": {"type": "integer", "default": 5000, "minimum": 1000},
             },
-            "required": ["projectRoot", "scenario"],
+            "required": ["projectRoot"],
+            "oneOf": [{"required": ["scenario"]}, {"required": ["scenarioFile"]}],
         },
     },
     "unity_scenario_run": {
         "bridgeOperation": "unity.scenario.run",
-        "description": "Start a scripted Unity automation scenario. Execution continues asynchronously inside the Unity editor update loop.",
+        "description": "Start a scripted Unity automation scenario. Valid kinds and fields are returned by unity_scenario_capabilities. Execution continues asynchronously inside the Unity editor update loop.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -1931,7 +1995,7 @@ TOOLS: dict[str, dict[str, Any]] = {
         },
     },
     "unity_scenario_run_and_wait": {
-        "description": "Start a Unity automation scenario and wait until it reaches a terminal state. By default returns a compact decision envelope; set includeFullPayload=true when asserting raw per-step payload_json, hook_name, or parity fixture fields. Full payload mode omits duplicated run_start.steps unless includeStepPayloads=true.",
+        "description": "Start a Unity automation scenario and wait until it reaches a terminal state. Valid kinds and fields are returned by unity_scenario_capabilities, including ui_click, ui_exists, and ui_get_text. By default returns a compact decision envelope; set includeFullPayload=true when asserting raw per-step payload_json, hook_name, or parity fixture fields. Full payload mode omits duplicated run_start.steps unless includeStepPayloads=true.",
         "inputSchema": {
             "type": "object",
             "properties": {

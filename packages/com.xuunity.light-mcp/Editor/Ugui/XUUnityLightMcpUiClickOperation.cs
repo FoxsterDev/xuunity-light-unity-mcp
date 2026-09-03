@@ -1,10 +1,10 @@
 using System;
-using UnityEditor;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
 using XUUnity.LightMcp.Editor.Core;
 using XUUnity.LightMcp.Editor.Helpers;
+using XUUnity.LightMcp.Editor.Operations;
 
 namespace XUUnity.LightMcp.Editor.Ugui
 {
@@ -26,9 +26,9 @@ namespace XUUnity.LightMcp.Editor.Ugui
                 project_root = XUUnityLightMcpFileIpcPaths.ProjectRootPath,
                 generated_at_utc = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ"),
                 requested_action = (args.action ?? "").Trim().ToLowerInvariant(),
-                selector = args.selector,
-                playmode_state = CurrentPlayModeState()
+                selector = args.selector
             };
+            XUUnityLightMcpPlayModeStateOperation.PopulateLivenessEvidence(payload);
 
             if (!string.Equals(payload.requested_action, "click", StringComparison.Ordinal))
             {
@@ -71,6 +71,7 @@ namespace XUUnity.LightMcp.Editor.Ugui
             });
             payload.before_snapshot = Summarize(before);
             payload.search_target = before.Target;
+            CopyRenderEvidence(payload, before.Target);
             payload.search_node_count = before.Nodes.Count;
             payload.search_max_depth = Math.Max(1, args.maxDepth);
             payload.search_max_nodes = Math.Max(1, args.maxNodes);
@@ -260,14 +261,14 @@ namespace XUUnity.LightMcp.Editor.Ugui
             return Respond(request, payload);
         }
 
-        static string CurrentPlayModeState()
+        static void CopyRenderEvidence(XUUnityLightMcpUiClickPayload payload, XUUnityLightMcpUiTargetInfo target)
         {
-            if (!EditorApplication.isPlayingOrWillChangePlaymode && !EditorApplication.isPlaying)
-            {
-                return "edit";
-            }
-
-            return EditorApplication.isPaused ? "paused" : "playing";
+            payload.screen_width = target?.screen_width ?? 0;
+            payload.screen_height = target?.screen_height ?? 0;
+            payload.render_width = target?.render_width ?? 0;
+            payload.render_height = target?.render_height ?? 0;
+            payload.render_target_available = target != null && target.render_target_available;
+            payload.render_target_differs_from_screen = target != null && target.render_target_differs_from_screen;
         }
 
         static XUUnityLightMcpUiClickSnapshotRef Summarize(XUUnityLightMcpUiTreeResult result)

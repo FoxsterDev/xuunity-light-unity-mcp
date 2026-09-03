@@ -155,10 +155,12 @@ class ServerProtocolAndParserTests(unittest.TestCase):
         self.assertIn("unity_loading_timing", tool_names)
         self.assertIn("unity_scene_open", tool_names)
         self.assertIn("unity_scenario_run_and_wait", tool_names)
+        self.assertIn("unity_scenario_capabilities", tool_names)
         self.assertIn("unity_scenario_results_list", tool_names)
         self.assertIn("unity_scenario_result_latest", tool_names)
         self.assertIn("unity_project_action_list", tool_names)
         self.assertIn("unity_project_action_invoke", tool_names)
+        self.assertIn("xuunity_project_hook_scaffold", tool_names)
         self.assertIn("unity_artifact_register", tool_names)
         self.assertIn("unity_artifact_write_report", tool_names)
         sdk_diff_guard_tool = next(
@@ -208,6 +210,123 @@ class ServerProtocolAndParserTests(unittest.TestCase):
         self.assertIn("allowDirtySceneDiscard", scene_open_tool["inputSchema"]["properties"])
         scenario_tool = next(tool for tool in response["result"]["tools"] if tool["name"] == "unity_scenario_run_and_wait")
         self.assertIn("includeStepPayloads", scenario_tool["inputSchema"]["properties"])
+
+    def test_setup_plan_accepts_scalar_project_root(self) -> None:
+        captured = {}
+
+        def fake_build_setup_plan(**kwargs):
+            captured.update(kwargs)
+            return {"status": "planned"}
+
+        with mock.patch.object(server_batch_orchestrator, "build_setup_plan", side_effect=fake_build_setup_plan):
+            result = server_batch_orchestrator.call_xuunity_setup_plan_tool(
+                {"projectRoot": "/tmp/OneProject", "projectRoots": ["/tmp/TwoProject"]}
+            )
+
+        self.assertFalse(result["isError"])
+        self.assertEqual(["/tmp/OneProject", "/tmp/TwoProject"], captured["project_roots"])
+
+    def test_scenario_capabilities_exposes_ui_step_kinds_and_schema(self) -> None:
+        with mock.patch.object(server, "ensure_project_root", return_value=Path("/tmp/FakeProject")):
+            result = server_batch_orchestrator.call_unity_scenario_capabilities_tool(
+                {"projectRoot": "/tmp/FakeProject"}
+            )
+
+        payload = result["structuredContent"]
+        self.assertIn("ui_click", payload["step_kinds"])
+        self.assertIn("ui_exists", payload["step_kinds"])
+        self.assertIn("ui_get_text", payload["step_kinds"])
+        self.assertIn("expectedExists", payload["scenario_schema"]["properties"]["steps"]["items"]["properties"])
+        self.assertEqual(["scenario", "scenarioFile"], payload["validate_input_modes"])
+
+    def test_scenario_validate_accepts_project_scoped_file(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project_root = Path(temp_dir)
+            scenario_path = project_root / "smoke.json"
+            scenario_path.write_text(
+                json.dumps({"name": "file-smoke", "steps": [{"stepId": "status", "kind": "status"}]}),
+                encoding="utf-8",
+            )
+            with (
+                mock.patch.object(server, "ensure_project_root", return_value=project_root),
+                mock.patch.object(
+                    server,
+                    "invoke_bridge",
+                    return_value={"status": "ok", "payload_type": "unity.scenario.validate", "payload_json": "{}"},
+                ) as invoke_mock,
+            ):
+                result = server_batch_orchestrator.call_unity_scenario_validate_tool(
+                    {"projectRoot": str(project_root), "scenarioFile": "smoke.json"}
+                )
+
+        self.assertFalse(result["isError"])
+        bridge_args = invoke_mock.call_args.args[2]
+        self.assertEqual("file-smoke", bridge_args["scenario"]["name"])
+
+    def test_scenario_validate_rejects_file_outside_project(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project_root = Path(temp_dir) / "Project"
+            project_root.mkdir()
+            outside = Path(temp_dir) / "outside.json"
+            outside.write_text("{}", encoding="utf-8")
+            with mock.patch.object(server, "ensure_project_root", return_value=project_root):
+                result = server_batch_orchestrator.call_unity_scenario_validate_tool(
+                    {"projectRoot": str(project_root), "scenarioFile": str(outside)}
+                )
+
+        self.assertTrue(result["isError"])
+        self.assertEqual("scenario_file_outside_project", result["structuredContent"]["error"]["code"])
+
+    def test_project_hook_scaffold_tool_previews_then_writes_with_approval(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project_root = Path(temp_dir)
+            arguments = {
+                "projectRoot": str(project_root),
+                "hookName": "example.authoring",
+                "actionId": "example.authoring.build",
+                "className": "ExampleAuthoringHook",
+                "mutating": True,
+            }
+            with mock.patch.object(server, "ensure_project_root", return_value=project_root):
+                preview = server_batch_orchestrator.call_xuunity_project_hook_scaffold_tool(arguments)
+                written = server_batch_orchestrator.call_xuunity_project_hook_scaffold_tool(
+                    {**arguments, "approve": True}
+                )
+                refused_overwrite = server_batch_orchestrator.call_xuunity_project_hook_scaffold_tool(
+                    {**arguments, "approve": True}
+                )
+
+            output_dir = project_root / "Assets" / "Editor" / "XUUnityLightMcpHooks" / "ExampleAuthoringHook"
+            self.assertFalse(preview["structuredContent"]["approved"])
+            self.assertEqual([], preview["structuredContent"]["written_paths"])
+            self.assertTrue(written["structuredContent"]["approved"])
+            self.assertTrue((output_dir / "ExampleAuthoringHook.cs").is_file())
+            self.assertTrue(refused_overwrite["isError"])
+            self.assertEqual(
+                "project_hook_scaffold_overwrite_approval_required",
+                refused_overwrite["structuredContent"]["error"]["code"],
+            )
+
+    def test_project_hook_scaffold_tool_rejects_an_output_outside_the_project(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project_root = Path(temp_dir) / "Project"
+            project_root.mkdir()
+            with mock.patch.object(server, "ensure_project_root", return_value=project_root):
+                result = server_batch_orchestrator.call_xuunity_project_hook_scaffold_tool(
+                    {
+                        "projectRoot": str(project_root),
+                        "hookName": "example.authoring",
+                        "actionId": "example.authoring.build",
+                        "className": "ExampleAuthoringHook",
+                        "outputDir": str(Path(temp_dir) / "Outside"),
+                    }
+                )
+
+        self.assertTrue(result["isError"])
+        self.assertEqual(
+            "project_hook_scaffold_path_outside_project",
+            result["structuredContent"]["error"]["code"],
+        )
 
     def test_scene_open_tool_invokes_bridge_with_scene_args(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:

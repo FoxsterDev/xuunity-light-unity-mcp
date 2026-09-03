@@ -87,6 +87,7 @@ namespace XUUnity.LightMcp.Editor.Helpers
                 var stepResult = state.steps[state.currentStepIndex];
                 if (ShouldSkipStepForDependencies(state, step, stepResult))
                 {
+                    CaptureStepEditorTruth(stepResult);
                     PersistResult(state);
                     SaveState(state);
                     state.currentStepIndex++;
@@ -97,6 +98,7 @@ namespace XUUnity.LightMcp.Editor.Helpers
                 }
 
                 var shouldAdvance = ProcessStep(state, step, stepResult);
+                CaptureStepEditorTruth(stepResult);
 
                 PersistResult(state);
                 SaveState(state);
@@ -169,6 +171,11 @@ namespace XUUnity.LightMcp.Editor.Helpers
             }
 
             return false;
+        }
+
+        static void CaptureStepEditorTruth(XUUnityLightMcpScenarioStepResult stepResult)
+        {
+            XUUnityLightMcpPlayModeStateOperation.PopulateLivenessEvidence(stepResult);
         }
 
         public static XUUnityLightMcpScenarioStepResult FindStepResult(

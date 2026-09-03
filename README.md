@@ -124,14 +124,14 @@ Use this contract when the user gives a short request such as:
 > path.
 
 ```text
-Set up XUUnity Light Unity MCP release v0.3.67 from the canonical repository
+Set up XUUnity Light Unity MCP release v0.3.68 from the canonical repository
 https://github.com/FoxsterDev/xuunity-mcp for /path/to/UnityProject, follow
-https://github.com/FoxsterDev/xuunity-mcp/blob/v0.3.67/README.md. Before executing
-an existing helper, compare its version and .source_root with v0.3.67 and refresh
+https://github.com/FoxsterDev/xuunity-mcp/blob/v0.3.68/README.md. Before executing
+an existing helper, compare its version and .source_root with v0.3.68 and refresh
 stale files from that release. On native Windows, migrate only the XUUnity client
 block to cmd.exe plus run_installed_or_refresh_xuunity_mcp.cmd. After any helper
 or client-config change, restart or refresh the client, list the live MCP tools,
-and run unity_status_summary. Require mcp_server_info.version=0.3.67 in that live
+and run unity_status_summary. Require mcp_server_info.version=0.3.68 in that live
 result. Only then run EditMode tests.
 ```
 
@@ -153,7 +153,7 @@ Agent defaults:
 ### Required Sequence
 
 1. Read the release-pinned
-   `https://github.com/FoxsterDev/xuunity-mcp/blob/v0.3.67/README.md`, its
+   `https://github.com/FoxsterDev/xuunity-mcp/blob/v0.3.68/README.md`, its
    `INSTALL.md`, and the matching `docs/clients/*` guide for the current host
    client.
 2. Run a non-mutating preflight:
@@ -193,7 +193,7 @@ Agent defaults:
 9. After any helper or client-config change, restart or refresh the client,
    confirm that `xuunity_light_unity` appears in its MCP server list, list the
    live MCP tools, and run `unity_status_summary`; require
-   `mcp_server_info.version=0.3.67`. Helper-only validation does
+   `mcp_server_info.version=0.3.68`. Helper-only validation does
    not prove that the current MCP client session is connected.
 10. When the user requested tests, run EditMode tests only after the live status
     summary is healthy.
@@ -235,14 +235,14 @@ Preflight review
 - Unity project root: <approved project root>
 - Additional discovered Unity projects: <none or list>
 - Existing helper directory: <present | missing>
-- Requested package release: <v0.3.67>
+- Requested package release: <v0.3.68>
 - Current package pin: <missing | current | stale | custom>
 - Helper state: <current | refresh required | missing> (<installed version and source root>)
 - Client launcher: <native/current | migration required>
 - Planned project file changes: <manifest, bridge config, lockfile, none>
 - Planned user-level config changes: <exact file paths or none>
 - Restart or refresh required after mutation: <yes/no and which client>
-- Required live proof after restart: <server listed, tools listed, unity_status_summary healthy with mcp_server_info.version=0.3.67>
+- Required live proof after restart: <server listed, tools listed, unity_status_summary healthy with mcp_server_info.version=0.3.68>
 - Planned commands after approval: <setup-apply, validate-setup, ensure-ready, request-status-summary, unity_status_summary after reload, ...>
 
 Do not run setup-apply, installer commands, helper sync, or client config edits
@@ -443,8 +443,8 @@ first requested MCP operation after setup.
 
 Inputs:
 - Canonical source repository: https://github.com/FoxsterDev/xuunity-mcp
-- Required release: v0.3.67
-- Release README: https://github.com/FoxsterDev/xuunity-mcp/blob/v0.3.67/README.md
+- Required release: v0.3.68
+- Release README: https://github.com/FoxsterDev/xuunity-mcp/blob/v0.3.68/README.md
 - Unity project root: <absolute path to the Unity project>
 - Workspace root: <absolute path to workspace; may equal the project root>
 - First operation after setup: <optional, for example EditMode tests, health check, compile, or none>
@@ -463,8 +463,8 @@ Rules:
 - Install the required tagged Git UPM release unless the user explicitly
   requests local package development.
 - Reuse an existing helper install directory only after checking its installed
-  version, `.source_root`, and refresh launcher against v0.3.67. Do not execute
-  stale helper files; refresh them from the approved v0.3.67 source first.
+  version, `.source_root`, and refresh launcher against v0.3.68. Do not execute
+  stale helper files; refresh them from the approved v0.3.68 source first.
 - Preserve existing config. Merge the `xuunity_light_unity` server block; do
   not overwrite unrelated MCP servers, editor settings, or package entries. On
   native Windows, replace only an existing XUUnity `bash`/`run.sh` block with
@@ -483,7 +483,7 @@ Required procedure:
    topology, current package pin, installed helper version/source, and client
    launcher flavor.
 2. Use the canonical source repository
-   https://github.com/FoxsterDev/xuunity-mcp. If its v0.3.67 source is missing
+   https://github.com/FoxsterDev/xuunity-mcp. If its v0.3.68 source is missing
    locally, ask before cloning it outside the Unity Assets folder and treat it
    as <MCP_REPO_ROOT>.
 3. Produce a non-mutating setup plan from <MCP_REPO_ROOT>. `setup-plan` must
@@ -498,7 +498,7 @@ Required procedure:
    - intended wiring target
    - requested Unity project root
    - additional discovered Unity projects
-   - requested v0.3.67 package release and current manifest pin
+   - requested v0.3.68 package release and current manifest pin
    - installed helper version/source and whether refresh is required
    - current client launcher and whether native Windows migration is required
    - files that will change, including user-level config
@@ -508,11 +508,11 @@ Required procedure:
    wiring, setup-apply, manifest edits, lockfile edits, or user-level config
    changes.
 6. After approval, refresh the host helper whenever its version/source does not
-   match v0.3.67. Reuse the install directory, not stale files:
+   match v0.3.68. Reuse the install directory, not stale files:
    - POSIX: `bash init_xuunity_light_unity_mcp.sh`
    - native Windows Codex: set
      `XUUNITY_LIGHT_UNITY_MCP_INSTALL_TARGET=codex`, then run
-     `.\xuunity_light_unity_mcp.cmd server-help` from the v0.3.67 source
+     `.\xuunity_light_unity_mcp.cmd server-help` from the v0.3.68 source
 7. Apply the approved plan only to the approved Unity project roots:
    bash xuunity_light_unity_mcp.sh setup-apply --plan-file /tmp/xuunity-setup-plan.json --project-root "<UNITY_PROJECT_ROOT>" --yes
 8. Wire the selected client using templates/clients/ or the matching
@@ -557,7 +557,7 @@ In Unity: `Window > Package Manager > + > Add package from git URL...`
 > Tip
 >
 > ```text
-> https://github.com/FoxsterDev/xuunity-mcp.git?path=/packages/com.xuunity.light-mcp#v0.3.67
+> https://github.com/FoxsterDev/xuunity-mcp.git?path=/packages/com.xuunity.light-mcp#v0.3.68
 > ```
 
 Or add it directly to `Packages/manifest.json`:
@@ -565,7 +565,7 @@ Or add it directly to `Packages/manifest.json`:
 ```json
 {
   "dependencies": {
-    "com.xuunity.light-mcp": "https://github.com/FoxsterDev/xuunity-mcp.git?path=/packages/com.xuunity.light-mcp#v0.3.67"
+    "com.xuunity.light-mcp": "https://github.com/FoxsterDev/xuunity-mcp.git?path=/packages/com.xuunity.light-mcp#v0.3.68"
   }
 }
 ```
@@ -592,8 +592,8 @@ delegates to the installed low-level `run.sh` or `run.cmd` launcher.
 
 This refresh is source-relative, not an update-to-latest service. If
 `.source_root` still points at an older checkout, the old helper can consider
-itself current. Before executing an existing helper for a v0.3.67 setup, compare
-its installed version and `.source_root` with the approved v0.3.67 source and
+itself current. Before executing an existing helper for a v0.3.68 setup, compare
+its installed version and `.source_root` with the approved v0.3.68 source and
 refresh it from that source when they differ.
 
 ### 2. Install The Host MCP Helper
@@ -931,6 +931,57 @@ asserting raw per-step `payload_json`, `hook_name`, or parity-fixture fields.
 When full scenario output is requested, duplicated `run_start.steps` are omitted
 by default; pass `includeStepPayloads=true` / `--include-step-payloads` only
 when the launch-time step copy itself is under test.
+
+### Greenfield scene and prefab authoring
+
+Keep the division of responsibility explicit: the MCP supplies guarded Unity
+execution, ordering, and evidence; project-local code owns product-specific
+scene/prefab authoring. Start by calling `unity_scenario_capabilities` to get
+the complete step schema. Scenarios can now compose `ui_click`, `ui_exists`,
+and `ui_get_text`, and `unity_scenario_validate` accepts either an inline
+`scenario` object or a project-relative `scenarioFile`.
+
+Use `xuunity_project_hook_scaffold` to generate the activation bundle. It is a
+preview-only call unless `approve=true`; existing files additionally require
+`overwrite=true`. The essential project-side shape is:
+
+```csharp
+using XUUnity.LightMcp.Editor.ScenarioHooks;
+
+public sealed class BuildLobbyHook : IXUUnityLightMcpScenarioHook
+{
+    public string HookName => "game.authoring";
+
+    public XUUnityLightMcpScenarioHookResult Execute(string payloadJson)
+    {
+        // Call the project's normal authoring API here, then measure its result.
+        return new XUUnityLightMcpScenarioHookResult
+        {
+            success = true,
+            outcome = "lobby_authored"
+        };
+    }
+}
+```
+
+Register that hook in the project-owned `project_actions.yaml`:
+
+```yaml
+game.authoring.build_lobby:
+  hookName: game.authoring
+  payload: {}
+  mutates: [scene, prefabs]
+  evidence: [outcome, mutation_delta]
+  validationModes: [project_action_contract]
+```
+
+For a mutating hook, serialize measured proof with
+`XUUnityLightMcpMutationDelta.Create(unit, target, beforeCount, afterCount,
+addedCount, removedCount, changedCount)`. Do not treat a successful hook call
+without that delta as acceptance evidence. Validate the generated scenario,
+run the non-mutating activation path first, then invoke the mutation with its
+explicit approval.
+
 `unity_status_summary` also defaults to a compact polling summary; use
 `includeFullPayload=true` when you need nested discovery, transport,
 state-group, timing, or artifact details.

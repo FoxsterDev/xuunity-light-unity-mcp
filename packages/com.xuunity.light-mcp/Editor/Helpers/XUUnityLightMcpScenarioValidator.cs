@@ -262,6 +262,14 @@ namespace XUUnity.LightMcp.Editor.Helpers
                             stepId, index);
                     }
                     break;
+                case XUUnityLightMcpUiRead.ExistsStepKind:
+                case XUUnityLightMcpUiRead.GetTextStepKind:
+                    if (XUUnityLightMcpUiSelectorMatcher.IsEmpty(step.selector))
+                    {
+                        AddIssue(payload, "error", "ui_selector_invalid",
+                            $"{kind} requires a selector with at least one constraint.", stepId, index);
+                    }
+                    break;
                 case "project_defined_hook":
                     if (string.IsNullOrWhiteSpace(step.hookName))
                     {

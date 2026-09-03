@@ -79,6 +79,8 @@ namespace XUUnity.LightMcp.Editor.Operations
                 playmode_loop_liveness = playmodeLiveness,
                 playmode_liveness_warning = livenessWarning,
                 playmode_liveness_remediation = XUUnityLightMcpPlayModeLivenessTracker.ResolveRemediation(livenessWarning),
+                console_error_count_total = XUUnityLightMcpConsoleBuffer.ErrorCount,
+                console_error_counter_session_id = XUUnityLightMcpConsoleBuffer.CounterSessionId,
                 last_pump_utc = XUUnityLightMcpBridgeRuntimeState.LastPumpUtc,
                 last_processed_request_id = XUUnityLightMcpBridgeRuntimeState.LastProcessedRequestId,
                 pending_request_count = visiblePendingRequestCount,

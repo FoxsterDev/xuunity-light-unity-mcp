@@ -82,6 +82,14 @@ namespace XUUnity.LightMcp.Editor.Helpers
                 : "transform_only";
             result.Target.capture_width = Screen.width;
             result.Target.capture_height = Screen.height;
+            result.Target.screen_width = Screen.width;
+            result.Target.screen_height = Screen.height;
+            result.Target.render_target_available = XUUnityLightMcpGameViewUtility.TryGetExistingRenderTargetSize(
+                out result.Target.render_width,
+                out result.Target.render_height);
+            result.Target.render_target_differs_from_screen = result.Target.render_target_available
+                && (result.Target.render_width != result.Target.screen_width
+                    || result.Target.render_height != result.Target.screen_height);
             result.Target.requested_scene_name = (effective.SceneName ?? "").Trim();
 
             var scope = ResolveSceneScope(result, effective);

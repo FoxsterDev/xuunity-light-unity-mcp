@@ -56,6 +56,15 @@ namespace XUUnity.LightMcp.Tests.EditModeUgui
             Assert.That(
                 payload.warnings.Exists(item => item.code == "ui_component_details_unavailable"),
                 Is.False);
+            Assert.That(payload.screen_width, Is.EqualTo(payload.target.screen_width));
+            Assert.That(payload.screen_height, Is.EqualTo(payload.target.screen_height));
+            Assert.That(payload.render_width, Is.EqualTo(payload.target.render_width));
+            Assert.That(payload.render_height, Is.EqualTo(payload.target.render_height));
+            Assert.That(payload.render_target_available, Is.EqualTo(payload.target.render_target_available));
+            Assert.That(payload.render_target_differs_from_screen,
+                Is.EqualTo(payload.target.render_target_differs_from_screen));
+            Assert.That(payload.playmode_loop_liveness, Is.EqualTo("not_playing"));
+            Assert.That(payload.result_trust_class, Is.EqualTo("editor_truth_confirmed"));
         }
 
         [Test]
@@ -110,6 +119,9 @@ namespace XUUnity.LightMcp.Tests.EditModeUgui
             Assert.That(payload.success, Is.True, string.Join("; ", payload.errors.ConvertAll(item => item.code)));
             Assert.That(payload.has_text, Is.True);
             Assert.That(payload.text, Is.EqualTo("Daily Gift"));
+            Assert.That(payload.screen_width, Is.EqualTo(payload.target.screen_width));
+            Assert.That(payload.render_width, Is.EqualTo(payload.target.render_width));
+            Assert.That(payload.playmode_loop_liveness, Is.EqualTo("not_playing"));
         }
 
         [Test]

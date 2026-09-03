@@ -1,7 +1,7 @@
 # XUUnity Light Unity MCP Smoke Tests
 
 Date: `2026-07-15`
-Status: `current source after v0.3.67`
+Status: `current source after v0.3.68`
 
 This file defines the public reusable smoke-test contract for the lightweight
 Unity MCP lane.
@@ -252,6 +252,7 @@ Optional project-local additions:
 
 - `game_view_configure`
 - `game_view_screenshot`
+- `ui_click`, `ui_exists`, and `ui_get_text`
 - `project_defined_hook`
 - `console_tail` (defaults to path-backed `editor_log`; use explicit
   `source=console` only for in-memory Console-buffer checks)
@@ -271,6 +272,20 @@ can report itself visible while its rendered bounds are `0x0` below a layout
 breakpoint; an unpinned capture can therefore show the wrong screen while a
 visibility-only assertion appears plausible. If a capture is surprising,
 measure the target with `unity_ui_query` or `unity_ui_get_bounds` before rerunning.
+When Play Mode is expected, immediately before every UI interaction or
+screenshot assertion require the point-of-use payload (or its persisted
+scenario step) to report `playmode_loop_liveness=advancing`. A prior
+`unity_playmode_state` sample is useful context but does not prove the later
+frame advanced. Treat
+`result_trust_class=playmode_throttled` or `playmode_liveness_unproven` as a
+non-decision-ready observation and follow `playmode_liveness_remediation`.
+
+For screenshot/layout acceptance, assert `render_target_available=true` and
+use `render_width`/`render_height` as the captured-frame dimensions. When
+`render_target_differs_from_screen=true`, retain `screen_width`/`screen_height`
+only as separate editor/runtime layout evidence; never label the Screen values
+as the screenshot resolution. UI read payloads expose the same pair so bounds
+and captured pixels can be compared without guessing.
 
 For `project_defined_hook_poll_until`, `passWhen` and `failWhen` remain the
 terminal predicates. When `continueWhen` is omitted, an unmatched successful
@@ -419,6 +434,11 @@ assets or catalogs. Raw `project_action` scenario envelopes promote a reported
 delta through the hook summary, but catalog-aware missing-proof verdicts remain
 a follow-up outside the typed invoke tool.
 
+Project hooks should construct this payload with the package-owned
+`XUUnityLightMcpMutationDelta.Create(...)` helper. The helper owns the schema
+version, rejects empty unit/target values, rejects negative counts, and enforces
+the count invariant before the hook can serialize misleading proof.
+
 ### 4d. Synchronous Rule-Assertion Hooks As A Validation Lane
 
 When gameplay rules change, prefer a project hook that drives the game's own
@@ -442,6 +462,10 @@ Pass criteria:
 - both payloads report the same final value
 - for the common single-test happy path, the final value should normally be
   `edit`
+- both completed and timed-out test envelopes report
+  `console_error_count_since_request_start` plus its trust class; if a runtime
+  timeout has positive console pressure, inspect the request-scoped console
+  errors before increasing the timeout
 
 Precondition: any observation made while Play Mode is running is evidence only
 if `playmode_loop_liveness` is `advancing` (section 24); a play-mode
@@ -982,6 +1006,12 @@ Pass criteria:
   remediation `focus_the_unity_editor_or_set_interaction_mode_to_no_throttling`
 - refocusing the editor returns `playmode_loop_liveness` to `advancing`
 - `unity_status_summary` surfaces the same fields while playing
+- `unity_ui_query`, `unity_ui_exists`, `unity_ui_get_text`, `unity_ui_click`,
+  `unity_game_view_screenshot`, and persisted scenario-step results carry a
+  fresh point-of-use liveness sample and `result_trust_class`
+- a UI or screenshot call made while throttled reports
+  `result_trust_class=playmode_throttled` and the focus/no-throttling remedy;
+  it must not inherit a prior advancing verdict
 - exiting Play Mode returns `playmode_loop_liveness` to `not_playing`
 - immediately after a domain reload or a play-state change, a single sample may
   report `unknown`; `unknown` is not `advancing` and must not be read as

@@ -371,6 +371,10 @@ def build_compact_final_status_projection(final_status: dict[str, Any]) -> dict[
             "filter_summary",
             "recommended_recovery_command",
             "lifecycle_churn_observed",
+            "console_error_count_since_request_start",
+            "console_error_count_trust_class",
+            "console_error_pressure_detected",
+            "console_error_pressure_warning",
             *TEST_PLAYMODE_ACCOUNTING_FIELDS,
         ):
             if key in final_status:
@@ -850,6 +854,47 @@ def _derive_timeout_classification(test_result: dict[str, Any] | None) -> str:
     return "timeout_before_test_start"
 
 
+def _test_console_pressure_summary(
+    source_payload: dict[str, Any] | None,
+    active_state: dict[str, Any] | None,
+) -> dict[str, Any]:
+    source = source_payload or {}
+    current = active_state or {}
+    if "console_error_count_since_request_start" in source:
+        count = max(0, int(source.get("console_error_count_since_request_start") or 0))
+        trust_class = str(source.get("console_error_count_trust_class") or "unity_reported")
+    else:
+        baseline_session = str(source.get("console_error_counter_session_id_at_request_start") or "")
+        current_session = str(current.get("console_error_counter_session_id") or "")
+        if baseline_session and current_session:
+            current_total = max(0, int(current.get("console_error_count_total") or 0))
+            if baseline_session == current_session:
+                baseline = max(0, int(source.get("console_error_count_at_request_start") or 0))
+                count = max(0, current_total - baseline)
+                trust_class = "complete_since_request_start"
+            else:
+                count = current_total
+                trust_class = "lower_bound_after_domain_reload"
+        elif str(current.get("active_test_console_error_count_trust_class") or "") not in {"", "unavailable"}:
+            count = max(0, int(current.get("active_test_console_error_count_since_request_start") or 0))
+            trust_class = str(current.get("active_test_console_error_count_trust_class") or "bridge_heartbeat")
+        else:
+            count = 0
+            trust_class = "unavailable"
+
+    return {
+        "console_error_count_since_request_start": count,
+        "console_error_count_trust_class": trust_class,
+        "console_error_pressure_detected": count > 0,
+        "console_error_pressure_warning": (
+            "Console errors or exceptions were emitted after this test request started; inspect the anchored "
+            "console before increasing the timeout."
+            if count > 0
+            else ""
+        ),
+    }
+
+
 def build_test_verdict_summary(
     *,
     project_root: Path,
@@ -988,6 +1033,10 @@ def build_test_verdict_summary(
         else str((source_payload or {}).get("recommended_recovery_command") or "")
     )
 
+    console_pressure = _test_console_pressure_summary(source_payload, active_state)
+    if test_verdict == "runtime_timeout" and bool(console_pressure["console_error_pressure_detected"]):
+        recommended_next_action = "inspect_console_errors_since_request_start"
+
     summary = {
         "result_payload_available": source_payload is not None,
         "result_payload_source": source,
@@ -1019,6 +1068,7 @@ def build_test_verdict_summary(
         "recommended_next_action": recommended_next_action,
         "recommended_recovery_command": recommended_recovery_command,
         "result_trust_class": trust_class,
+        **console_pressure,
     }
     summary.update(_test_playmode_accounting_summary(source_payload, source=source))
     post_lifecycle_heartbeat_age = heartbeat_age_seconds(active_state or {})

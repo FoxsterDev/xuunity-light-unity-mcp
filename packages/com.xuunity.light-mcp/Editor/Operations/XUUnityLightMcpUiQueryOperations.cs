@@ -29,6 +29,7 @@ namespace XUUnity.LightMcp.Editor.Operations
                 selector = args.selector,
                 component_detail_backends = XUUnityLightMcpUiComponentReaderRegistry.BackendIds()
             };
+            XUUnityLightMcpPlayModeStateOperation.PopulateLivenessEvidence(payload);
 
             if (RequiresSelector && XUUnityLightMcpUiSelectorMatcher.IsEmpty(args.selector))
             {
@@ -54,6 +55,7 @@ namespace XUUnity.LightMcp.Editor.Operations
             });
 
             payload.target = result.Target;
+            CopyEditorTruth(payload, payload.target);
             payload.scanned_node_count = result.Nodes.Count;
             payload.warnings = result.Warnings;
             payload.errors.AddRange(result.Errors);
@@ -123,6 +125,17 @@ namespace XUUnity.LightMcp.Editor.Operations
             }
 
             return Respond(request, payload);
+        }
+
+        static void CopyEditorTruth(XUUnityLightMcpUiQueryPayload payload, XUUnityLightMcpUiTargetInfo target)
+        {
+            XUUnityLightMcpPlayModeStateOperation.PopulateLivenessEvidence(payload);
+            payload.screen_width = target?.screen_width ?? 0;
+            payload.screen_height = target?.screen_height ?? 0;
+            payload.render_width = target?.render_width ?? 0;
+            payload.render_height = target?.render_height ?? 0;
+            payload.render_target_available = target != null && target.render_target_available;
+            payload.render_target_differs_from_screen = target != null && target.render_target_differs_from_screen;
         }
 
         protected virtual void Finalize(XUUnityLightMcpUiQueryArgs args, XUUnityLightMcpUiQueryPayload payload)

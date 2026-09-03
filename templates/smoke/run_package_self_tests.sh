@@ -372,6 +372,7 @@ run_editmode() {
     "$WRAPPER" request-editmode-tests \
     --project-root "$PROJECT_ROOT" \
     --assembly-name com.xuunity.light-mcp.Editor.Tests \
+    --assembly-name com.xuunity.light-mcp.Editor.Ugui.Tests \
     --category-name "$category" \
     --timeout-ms "$TIMEOUT_MS"
 }

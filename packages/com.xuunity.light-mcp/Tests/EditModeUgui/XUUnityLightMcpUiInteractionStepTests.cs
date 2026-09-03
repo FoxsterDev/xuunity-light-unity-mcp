@@ -70,6 +70,20 @@ namespace XUUnity.LightMcp.Tests.EditModeUgui
             Assert.That(Codes(payload), Is.Empty, string.Join(",", Codes(payload)));
         }
 
+        [TestCase(XUUnityLightMcpUiRead.ExistsStepKind)]
+        [TestCase(XUUnityLightMcpUiRead.GetTextStepKind)]
+        public void Validator_AcceptsUiReadStepsWithSelectors(string kind)
+        {
+            var payload = Validate(new XUUnityLightMcpScenarioStepDefinition
+            {
+                stepId = "read",
+                kind = kind,
+                selector = new XUUnityLightMcpUiSelectorArgs { name = "Label" }
+            });
+
+            Assert.That(Codes(payload), Is.Empty, string.Join(",", Codes(payload)));
+        }
+
         [Test]
         public void Step_RefusesToDeliverWithoutApproval()
         {
@@ -171,6 +185,68 @@ namespace XUUnity.LightMcp.Tests.EditModeUgui
             Assert.That(payload.ui_interaction.search_truncation_reason, Is.EqualTo("max_nodes_reached"));
             Assert.That(payload.ui_interaction.search_target.searched_scenes, Is.Not.Empty);
             Assert.That(_clickCount, Is.Zero);
+        }
+
+        [Test]
+        public void UiExistsStep_AssertsPresenceAndCarriesSearchAndLivenessEvidence()
+        {
+            var result = Run(new XUUnityLightMcpScenarioStepDefinition
+            {
+                stepId = "label-exists",
+                kind = XUUnityLightMcpUiRead.ExistsStepKind,
+                expectedExists = true,
+                selector = new XUUnityLightMcpUiSelectorArgs { name = "Label" }
+            });
+
+            Assert.That(result.status, Is.EqualTo("passed"), result.error_message);
+            Assert.That(result.playmode_state, Is.EqualTo("edit"));
+            Assert.That(result.playmode_loop_liveness, Is.EqualTo("not_playing"));
+            Assert.That(result.result_trust_class, Is.EqualTo("editor_truth_confirmed"));
+            var payload = JsonUtility.FromJson<XUUnityLightMcpUiReadStepPayload>(result.payload_json);
+            Assert.That(payload.operation, Is.EqualTo("unity.ui.exists"));
+            Assert.That(payload.met_expectations, Is.True);
+            Assert.That(payload.query.exists, Is.True);
+            Assert.That(payload.query.match_count, Is.EqualTo(1));
+            Assert.That(payload.query.playmode_loop_liveness, Is.EqualTo("not_playing"));
+        }
+
+        [Test]
+        public void UiExistsStep_ConfirmsAbsenceOnlyAfterACompleteSearch()
+        {
+            var result = Run(new XUUnityLightMcpScenarioStepDefinition
+            {
+                stepId = "missing-is-absent",
+                kind = XUUnityLightMcpUiRead.ExistsStepKind,
+                expectedExists = false,
+                selector = new XUUnityLightMcpUiSelectorArgs { name = "MissingLabel" }
+            });
+
+            Assert.That(result.status, Is.EqualTo("passed"), result.error_message);
+            Assert.That(result.outcome, Is.EqualTo("ui_absence_confirmed"));
+            var payload = JsonUtility.FromJson<XUUnityLightMcpUiReadStepPayload>(result.payload_json);
+            Assert.That(payload.query.exists, Is.False);
+            Assert.That(payload.query.truncated, Is.False);
+            Assert.That(payload.query.out_of_scope, Is.False);
+        }
+
+        [Test]
+        public void UiGetTextStep_CapturesAndAssertsSemanticText()
+        {
+            var result = Run(new XUUnityLightMcpScenarioStepDefinition
+            {
+                stepId = "read-label",
+                kind = XUUnityLightMcpUiRead.GetTextStepKind,
+                expectedText = "Close",
+                selector = new XUUnityLightMcpUiSelectorArgs { name = "Label" }
+            });
+
+            Assert.That(result.status, Is.EqualTo("passed"), result.error_message);
+            Assert.That(result.outcome, Is.EqualTo("ui_text_captured"));
+            var payload = JsonUtility.FromJson<XUUnityLightMcpUiReadStepPayload>(result.payload_json);
+            Assert.That(payload.operation, Is.EqualTo("unity.ui.get_text"));
+            Assert.That(payload.expected_text, Is.EqualTo("Close"));
+            Assert.That(payload.query.has_text, Is.True);
+            Assert.That(payload.query.text, Is.EqualTo("Close"));
         }
 
         static XUUnityLightMcpScenarioStepDefinition NewStep()

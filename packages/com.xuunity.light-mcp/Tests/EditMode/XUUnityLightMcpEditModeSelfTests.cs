@@ -741,7 +741,7 @@ namespace XUUnity.LightMcp.Tests.EditMode
         }
 
         [Test]
-        public void PlayModeLivenessTracker_WarnsOnlyWhenThrottledAndNamesFocusTheft()
+        public void PlayModeLivenessTracker_WarnsWhenThrottledOrUnprovenAndNamesFocusTheft()
         {
             Assert.That(
                 XUUnityLightMcpPlayModeLivenessTracker.ResolveWarning("throttled", false),
@@ -751,11 +751,75 @@ namespace XUUnity.LightMcp.Tests.EditMode
                 Is.EqualTo("playmode_throttled"));
             Assert.That(XUUnityLightMcpPlayModeLivenessTracker.ResolveWarning("advancing", false), Is.Empty);
             Assert.That(XUUnityLightMcpPlayModeLivenessTracker.ResolveWarning("not_playing", false), Is.Empty);
-            Assert.That(XUUnityLightMcpPlayModeLivenessTracker.ResolveWarning("unknown", false), Is.Empty);
+            Assert.That(
+                XUUnityLightMcpPlayModeLivenessTracker.ResolveWarning("unknown", false),
+                Is.EqualTo(XUUnityLightMcpPlayModeLivenessTracker.UnprovenUnfocusedWarning));
+            Assert.That(XUUnityLightMcpPlayModeLivenessTracker.ResolveWarning("unknown", true), Is.Empty);
             Assert.That(
                 XUUnityLightMcpPlayModeLivenessTracker.ResolveRemediation("playmode_throttled_editor_unfocused"),
                 Is.EqualTo("focus_the_unity_editor_or_set_interaction_mode_to_no_throttling"));
             Assert.That(XUUnityLightMcpPlayModeLivenessTracker.ResolveRemediation(""), Is.Empty);
+        }
+
+        [Test]
+        public void MutationDeltaBuilder_ProducesTheSharedEvidenceContract()
+        {
+            var delta = XUUnityLightMcpMutationDelta.Create("prefab", "Assets/UI/Menu.prefab", 3, 4, 2, 1, 1);
+
+            Assert.That(delta.schema_version, Is.EqualTo(XUUnityLightMcpMutationDelta.SchemaVersion));
+            Assert.That(delta.unit, Is.EqualTo("prefab"));
+            Assert.That(delta.target, Is.EqualTo("Assets/UI/Menu.prefab"));
+            Assert.That(delta.before_count, Is.EqualTo(3));
+            Assert.That(delta.after_count, Is.EqualTo(4));
+            Assert.That(delta.added_count, Is.EqualTo(2));
+            Assert.That(delta.removed_count, Is.EqualTo(1));
+            Assert.That(delta.changed_count, Is.EqualTo(1));
+        }
+
+        [Test]
+        public void MutationDeltaBuilder_RejectsAnInconsistentCountInvariant()
+        {
+            Assert.Throws<ArgumentException>(() =>
+                XUUnityLightMcpMutationDelta.Create("prefab", "Assets/UI/Menu.prefab", 3, 5, 1, 0, 0));
+        }
+
+        [Test]
+        public void TestConsolePressure_CountsErrorsAfterTheRequestBaseline()
+        {
+            var state = new XUUnityLightMcpPersistedTestRunState
+            {
+                console_error_count_at_request_start = 17,
+                console_error_counter_session_id_at_request_start = "current-domain"
+            };
+
+            XUUnityLightMcpTestRunState.ResolveConsoleErrorPressure(
+                state,
+                19,
+                "current-domain",
+                out var count,
+                out var trustClass);
+            Assert.That(count, Is.EqualTo(2));
+            Assert.That(trustClass, Is.EqualTo("complete_since_request_start"));
+        }
+
+        [Test]
+        public void TestConsolePressure_DowngradesToALowerBoundAfterDomainReload()
+        {
+            var state = new XUUnityLightMcpPersistedTestRunState
+            {
+                console_error_count_at_request_start = 999,
+                console_error_counter_session_id_at_request_start = "previous-domain"
+            };
+
+            XUUnityLightMcpTestRunState.ResolveConsoleErrorPressure(
+                state,
+                4,
+                "current-domain",
+                out var count,
+                out var trustClass);
+
+            Assert.That(count, Is.EqualTo(4));
+            Assert.That(trustClass, Is.EqualTo("lower_bound_after_domain_reload"));
         }
 
         [Test]

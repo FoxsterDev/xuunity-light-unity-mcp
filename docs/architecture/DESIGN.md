@@ -122,6 +122,37 @@ Current design intent:
 
 This keeps the lightweight lane closer to Rider-style behavior without depending on Rider runtime internals.
 
+## Editor-Truth Evidence Boundary
+
+Editor residency, player-loop progress, and Game View pixels are different
+facts. A fresh bridge heartbeat proves that the editor process is responsive;
+it does not prove that Play Mode advanced a frame. Likewise, `Screen.width` and
+`Screen.height` describe Unity's current Screen surface, but the Editor Game
+View can capture a render texture with different dimensions.
+
+Operations that make a decision from a running frame therefore sample
+liveness at the point of use. UI tree/query/click results, Game View
+screenshots, and persisted scenario-step results carry the play-mode state,
+frame sample, editor focus, `playmode_loop_liveness`, warning/remediation, and
+`result_trust_class`. `throttled` maps to `playmode_throttled`; a playing state
+without sufficient samples maps to `playmode_liveness_unproven`. Neither is
+equivalent to runtime proof even when transport and editor health are green.
+
+Screenshot and UI-read evidence also separates:
+
+- `render_width` / `render_height`: dimensions of the existing Game View render
+  target (and therefore the captured screenshot when capture succeeds)
+- `screen_width` / `screen_height`: the contemporaneous Unity `Screen.*`
+  values used by runtime layout APIs
+- `render_target_available`: whether an existing render texture could be
+  inspected without opening or mutating a Game View
+- `render_target_differs_from_screen`: an explicit mismatch verdict
+
+An unavailable render target is reported as unavailable, not inferred from
+`Screen.*`. A mismatch is valid evidence about two surfaces, not an invitation
+to relabel one as the other. This boundary prevents a semantically correct UI
+tree from being combined with pixels rendered at an unstated resolution.
+
 ## Portfolio Reporting Contract
 
 Per-project request artifacts remain the source of truth. For test runs, the

@@ -1471,6 +1471,17 @@ class CompactEnvelopeTests(unittest.TestCase):
             "file_path": "/tmp/shot.png",
             "width": 1170,
             "height": 2532,
+            "render_width": 1170,
+            "render_height": 2532,
+            "screen_width": 1080,
+            "screen_height": 1920,
+            "render_target_available": True,
+            "render_target_differs_from_screen": True,
+            "playmode_state": "playing",
+            "playmode_loop_liveness": "throttled",
+            "playmode_liveness_warning": "playmode_throttled_editor_unfocused",
+            "playmode_liveness_remediation": "focus_the_unity_editor_or_set_interaction_mode_to_no_throttling",
+            "result_trust_class": "playmode_throttled",
             "image_included": False,
             "image_requested": True,
             "image_omitted_reason": "payload_budget",
@@ -1484,6 +1495,11 @@ class CompactEnvelopeTests(unittest.TestCase):
 
         self.assertEqual("/tmp/shot.png", compact["file_path"])
         self.assertEqual("payload_budget", compact["image_omitted_reason"])
+        self.assertEqual(1170, compact["render_width"])
+        self.assertEqual(1080, compact["screen_width"])
+        self.assertTrue(compact["render_target_differs_from_screen"])
+        self.assertEqual("throttled", compact["playmode_loop_liveness"])
+        self.assertEqual("playmode_throttled", compact["result_trust_class"])
         self.assertNotIn("some_bulky_diagnostic_block", compact)
         self.assertNotIn("image_base64", compact)
 
@@ -1523,6 +1539,7 @@ class CompactEnvelopeTests(unittest.TestCase):
                 "playmode_loop_liveness": "throttled",
                 "playmode_liveness_warning": "playmode_throttled_editor_unfocused",
                 "playmode_liveness_remediation": "focus_the_unity_editor_or_set_interaction_mode_to_no_throttling",
+                "result_trust_class": "playmode_throttled",
                 "noise": list(range(100)),
             },
             "unity.playmode.state",
@@ -1534,6 +1551,7 @@ class CompactEnvelopeTests(unittest.TestCase):
         self.assertEqual(4321, compact["playmode_frame_count"])
         self.assertFalse(compact["editor_application_focused"])
         self.assertIn("playmode_liveness_remediation", compact)
+        self.assertEqual("playmode_throttled", compact["result_trust_class"])
         self.assertNotIn("noise", compact)
 
     def test_the_compactable_tools_expose_the_opt_out(self) -> None:

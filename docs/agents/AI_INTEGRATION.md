@@ -184,7 +184,7 @@ For production consumers, use the current Git UPM release path:
 ```json
 {
   "dependencies": {
-    "com.xuunity.light-mcp": "https://github.com/FoxsterDev/xuunity-mcp.git?path=/packages/com.xuunity.light-mcp#v0.3.67"
+    "com.xuunity.light-mcp": "https://github.com/FoxsterDev/xuunity-mcp.git?path=/packages/com.xuunity.light-mcp#v0.3.68"
   }
 }
 ```
@@ -265,6 +265,53 @@ assertions.
 If readiness checks succeed but a later compile or test run fails, treat that as
 a Unity project or runtime failure unless the error explicitly points back to
 bridge readiness, package import, or unsupported capability.
+
+## Greenfield Authoring Contract
+
+The reusable MCP verifies and sequences work; a project-local hook authors
+product-specific scenes and prefabs through the project's normal APIs. Discover
+the current scenario grammar with `unity_scenario_capabilities`. A scenario can
+use `ui_click`, `ui_exists`, and `ui_get_text`, and its validation input may be
+an inline object or a JSON `scenarioFile` under `projectRoot`.
+
+Generate the starting bundle with `xuunity_project_hook_scaffold`. The call is
+read-only by default; writing requires `approve=true`, and replacing existing
+files also requires `overwrite=true`. The minimal hook contract is:
+
+```csharp
+using XUUnity.LightMcp.Editor.ScenarioHooks;
+
+public sealed class BuildLobbyHook : IXUUnityLightMcpScenarioHook
+{
+    public string HookName => "game.authoring";
+
+    public XUUnityLightMcpScenarioHookResult Execute(string payloadJson)
+    {
+        // Invoke and measure the project's real authoring path.
+        return new XUUnityLightMcpScenarioHookResult
+        {
+            success = true,
+            outcome = "lobby_authored"
+        };
+    }
+}
+```
+
+The project-owned catalog maps an action to that hook:
+
+```yaml
+game.authoring.build_lobby:
+  hookName: game.authoring
+  payload: {}
+  mutates: [scene, prefabs]
+  evidence: [outcome, mutation_delta]
+  validationModes: [project_action_contract]
+```
+
+Mutating hooks should return measured evidence created with
+`XUUnityLightMcpMutationDelta.Create(...)`. A successful hook without a valid
+non-destructive delta remains non-decision-ready. Compile and validate the
+generated activation scenario before granting mutation approval.
 
 ## Agent Behavior Rules
 
@@ -406,16 +453,23 @@ Only after that:
 
 10. `unity.playmode.state`
 11. `unity.playmode.set`
-12. `unity.game_view.screenshot`
-13. `unity.scenario.validate`
-14. `unity.scenario.run`
-15. `unity.scenario.result`
+12. `unity.game_view.configure` and `unity.game_view.screenshot`
+13. `unity.ui.query` / `unity.ui.exists` / `unity.ui.get_text`, then guarded
+    `unity.ui.click` only when interaction is required
+14. `unity_scenario_capabilities`
+15. `unity.scenario.validate`
+16. `unity.scenario.run`
+17. `unity.scenario.result`
 
 Scenario extension route:
 
-16. list/invoke catalog-backed project actions when the consumer publishes
+18. list/invoke catalog-backed project actions when the consumer publishes
     `project_actions.yaml`
-17. implement `IXUUnityLightMcpScenarioHook` in a project `Assets/Editor/` assembly when the consumer needs project-local automation not worth promoting into the shared package yet
+19. preview or write the activation bundle with
+    `xuunity_project_hook_scaffold`, then implement
+    `IXUUnityLightMcpScenarioHook` in a project `Assets/Editor/` assembly when
+    the consumer needs project-local automation not worth promoting into the
+    shared package yet
 
 ## Where To Extend
 

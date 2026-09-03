@@ -8,6 +8,8 @@ namespace XUUnity.LightMcp.Editor.Core
         public const string SchemaVersion = "xuunity.ui.read.v1";
         public const string InteractionSchemaVersion = "xuunity.ui-interaction.v1";
         public const string InteractionStepKind = "ui_click";
+        public const string ExistsStepKind = "ui_exists";
+        public const string GetTextStepKind = "ui_get_text";
 
         public const string ProofSemanticTree = "semantic_ui_tree";
         public const string ProofSemanticPartial = "semantic_ui_partial";
@@ -80,6 +82,12 @@ namespace XUUnity.LightMcp.Editor.Core
         public string prefab_path = "";
         public int capture_width;
         public int capture_height;
+        public int screen_width;
+        public int screen_height;
+        public int render_width;
+        public int render_height;
+        public bool render_target_available;
+        public bool render_target_differs_from_screen;
         public string bounds_origin = "bottom_left";
     }
 
@@ -170,7 +178,7 @@ namespace XUUnity.LightMcp.Editor.Core
     }
 
     [Serializable]
-    internal sealed class XUUnityLightMcpUiTreePayload
+    internal sealed class XUUnityLightMcpUiTreePayload : XUUnityLightMcpPlayModeLivenessEvidence
     {
         public string schema_version = XUUnityLightMcpUiRead.SchemaVersion;
         public string backend_id = "xuunity.light_unity_mcp";
@@ -179,6 +187,12 @@ namespace XUUnity.LightMcp.Editor.Core
         public bool success;
         public string proof_class = XUUnityLightMcpUiRead.ProofError;
         public string generated_at_utc = "";
+        public int screen_width;
+        public int screen_height;
+        public int render_width;
+        public int render_height;
+        public bool render_target_available;
+        public bool render_target_differs_from_screen;
         public XUUnityLightMcpUiTargetInfo target = new();
         public List<string> component_detail_backends = new();
         public List<XUUnityLightMcpUiNode> nodes = new();
@@ -195,7 +209,7 @@ namespace XUUnity.LightMcp.Editor.Core
     }
 
     [Serializable]
-    internal sealed class XUUnityLightMcpUiQueryPayload
+    internal sealed class XUUnityLightMcpUiQueryPayload : XUUnityLightMcpPlayModeLivenessEvidence
     {
         public string schema_version = XUUnityLightMcpUiRead.SchemaVersion;
         public string backend_id = "xuunity.light_unity_mcp";
@@ -204,6 +218,12 @@ namespace XUUnity.LightMcp.Editor.Core
         public bool success;
         public string proof_class = XUUnityLightMcpUiRead.ProofError;
         public string generated_at_utc = "";
+        public int screen_width;
+        public int screen_height;
+        public int render_width;
+        public int render_height;
+        public bool render_target_available;
+        public bool render_target_differs_from_screen;
         public XUUnityLightMcpUiTargetInfo target = new();
         public List<string> component_detail_backends = new();
         public XUUnityLightMcpUiSelectorArgs selector = new();
@@ -278,7 +298,7 @@ namespace XUUnity.LightMcp.Editor.Core
     }
 
     [Serializable]
-    internal sealed class XUUnityLightMcpUiClickPayload
+    internal sealed class XUUnityLightMcpUiClickPayload : XUUnityLightMcpPlayModeLivenessEvidence
     {
         public string schema_version = XUUnityLightMcpUiRead.SchemaVersion;
         public string backend_id = "xuunity.light_unity_mcp";
@@ -308,7 +328,12 @@ namespace XUUnity.LightMcp.Editor.Core
         public bool effective;
         public bool no_observable_effect;
         public bool state_changed;
-        public string playmode_state = "";
+        public int screen_width;
+        public int screen_height;
+        public int render_width;
+        public int render_height;
+        public bool render_target_available;
+        public bool render_target_differs_from_screen;
         public XUUnityLightMcpUiClickSnapshotRef before_snapshot = new();
         public XUUnityLightMcpUiClickSnapshotRef after_snapshot = new();
         public List<XUUnityLightMcpUiDiagnostic> warnings = new();
@@ -340,6 +365,11 @@ namespace XUUnity.LightMcp.Editor.Core
         public bool search_truncated;
         public string search_truncation_reason = "";
         public string playmode_state = "";
+        public string playmode_loop_liveness = "";
+        public string playmode_liveness_warning = "";
+        public string playmode_liveness_remediation = "";
+        public bool editor_application_focused;
+        public string result_trust_class = "";
         public string refusal_code = "";
     }
 
@@ -351,6 +381,16 @@ namespace XUUnity.LightMcp.Editor.Core
         public bool met_expectations;
         public string click_status = "";
         public string click_error = "";
+    }
+
+    [Serializable]
+    internal sealed class XUUnityLightMcpUiReadStepPayload
+    {
+        public string operation = "";
+        public bool met_expectations;
+        public bool expected_exists = true;
+        public string expected_text = "";
+        public XUUnityLightMcpUiQueryPayload query = new();
     }
 
     [Serializable]

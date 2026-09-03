@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Linq;
+using XUUnity.LightMcp.Editor.Bridge;
 using XUUnity.LightMcp.Editor.Core;
 
 namespace XUUnity.LightMcp.Editor.Helpers
@@ -21,6 +22,7 @@ namespace XUUnity.LightMcp.Editor.Helpers
             lock (Gate)
             {
                 XUUnityLightMcpFileIpcPaths.EnsureDirectories();
+                XUUnityLightMcpConsoleBuffer.EnsureStarted();
                 var state = new XUUnityLightMcpPersistedTestRunState
                 {
                     request_id = requestId ?? "",
@@ -37,6 +39,8 @@ namespace XUUnity.LightMcp.Editor.Helpers
                     filter_summary = filterSummary ?? "",
                     filter_requested = filterRequested,
                     response_handoff_state = "pending",
+                    console_error_count_at_request_start = XUUnityLightMcpConsoleBuffer.ErrorCount,
+                    console_error_counter_session_id_at_request_start = XUUnityLightMcpConsoleBuffer.CounterSessionId,
                     failures = new System.Collections.Generic.List<XUUnityLightMcpTestFailure>(),
                 };
 
@@ -310,6 +314,7 @@ namespace XUUnity.LightMcp.Editor.Helpers
 
         static XUUnityLightMcpTestsPayload BuildPayloadLocked(XUUnityLightMcpPersistedTestRunState state)
         {
+            ResolveConsoleErrorPressure(state, out var consoleErrorCount, out var consoleTrustClass);
             return new XUUnityLightMcpTestsPayload
             {
                 project_root = state.project_root ?? XUUnityLightMcpFileIpcPaths.ProjectRootPath,
@@ -347,8 +352,55 @@ namespace XUUnity.LightMcp.Editor.Helpers
                 last_started_test = state.last_started_test ?? "",
                 last_finished_test = state.last_finished_test ?? "",
                 lifecycle_churn_observed = state.lifecycle_churn_observed,
+                console_error_count_since_request_start = consoleErrorCount,
+                console_error_count_trust_class = consoleTrustClass,
+                console_error_pressure_detected = consoleErrorCount > 0,
                 validation_evidence = "unity_mcp"
             };
+        }
+
+        internal static void ResolveConsoleErrorPressure(
+            XUUnityLightMcpPersistedTestRunState state,
+            out long count,
+            out string trustClass)
+        {
+            ResolveConsoleErrorPressure(
+                state,
+                XUUnityLightMcpConsoleBuffer.ErrorCount,
+                XUUnityLightMcpConsoleBuffer.CounterSessionId,
+                out count,
+                out trustClass);
+        }
+
+        internal static void ResolveConsoleErrorPressure(
+            XUUnityLightMcpPersistedTestRunState state,
+            long currentCount,
+            string currentSessionId,
+            out long count,
+            out string trustClass)
+        {
+            count = 0;
+            trustClass = "unavailable";
+            if (state == null)
+            {
+                return;
+            }
+
+            currentCount = Math.Max(0L, currentCount);
+            if (string.Equals(
+                    state.console_error_counter_session_id_at_request_start,
+                    currentSessionId,
+                    StringComparison.Ordinal))
+            {
+                count = Math.Max(0L, currentCount - state.console_error_count_at_request_start);
+                trustClass = "complete_since_request_start";
+                return;
+            }
+
+            count = currentCount;
+            trustClass = string.IsNullOrEmpty(state.console_error_counter_session_id_at_request_start)
+                ? "lower_bound_without_request_baseline"
+                : "lower_bound_after_domain_reload";
         }
 
         static string ResolveStatus(XUUnityLightMcpPersistedTestRunState state)

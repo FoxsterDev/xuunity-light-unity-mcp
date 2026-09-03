@@ -25,6 +25,7 @@ from server_bridge_journal import summarize_request_attribution
 from server_specs import (
     OPERATION_LIFECYCLE_POLICIES,
     SCENARIO_DEFINITION_SCHEMA,
+    SCENARIO_STEP_KINDS,
     SCENARIO_TERMINAL_STATUSES,
     STARTUP_POLICIES,
     TOOLS,
@@ -302,7 +303,7 @@ from server_batch_recovery import (
 PROTOCOL_VERSION = "2025-06-18"
 SERVER_INFO = {
     "name": "xuunity-mcp",
-    "version": "0.3.67",
+    "version": "0.3.68",
 }
 
 # === Block A: Registry & Discovery Helpers ===
@@ -1500,10 +1501,60 @@ def call_unity_scenario_run_and_wait_tool(arguments: dict[str, Any]) -> dict[str
 def normalize_scenario_tool_arguments(arguments: dict[str, Any]) -> dict[str, Any]:
     project_root_value = arguments.get("projectRoot")
     scenario = arguments.get("scenario")
-    if not isinstance(project_root_value, str) or not project_root_value.strip() or not isinstance(scenario, dict):
+    scenario_file = arguments.get("scenarioFile")
+    has_scenario_file = isinstance(scenario_file, str) and bool(scenario_file.strip())
+    if scenario is not None and has_scenario_file:
+        raise ToolInvocationError(
+            "scenario_input_ambiguous",
+            "Supply exactly one of scenario or scenarioFile.",
+        )
+    if not isinstance(project_root_value, str) or not project_root_value.strip():
         return arguments
 
     project_root = ensure_project_root(project_root_value)
+    if has_scenario_file:
+        scenario_path = Path(str(scenario_file).strip()).expanduser()
+        if not scenario_path.is_absolute():
+            scenario_path = project_root / scenario_path
+        scenario_path = scenario_path.resolve()
+        try:
+            scenario_path.relative_to(project_root.resolve())
+        except ValueError as exc:
+            raise ToolInvocationError(
+                "scenario_file_outside_project",
+                "scenarioFile must stay under projectRoot.",
+                {"scenario_file": str(scenario_path), "project_root": str(project_root)},
+            ) from exc
+        if not scenario_path.is_file():
+            raise ToolInvocationError(
+                "scenario_file_not_found",
+                "scenarioFile does not exist or is not a file.",
+                {"scenario_file": str(scenario_path)},
+            )
+        if scenario_path.stat().st_size > 1024 * 1024:
+            raise ToolInvocationError(
+                "scenario_file_too_large",
+                "scenarioFile must be 1 MiB or smaller.",
+                {"scenario_file": str(scenario_path)},
+            )
+        try:
+            scenario = read_json(scenario_path)
+        except (OSError, ValueError) as exc:
+            raise ToolInvocationError(
+                "scenario_file_invalid",
+                f"Failed to read scenarioFile: {exc}",
+                {"scenario_file": str(scenario_path)},
+            ) from exc
+        if not isinstance(scenario, dict):
+            raise ToolInvocationError(
+                "scenario_file_invalid",
+                "scenarioFile must contain one JSON object.",
+                {"scenario_file": str(scenario_path)},
+            )
+
+    if not isinstance(scenario, dict):
+        return arguments
+
     normalized = dict(arguments)
     normalized["projectRoot"] = str(project_root)
     normalized["scenario"] = normalize_project_action_scenario(
@@ -1511,6 +1562,26 @@ def normalize_scenario_tool_arguments(arguments: dict[str, Any]) -> dict[str, An
         scenario=scenario,
     )
     return normalized
+
+
+def call_unity_scenario_capabilities_tool(arguments: dict[str, Any]) -> dict[str, Any]:
+    project_root_value = arguments.get("projectRoot")
+    if not isinstance(project_root_value, str) or not project_root_value.strip():
+        raise JsonRpcError(-32602, "projectRoot is required.")
+    try:
+        project_root = ensure_project_root(project_root_value)
+    except ToolInvocationError as exc:
+        return mcp_json_result(build_tool_error_payload(exc), is_error=True)
+    return mcp_json_result(
+        {
+            "schema_version": "xuunity.scenario-capabilities.v1",
+            "project_root": str(project_root),
+            "step_kinds": list(SCENARIO_STEP_KINDS),
+            "scenario_schema": SCENARIO_DEFINITION_SCHEMA,
+            "validate_input_modes": ["scenario", "scenarioFile"],
+            "scenario_file_scope": "project_root",
+        }
+    )
 
 
 def call_unity_scenario_validate_tool(arguments: dict[str, Any]) -> dict[str, Any]:
@@ -2117,10 +2188,15 @@ def call_xuunity_setup_plan_tool(arguments: dict[str, Any]) -> dict[str, Any]:
     if package_source not in {"git", "file"}:
         raise JsonRpcError(-32602, "packageSource must be one of: git, file.")
 
+    project_roots = _optional_string_list_arg(arguments, "projectRoots")
+    project_root = _optional_string_arg(arguments, "projectRoot")
+    if project_root and project_root not in project_roots:
+        project_roots.insert(0, project_root)
+
     try:
         payload = build_setup_plan(
             workspace_root=_optional_string_arg(arguments, "workspaceRoot") or None,
-            project_roots=_optional_string_list_arg(arguments, "projectRoots"),
+            project_roots=project_roots,
             recursive=_optional_bool_arg(arguments, "recursive", False),
             include_test_framework=include_test_framework,
             package_source=package_source,
@@ -2270,6 +2346,74 @@ def call_unity_project_action_invoke_tool(arguments: dict[str, Any]) -> dict[str
     except ToolInvocationError as exc:
         return mcp_json_result(build_tool_error_payload(exc), is_error=True)
     return mcp_json_result(result, is_error=is_error)
+
+
+def call_xuunity_project_hook_scaffold_tool(arguments: dict[str, Any]) -> dict[str, Any]:
+    project_root_value = arguments.get("projectRoot")
+    if not isinstance(project_root_value, str) or not project_root_value.strip():
+        raise JsonRpcError(-32602, "projectRoot is required.")
+
+    hook_name = _optional_string_arg(arguments, "hookName")
+    action_id = _optional_string_arg(arguments, "actionId")
+    class_name = _optional_string_arg(arguments, "className")
+    if not hook_name or not action_id or not class_name:
+        raise JsonRpcError(-32602, "hookName, actionId, and className are required.")
+
+    approve = _optional_bool_arg(arguments, "approve", False)
+    overwrite = _optional_bool_arg(arguments, "overwrite", False)
+    try:
+        project_root = ensure_project_root(project_root_value)
+        output_dir_value = _optional_string_arg(arguments, "outputDir")
+        output_dir = Path(output_dir_value) if output_dir_value else Path("Assets") / "Editor" / "XUUnityLightMcpHooks" / class_name
+        if not output_dir.is_absolute():
+            output_dir = project_root / output_dir
+        output_dir = output_dir.resolve()
+        try:
+            output_dir.relative_to(project_root.resolve())
+        except ValueError as exc:
+            raise ToolInvocationError(
+                "project_hook_scaffold_path_outside_project",
+                "outputDir must stay under projectRoot.",
+                {"output_dir": str(output_dir), "project_root": str(project_root)},
+            ) from exc
+
+        preview = scaffold_project_hook(
+            hook_name=hook_name,
+            action_id=action_id,
+            class_name=class_name,
+            namespace=_optional_string_arg(arguments, "namespace") or "Example.Project.Editor",
+            output_dir=output_dir,
+            mutating=_optional_bool_arg(arguments, "mutating", False),
+            ui_fixture=_optional_bool_arg(arguments, "uiFixture", False),
+            write_files=False,
+        )
+        existing_paths = [
+            str(output_dir / str(item.get("path") or ""))
+            for item in preview.get("files", [])
+            if (output_dir / str(item.get("path") or "")).exists()
+        ]
+        if approve and existing_paths and not overwrite:
+            raise ToolInvocationError(
+                "project_hook_scaffold_overwrite_approval_required",
+                "Scaffold files already exist; set overwrite=true with approve=true to replace them.",
+                {"existing_paths": existing_paths},
+            )
+        result = preview if not approve else scaffold_project_hook(
+            hook_name=hook_name,
+            action_id=action_id,
+            class_name=class_name,
+            namespace=_optional_string_arg(arguments, "namespace") or "Example.Project.Editor",
+            output_dir=output_dir,
+            mutating=_optional_bool_arg(arguments, "mutating", False),
+            ui_fixture=_optional_bool_arg(arguments, "uiFixture", False),
+            write_files=True,
+        )
+        result["approved"] = approve
+        result["overwrite"] = overwrite
+        result["existing_paths_before_write"] = existing_paths
+    except ToolInvocationError as exc:
+        return mcp_json_result(build_tool_error_payload(exc), is_error=True)
+    return mcp_json_result(result)
 
 
 def call_unity_sdk_generated_diff_guard_tool(arguments: dict[str, Any]) -> dict[str, Any]:
@@ -2670,6 +2814,7 @@ def call_tool(name: str, arguments: dict[str, Any] | None) -> dict[str, Any]:
             "unity_scenario_result_latest": call_unity_scenario_result_latest_tool,
             "unity_maintenance_prune": call_unity_maintenance_prune_tool,
             "unity_compile_build_config_matrix": call_unity_compile_build_config_matrix_tool,
+            "unity_scenario_capabilities": call_unity_scenario_capabilities_tool,
             "unity_scenario_validate": call_unity_scenario_validate_tool,
             "unity_scenario_run": call_unity_scenario_run_tool,
             "unity_scenario_run_and_wait": call_unity_scenario_run_and_wait_tool,
@@ -2678,6 +2823,7 @@ def call_tool(name: str, arguments: dict[str, Any] | None) -> dict[str, Any]:
             "unity_loading_timing": call_unity_loading_timing_tool,
             "unity_project_action_list": call_unity_project_action_list_tool,
             "unity_project_action_invoke": call_unity_project_action_invoke_tool,
+            "xuunity_project_hook_scaffold": call_xuunity_project_hook_scaffold_tool,
             "unity_sdk_generated_diff_guard": call_unity_sdk_generated_diff_guard_tool,
             "unity_sdk_package_restore": call_unity_sdk_package_restore_tool,
             "unity_artifact_register": call_unity_artifact_register_tool,
@@ -3019,6 +3165,7 @@ wrap_globals_with_proxies(globals(), [
     "batch_lane_preflight_blocker",
     "call_unity_compile_build_config_matrix_tool",
     "call_unity_scenario_run_and_wait_tool",
+    "call_unity_scenario_capabilities_tool",
     "call_unity_scenario_validate_tool",
     "call_unity_console_grep_tool",
     "call_unity_console_tail_tool",
@@ -3033,6 +3180,7 @@ wrap_globals_with_proxies(globals(), [
     "call_unity_license_capabilities_tool",
     "call_unity_project_action_list_tool",
     "call_unity_project_action_invoke_tool",
+    "call_xuunity_project_hook_scaffold_tool",
     "call_unity_artifact_register_tool",
     "call_unity_artifact_write_report_tool",
     "call_unity_ui_reference_register_tool",

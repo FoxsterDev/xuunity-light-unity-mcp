@@ -10,7 +10,7 @@ from typing import Any
 
 SERVER_INFO = {
     "name": "xuunity-mcp",
-    "version": "0.3.67",
+    "version": "0.3.68",
 }
 PROTOCOL_VERSION = "2025-06-18"
 
@@ -104,6 +104,7 @@ from server_batch_orchestrator import (
     batch_lane_preflight_blocker,
     call_unity_compile_build_config_matrix_tool,
     call_unity_scenario_run_and_wait_tool,
+    call_unity_scenario_capabilities_tool,
     call_unity_scenario_validate_tool,
     call_unity_console_grep_tool,
     call_unity_loading_timing_tool,
@@ -118,6 +119,7 @@ from server_batch_orchestrator import (
     call_unity_license_capabilities_tool,
     call_unity_project_action_list_tool,
     call_unity_project_action_invoke_tool,
+    call_xuunity_project_hook_scaffold_tool,
     call_unity_sdk_package_restore_tool,
     call_unity_artifact_register_tool,
     call_unity_artifact_write_report_tool,
