@@ -4,6 +4,12 @@
 
 ### Why
 
+- Two capabilities were broken in a way that reported success. `unity.game_view.configure`
+  could not set a resolution on any iOS-targeted project, while the capability probe kept
+  advertising Game View support because it only ever tested the one build group that always
+  resolves. `unity.ui.click` reported `delivered: true` for clicks that the target's own
+  handler then discarded, because the pointer event carried no raycast for the handler to
+  recognise. In both cases the honest answer was available and the tool did not give it.
 - A release landed as one commit carrying the product change, its tests, the whole
   documentation sweep and the version bump. That left the changelog as the only
   description of the change, made a revert of the release also revert the product, and let
@@ -51,16 +57,15 @@
 
 ### Added
 
-- `scripts/testing/check_release_commit_shape.py` now enforces the `## Unreleased` half of
-  its own contract: a work commit that changes shipped package or host source must add at
-  least one line under `## Unreleased`, so the release that promotes that section cannot
-  omit it. Test-, docs-, script- and skill-only commits are exempt. The rule was added after
-  a behaviour fix shipped with no changelog entry and the gate reported ok.
-- `scripts/testing/check_release_commit_shape.py` enforces the two-commit release shape.
-  A `release:` commit may carry only what the version sweep writes, the changelog section
-  it opens, and the release bookkeeping docs; every other commit must bump no version and
-  must describe itself under `## Unreleased`. The check names the exact files to move, runs
-  over a single commit or a range, and derives its allowlist from
+- `scripts/testing/check_release_commit_shape.py` enforces the two-commit release shape,
+  so a release can be reverted without reverting the product change it published. A
+  `release:` commit may carry only what the version sweep writes, the changelog section it
+  opens, and the release bookkeeping docs. Every other commit must bump no version and must
+  describe itself under `## Unreleased`; a commit that changes shipped package or host
+  source and adds no line there is refused as `undescribed_work_commit`, so the release
+  that promotes that section cannot silently omit a shipped change. Test-, docs-, script-
+  and skill-only commits are exempt. The check names the exact files to move, runs over a
+  single commit or a range, and derives its allowlist from
   `scripts/tools/sync_release_version.py` so a newly swept document does not need a second
   edit to stay releasable. The release checklist and publishing checklist now require it.
 
