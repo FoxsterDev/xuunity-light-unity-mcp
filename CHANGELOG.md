@@ -2,6 +2,90 @@
 
 ## Unreleased
 
+## 0.3.69
+
+Release tag: `v0.3.69`
+
+Current Git UPM install URL:
+
+```text
+https://github.com/FoxsterDev/xuunity-mcp.git?path=/packages/com.xuunity.light-mcp#v0.3.69
+```
+
+### Why
+
+- A green player-script compile did not prove that Unity had reloaded the
+  editor assembly used by a project action. An action could therefore execute
+  older editor code and make a correct change look ineffective.
+- A catalog action that read assets edited outside Unity could run before the
+  AssetDatabase imported those edits and return a confident result for stale
+  data.
+- Forcing operating-system focus is disruptive and does not itself prove that
+  the player loop advances. The bridge needed a background-execution aid that
+  kept measured liveness as the source of truth.
+
+### Changed
+
+- Released `v0.3.69` package metadata, server metadata, package manifests, and Git UPM examples.
+
+### Added
+
+- Every catalog-backed `project_action` now runs a persisted
+  `project_action_currency` preflight before its project hook. The gate compares
+  the loaded editor-domain timestamp with the newest `.cs`, `.asmdef`,
+  `.asmref`, or `.rsp` input under `Assets` and blocks stale or unknown state.
+- Catalog entries can declare `requiresFreshAssets: true`. Their invocation
+  automatically performs and settles a forced AssetDatabase refresh, then
+  rechecks editor-domain currency before calling the hook.
+- `unity_project_action_currency`, `unity_project_action_invoke`, and
+  `unity_status_summary` expose the same currency evidence and recovery action.
+- While the bridge is active it keeps runtime
+  `Application.runInBackground=true`. It does not change `PlayerSettings` or
+  operating-system focus, reports `native_autofocus_enabled=false`, and keeps
+  measured player-loop liveness authoritative.
+
+### Benefits
+
+- Project actions no longer silently use editor code or asset state older than
+  the files on disk. A stale invocation stops before the hook and names the
+  refresh needed to continue.
+- Asset-reading hooks declare freshness once in `project_actions.yaml` instead
+  of relying on every caller to remember a manual refresh.
+- Unfocused Unity automation can continue when Unity supports background
+  execution without stealing the developer's active window.
+
+### Validation
+
+- Full host discovery passed `1009` tests with `14` expected platform skips,
+  including live localhost TCP framing coverage.
+- Clean current-source package compilation and probe v4 passed on Unity
+  `2022.3.62f3`, `2022.3.67f2`, `6000.0.58f2`, `6000.1.13f1`,
+  `6000.2.14f1`, `6000.3.23f1`, `6000.4.4f1`, `6000.5.10f1`, and
+  `6000.6.0b3`. Every probe reported `game_view_reflection_v1` supported and
+  exposed both Game View operations plus `unity.project_action.currency`.
+- Package EditMode tests passed `102/102` with post-settle compilation green on
+  Unity `2022.3.67f2` and `6000.6.0b3`.
+- An unfocused Unity `6000.6.0b3` editor completed the full interactive
+  enter-Play-Mode/exit-Play-Mode scenario with
+  `application_run_in_background=true` and
+  `native_autofocus_enabled=false`.
+
+### Known limitations
+
+- A first cold-project interactive run on Unity `6000.3`, `6000.5`, or
+  `6000.6` can still encounter the existing transient Import Worker ownership
+  guard during refresh. The warmed Unity `6000.6` rerun and its package tests
+  passed; the guard fails closed and does not indicate a C# or Game View API
+  incompatibility.
+- `Application.runInBackground` is an execution preference, not proof that the
+  player loop advanced. Callers must continue to use the reported liveness
+  fields for Play Mode conclusions.
+- Live Unity validation was performed on macOS. Native Windows and Linux host
+  sessions were not rerun for this release.
+- The hosted `Unity Package CI` workflow remains explicitly waived because its
+  runners do not have Unity license credentials. Local clean-project Unity
+  validation is the package evidence for this release.
+
 ## 0.3.68
 
 Release tag: `v0.3.68`

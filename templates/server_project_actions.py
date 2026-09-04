@@ -11,6 +11,8 @@ from server_core import ToolInvocationError
 
 PROJECT_ACTION_SCHEMA_VERSION = "xuunity.project-actions.v1"
 PROJECT_HOOK_SCAFFOLD_VERSION = "xuunity.project-hook-scaffold.v1"
+PROJECT_ACTION_CURRENCY_SUFFIX = "__currency"
+PROJECT_ACTION_REFRESH_SUFFIX = "__refresh_assets"
 
 
 def parse_project_actions_yaml(text: str) -> dict[str, Any]:
@@ -313,6 +315,7 @@ def normalize_project_action_record(
         "evidence": _as_string_list(action_raw.get("evidence")),
         "validation_modes": _as_string_list(action_raw.get("validationModes")),
         "host_scoped": bool(action_raw.get("hostScoped")),
+        "requires_fresh_assets": bool(action_raw.get("requiresFreshAssets")),
         "required_payload_fields": _as_string_list(action_raw.get("requiredPayloadFields")),
         "settle_policy": str(action_raw.get("settlePolicy") or "").strip(),
     }
@@ -455,15 +458,14 @@ def build_project_action_scenario(
         effective_scenario_name = f"project_action_{sanitize_action_name(action_id)}_{int(time.time())}"
 
     settle_policy = str(action_record.get("settle_policy") or "")
-    steps: list[dict[str, Any]] = [
-        {
-            "stepId": "invoke_project_action",
-            "kind": "project_defined_hook",
-            "hookName": hook_name,
-            "hookPayloadJson": json.dumps(hook_payload, ensure_ascii=True, separators=(",", ":")),
-            "mutationSettlePolicy": settle_policy,
-        }
-    ]
+    hook_step = {
+        "stepId": "invoke_project_action",
+        "kind": "project_defined_hook",
+        "hookName": hook_name,
+        "hookPayloadJson": json.dumps(hook_payload, ensure_ascii=True, separators=(",", ":")),
+        "mutationSettlePolicy": settle_policy,
+    }
+    steps = expand_project_action_hook_step(action_record=action_record, hook_step=hook_step)
     if settle_policy == "apply_then_gate":
         compile_target = str(action_payload.get("build_target") or action_payload.get("target") or "").strip()
         if not compile_target:
@@ -609,7 +611,7 @@ def normalize_project_action_steps(
         if not isinstance(step, dict) or _scenario_step_operation(step) != "project_action":
             normalized_steps.append(step)
             continue
-        normalized_steps.append(
+        normalized_steps.extend(
             normalize_project_action_step(
                 catalog=catalog,
                 step=step,
@@ -626,7 +628,7 @@ def normalize_project_action_step(
     step: dict[str, Any],
     step_group: str,
     step_index: int,
-) -> dict[str, Any]:
+) -> list[dict[str, Any]]:
     step_id = str(step.get("stepId") or f"{step_group}_{step_index}").strip()
     action_id = str(step.get("actionId") or step.get("projectAction") or "").strip()
     action_record = resolve_project_action(catalog, action_id)
@@ -704,13 +706,69 @@ def normalize_project_action_step(
     normalized = {
         key: value
         for key, value in step.items()
-        if key not in {"kind", "actionId", "projectAction", "payload", "payloadJson", "allowMutating"}
+        if key not in {
+            "kind",
+            "actionId",
+            "projectAction",
+            "payload",
+            "payloadJson",
+            "allowMutating",
+            "requiresFreshAssets",
+            "assetRefreshStepId",
+        }
     }
+    normalized["stepId"] = step_id
     normalized["kind"] = "project_defined_hook"
     normalized["hookName"] = hook_name
     normalized["hookPayloadJson"] = json.dumps(hook_payload, ensure_ascii=True, separators=(",", ":"))
     normalized["mutationSettlePolicy"] = str(action_record.get("settle_policy") or "")
-    return normalized
+    return expand_project_action_hook_step(action_record=action_record, hook_step=normalized)
+
+
+def expand_project_action_hook_step(
+    *,
+    action_record: dict[str, Any],
+    hook_step: dict[str, Any],
+) -> list[dict[str, Any]]:
+    action_id = str(action_record.get("action_id") or "").strip()
+    step_id = str(hook_step.get("stepId") or "invoke_project_action").strip()
+    currency_step_id = f"{step_id}{PROJECT_ACTION_CURRENCY_SUFFIX}"
+    requires_fresh_assets = bool(action_record.get("requires_fresh_assets"))
+    refresh_step_id = f"{step_id}{PROJECT_ACTION_REFRESH_SUFFIX}" if requires_fresh_assets else ""
+
+    conditional_fields = {
+        key: hook_step[key]
+        for key in ("dependsOn", "runIfStepPassed")
+        if key in hook_step
+    }
+    currency_step: dict[str, Any] = {
+        "stepId": currency_step_id,
+        "kind": "project_action_currency",
+        "actionId": action_id,
+        "requiresFreshAssets": requires_fresh_assets,
+    }
+    steps: list[dict[str, Any]] = []
+    if requires_fresh_assets:
+        refresh_step = {
+            "stepId": refresh_step_id,
+            "kind": "project_refresh",
+            "forceAssetRefresh": True,
+            "resolvePackages": False,
+            "rerunHealthProbe": False,
+            "timeoutSeconds": 180.0,
+            **conditional_fields,
+        }
+        steps.append(refresh_step)
+        currency_step["assetRefreshStepId"] = refresh_step_id
+        currency_step["dependsOn"] = [refresh_step_id]
+    else:
+        currency_step.update(conditional_fields)
+
+    executable_hook = dict(hook_step)
+    executable_hook["dependsOn"] = [currency_step_id]
+    executable_hook.pop("runIfStepPassed", None)
+    steps.extend([currency_step, executable_hook])
+    return steps
 
 
 def _stamp_compact_project_action_payload(payload: dict[str, Any]) -> dict[str, Any]:
@@ -718,6 +776,23 @@ def _stamp_compact_project_action_payload(payload: dict[str, Any]) -> dict[str, 
     payload["full_payload_available"] = True
     payload["full_payload_tool_arguments"] = {"includeFullPayload": True}
     return payload
+
+
+def _attach_project_action_currency_fields(payload: dict[str, Any], currency: dict[str, Any]) -> None:
+    if not currency:
+        return
+    currency_known = bool(currency.get("editor_domain_currency_known"))
+    payload["editor_domain_current"] = bool(currency.get("editor_domain_current")) if currency_known else None
+    payload["editor_domain_currency"] = str(currency.get("editor_domain_currency") or "unknown")
+    payload["editor_domain_currency_known"] = currency_known
+    payload["editor_domain_loaded_utc"] = str(currency.get("editor_domain_loaded_utc") or "")
+    payload["newest_editor_input_path"] = str(currency.get("newest_editor_input_path") or "")
+    payload["newest_editor_input_write_utc"] = str(currency.get("newest_editor_input_write_utc") or "")
+    payload["asset_refresh_performed"] = bool(currency.get("asset_refresh_performed"))
+    payload["safe_to_invoke"] = bool(currency.get("safe_to_invoke"))
+    payload["application_run_in_background"] = bool(currency.get("application_run_in_background"))
+    payload["native_autofocus_enabled"] = bool(currency.get("native_autofocus_enabled"))
+    payload["currency_recommended_next_action"] = str(currency.get("recommended_next_action") or "")
 
 
 def build_project_action_invocation_payload(
@@ -731,8 +806,10 @@ def build_project_action_invocation_payload(
     run_payload: dict[str, Any],
     scenario_summary: dict[str, Any] | None,
     wait_for_result: bool,
+    project_action_currency_preflight: dict[str, Any] | None = None,
     include_full_payload: bool = True,
 ) -> dict[str, Any]:
+    initial_currency = dict(project_action_currency_preflight or {})
     payload = {
         "action": "unity_project_action_invoke",
         "project_root": str(project_root),
@@ -742,6 +819,7 @@ def build_project_action_invocation_payload(
         "resolved_by_alias": str(action_record.get("resolved_by_alias") or ""),
         "hook_name": str(action_record.get("hook_name") or ""),
         "mutation": bool(action_record.get("mutation")),
+        "requires_fresh_assets": bool(action_record.get("requires_fresh_assets")),
         "mutates": list(action_record.get("mutates") or []),
         "evidence": list(action_record.get("evidence") or []),
         "validation_modes": list(action_record.get("validation_modes") or []),
@@ -751,6 +829,9 @@ def build_project_action_invocation_payload(
         "run_id": str(run_payload.get("run_id") or ""),
         "run_start_status": str(run_payload.get("status") or ""),
     }
+    if initial_currency:
+        payload["project_action_currency_preflight"] = initial_currency
+        _attach_project_action_currency_fields(payload, initial_currency)
     if include_full_payload:
         payload["scenario"] = scenario
     if not wait_for_result:
@@ -776,6 +857,14 @@ def build_project_action_invocation_payload(
     payload["result_path"] = str(summary.get("result_path") or "")
     if "project_defined_hook_summary" in summary:
         payload["project_defined_hook_summary"] = summary["project_defined_hook_summary"]
+    currency_summary = summary.get("project_action_currency")
+    if isinstance(currency_summary, dict):
+        payload["project_action_currency"] = currency_summary
+        final_currency = currency_summary.get("final")
+    else:
+        final_currency = None
+    effective_currency = dict(final_currency) if isinstance(final_currency, dict) else initial_currency
+    _attach_project_action_currency_fields(payload, effective_currency)
     if bool(action_record.get("mutation")):
         payload.update(build_project_action_mutation_verdict(summary))
     if include_full_payload:

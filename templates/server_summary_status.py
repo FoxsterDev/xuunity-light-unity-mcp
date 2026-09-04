@@ -127,6 +127,24 @@ def build_status_summary(
         "transport_listener_state": transport_listener_state,
         "bridge_generation": int(effective.get("bridge_generation") or 0),
         "bridge_session_id": str(effective.get("bridge_session_id") or ""),
+        "editor_domain_loaded_utc": str(effective.get("editor_domain_loaded_utc") or ""),
+        "editor_domain_current": (
+            bool(effective.get("editor_domain_current"))
+            if bool(effective.get("editor_domain_currency_known"))
+            else None
+        ),
+        "editor_domain_currency_known": bool(effective.get("editor_domain_currency_known")),
+        "editor_domain_currency": str(effective.get("editor_domain_currency") or "unknown"),
+        "newest_editor_input_path": str(effective.get("newest_editor_input_path") or ""),
+        "newest_editor_input_write_utc": str(effective.get("newest_editor_input_write_utc") or ""),
+        "editor_input_count": int(effective.get("editor_input_count") or 0),
+        "editor_domain_currency_reason": str(effective.get("editor_domain_currency_reason") or ""),
+        "editor_domain_currency_basis": str(effective.get("editor_domain_currency_basis") or ""),
+        "editor_domain_currency_recommended_next_action": str(
+            effective.get("editor_domain_currency_recommended_next_action") or ""
+        ),
+        "application_run_in_background": bool(effective.get("application_run_in_background")),
+        "native_autofocus_enabled": bool(effective.get("native_autofocus_enabled")),
         "playmode_state": str(effective.get("playmode_state") or ""),
         "script_compilation_failed": bool(effective.get("script_compilation_failed")),
         "compiler_error_count": int(effective.get("compiler_error_count") or 0),

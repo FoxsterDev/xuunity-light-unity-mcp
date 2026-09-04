@@ -1,7 +1,7 @@
 # XUUnity Light Unity MCP Smoke Tests
 
 Date: `2026-07-15`
-Status: `current source after v0.3.68`
+Status: `current source after v0.3.69`
 
 This file defines the public reusable smoke-test contract for the lightweight
 Unity MCP lane.
@@ -397,6 +397,36 @@ Pass criteria:
 - a matching `failWhen` for `not_started` fails on the first poll;
 - a never-ready hook ends with `project_hook_poll_until_timeout` and preserves
   the latest payload.
+
+### 4b.1. Project-Action Currency Contract
+
+Exercise both catalog modes through `unity_project_action_invoke` or a raw
+scenario `project_action` step.
+
+For an ordinary action, normalization must produce
+`project_action_currency -> project_defined_hook`. The hook keeps the caller's
+step id and depends on the generated `__currency` step. If the newest `.cs`,
+`.asmdef`, `.asmref`, or `.rsp` under `Assets` is newer than
+`editor_domain_loaded_utc`, the currency step fails with
+`editor_domain_stale`; the hook is not invoked and the result recommends
+`run_unity_project_refresh_before_invoking`. An unavailable timestamp or failed
+scan is `unknown` and also fails closed.
+
+For an asset-reading catalog action marked `requiresFreshAssets: true`, the
+sequence must be
+`project_refresh -> project_action_currency -> project_defined_hook`. The
+generated refresh uses `forceAssetRefresh=true`, `resolvePackages=false`, and
+`rerunHealthProbe=false`, waits for the existing refresh/domain settle
+contract, and records `asset_refresh_performed=true` before the hook can run.
+Original dependencies stay on the refresh; each generated step depends on its
+predecessor.
+
+Also assert that `unity_status_summary` and
+`unity_project_action_currency` expose the same domain timestamp, currency
+classification, newest input, reason, and recovery. While the bridge is active,
+`application_run_in_background=true` and `native_autofocus_enabled=false` must
+be explicit. Neither field replaces the point-of-use
+`playmode_loop_liveness=advancing` requirement for Play Mode evidence.
 
 ### 4c. Mutating Project-Action Delta Contract
 

@@ -2,6 +2,11 @@
 
 Date: `2026-09-03`
 Server version under test: `v0.3.67` (project pin `com.xuunity.light-mcp#v0.3.67`).
+Implementation status: both P1 currency findings are released in
+`v0.3.69` through one shared `project_action_currency`
+preflight. P2 items remain open. Native autofocus was deliberately declined;
+the bridge enables runtime background execution and keeps measured player-loop
+liveness authoritative.
 Some findings below may already be addressed in `v0.3.68`; each is written against what `0.3.67` actually
 emitted in this session, so re-check before implementing.
 
@@ -148,3 +153,21 @@ is one call.
 worth making are not about reliability but about *currency* — telling the operator when what they are
 looking at is no longer what is on disk. Two small fields would have removed four wasted cycles and one
 confidently wrong conclusion from this session alone.
+
+## 11. Re-evaluation for v0.3.69
+
+- Every typed invocation and raw scenario `project_action` now expands through
+  a persisted currency step before its project hook. The preflight compares
+  `editor_domain_loaded_utc` with the newest `.cs`, `.asmdef`, `.asmref`, or
+  `.rsp` mtime under `Assets`; stale and unknown classifications fail closed
+  before the hook.
+- Catalog `requiresFreshAssets: true` prepends a forced AssetDatabase refresh
+  with package resolution and redundant health probing disabled. The scenario
+  waits for the existing refresh/domain-settle contract, then requires both a
+  current editor domain and a recorded successful refresh before invoking.
+- `unity_project_action_currency`, `unity_project_action_invoke`, and
+  `unity_status_summary` expose the compact currency evidence and recovery.
+- Runtime `Application.runInBackground=true` is re-applied on bootstrap,
+  heartbeat, and play-mode state changes. No `PlayerSettings` or OS focus is
+  mutated; payloads explicitly report `native_autofocus_enabled=false`, and
+  liveness remains the point-of-use trust signal.

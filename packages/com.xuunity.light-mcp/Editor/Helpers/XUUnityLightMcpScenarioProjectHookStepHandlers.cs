@@ -20,20 +20,12 @@ namespace XUUnity.LightMcp.Editor.Helpers
     {
         public static bool ProcessProjectActionStep(XUUnityLightMcpScenarioStepDefinition step, XUUnityLightMcpScenarioStepResult stepResult)
         {
-            if (!XUUnityLightMcpScenarioProjectActionNormalizer.TryBuildExecutableProjectActionStep(
-                    step,
-                    out var executableStep,
-                    out var errorCode,
-                    out var errorMessage))
-            {
-                stepResult.status = "failed";
-                stepResult.error_code = errorCode;
-                stepResult.error_message = errorMessage;
-                return true;
-            }
-
-            stepResult.hook_name = executableStep.hookName ?? "";
-            return ProcessProjectDefinedHookStep(executableStep, stepResult);
+            stepResult.status = "failed";
+            stepResult.failure_class = "precondition";
+            stepResult.error_code = "project_action_currency_preflight_missing";
+            stepResult.error_message = "project_action must be normalized through project_action_currency before scenario dispatch.";
+            stepResult.outcome = "project_action_blocked";
+            return true;
         }
 
         public static bool ProcessProjectDefinedHookStep(XUUnityLightMcpScenarioStepDefinition step, XUUnityLightMcpScenarioStepResult stepResult)

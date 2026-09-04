@@ -90,6 +90,7 @@ namespace XUUnity.LightMcp.Editor.Bridge
             _heartbeatIntervalSeconds = config.heartbeat_interval_ms / 1000.0d;
             _pumpIntervalSeconds = config.pump_interval_ms / 1000.0d;
 
+            XUUnityLightMcpBackgroundExecution.EnsureEnabled();
             XUUnityLightMcpBridgeRuntimeState.InitializeBridgeSession();
             XUUnityLightMcpBridgeTransportRuntime.Initialize(config);
             XUUnityLightMcpLifecycleMonitor.InitializeIfNeeded();
@@ -117,6 +118,7 @@ namespace XUUnity.LightMcp.Editor.Bridge
             {
                 try
                 {
+                    XUUnityLightMcpBackgroundExecution.EnsureEnabled();
                     XUUnityLightMcpPlayModeLivenessTracker.Sample();
                     XUUnityLightMcpBridgeStateWriter.WriteHeartbeat();
                 }

@@ -184,7 +184,7 @@ For production consumers, use the current Git UPM release path:
 ```json
 {
   "dependencies": {
-    "com.xuunity.light-mcp": "https://github.com/FoxsterDev/xuunity-mcp.git?path=/packages/com.xuunity.light-mcp#v0.3.68"
+    "com.xuunity.light-mcp": "https://github.com/FoxsterDev/xuunity-mcp.git?path=/packages/com.xuunity.light-mcp#v0.3.69"
   }
 }
 ```
@@ -302,6 +302,7 @@ The project-owned catalog maps an action to that hook:
 ```yaml
 game.authoring.build_lobby:
   hookName: game.authoring
+  requiresFreshAssets: true
   payload: {}
   mutates: [scene, prefabs]
   evidence: [outcome, mutation_delta]
@@ -321,6 +322,8 @@ An integrating agent should:
 - keep the bridge disabled unless the current task actually needs Unity-aware validation
 - prefer read and validation operations before mutation
 - prefer compile before EditMode tests when changed scripts are already in play
+- trust a project-action result only after `editor_domain_current=true`; use
+  `requiresFreshAssets: true` for hooks that read externally edited assets
 - prefer `unity_prefab_render` over Play Mode plus screenshots for prefab-only
   UI acceptance; it needs no boot flow and is immune to editor throttling
 - trust play-mode observations only while `playmode_loop_liveness` is
@@ -331,6 +334,8 @@ An integrating agent should:
 An integrating agent should not:
 
 - mutate `ProjectSettings` just to make the MCP work
+- steal OS focus or treat `Application.runInBackground` as proof that the
+  player loop advanced; require point-of-use liveness evidence
 - inject broad scripting defines
 - assume Game View reflection works on every Unity version
 - treat shell compile as equivalent to Unity validation

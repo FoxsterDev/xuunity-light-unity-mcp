@@ -45,6 +45,12 @@ It now has:
 - request-scoped console-error pressure on EditMode and PlayMode test verdicts
 - package-owned mutation-delta construction plus a guarded MCP project-hook
   scaffold path and scalar `xuunity_setup_plan.projectRoot` parity
+- one shared project-action currency preflight: editor-domain freshness is
+  checked before every hook, while catalog `requiresFreshAssets: true` actions
+  automatically run and settle a forced AssetDatabase refresh first
+- runtime `Application.runInBackground=true` while the bridge is active,
+  without `PlayerSettings` mutation or native OS autofocus; point-of-use
+  player-loop liveness remains authoritative
 
 The public `xuunity` protocol layer also now understands validation-lane
 selection.
@@ -544,6 +550,10 @@ structurally open, and what each open lane needs — not an overall percentage.
 Editing package sources under a `file:` dependency needs one explicit
 `unity_project_refresh` before the next test run picks them up; a test run alone
 can execute the previously compiled assemblies and report a stale verdict.
+Typed project actions now enforce this boundary themselves: stale editor-domain
+currency blocks the hook, and asset-reading actions marked
+`requiresFreshAssets: true` receive an automatic refresh before the shared
+currency gate.
 
 ## What Is Not Yet Proven
 

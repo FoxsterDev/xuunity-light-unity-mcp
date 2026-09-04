@@ -113,7 +113,8 @@ Current design intent:
   counts, and diagnostics from that state are unknown rather than green
 - fail fast when a launch command completes but no matching editor process appears for the target project
 - surface editor busy reasons explicitly
-- activate Unity before focus-sensitive interactive operations
+- open or reuse Unity before interactive operations, but do not steal native OS
+  focus as a default remediation
 - wait for editor idle before and after lifecycle-sensitive synchronous operations
 - distinguish request acceptance from settled editor completion
 - carry bridge session identity and generation in state
@@ -137,6 +138,11 @@ frame sample, editor focus, `playmode_loop_liveness`, warning/remediation, and
 `result_trust_class`. `throttled` maps to `playmode_throttled`; a playing state
 without sufficient samples maps to `playmode_liveness_unproven`. Neither is
 equivalent to runtime proof even when transport and editor health are green.
+
+While enabled, the bridge keeps runtime `Application.runInBackground=true`
+across domain/play-state churn without writing `PlayerSettings`. This reduces
+focus dependence but is not a liveness verdict; native autofocus stays disabled
+and point-of-use frame advancement remains authoritative.
 
 Screenshot and UI-read evidence also separates:
 

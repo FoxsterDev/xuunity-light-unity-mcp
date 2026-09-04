@@ -213,8 +213,8 @@
     ]
   },
   "mcp_tools_list": {
-    "sha256": "c533960a1f8ee46451e5aa52c82c6f54e060329d2788f116f1821dc38b715cb4",
-    "tool_count": 67,
+    "sha256": "55656fe2b7c69d91136819e3f2fca6c79f4a321685812177c3a398825a728df5",
+    "tool_count": 68,
     "tool_names": [
       "xuunity_setup_plan",
       "xuunity_setup_apply",
@@ -231,6 +231,7 @@
       "unity_request_final_status",
       "unity_project_refresh",
       "unity_project_action_list",
+      "unity_project_action_currency",
       "unity_project_action_invoke",
       "xuunity_project_hook_scaffold",
       "unity_artifact_register",

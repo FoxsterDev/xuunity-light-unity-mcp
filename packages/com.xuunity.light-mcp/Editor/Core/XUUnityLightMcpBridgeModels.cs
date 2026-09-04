@@ -18,7 +18,7 @@ namespace XUUnity.LightMcp.Editor.Core
         [Serializable]
         internal sealed class XUUnityLightMcpBridgeState
         {
-            public int bridge_version = 10;
+            public int bridge_version = 11;
             public string project_root = "";
             public int editor_pid;
             public string bridge_process_class = "";
@@ -32,6 +32,8 @@ namespace XUUnity.LightMcp.Editor.Core
             public string bridge_session_id = "";
             public int bridge_generation;
             public bool bridge_bootstrap_attached;
+            public string editor_domain_loaded_utc = "";
+            public bool application_run_in_background;
             public bool domain_reload_in_progress;
             public string domain_reload_started_utc = "";
             public bool asset_import_in_progress;
@@ -164,6 +166,18 @@ namespace XUUnity.LightMcp.Editor.Core
             public string bridge_session_id = "";
             public int bridge_generation;
             public bool bridge_bootstrap_attached;
+            public string editor_domain_loaded_utc = "";
+            public bool editor_domain_current;
+            public bool editor_domain_currency_known;
+            public string editor_domain_currency = "";
+            public string newest_editor_input_path = "";
+            public string newest_editor_input_write_utc = "";
+            public int editor_input_count;
+            public string editor_domain_currency_reason = "";
+            public string editor_domain_currency_basis = "";
+            public string editor_domain_currency_recommended_next_action = "";
+            public bool application_run_in_background;
+            public bool native_autofocus_enabled;
             public bool domain_reload_in_progress;
             public string domain_reload_started_utc = "";
             public bool asset_import_in_progress;
@@ -238,6 +252,7 @@ namespace XUUnity.LightMcp.Editor.Core
             public int bridge_generation;
             public string bridge_session_id = "";
             public string bootstrap_attached_at_utc = "";
+            public string editor_domain_loaded_utc = "";
         }
 
         [Serializable]

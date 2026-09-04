@@ -562,6 +562,7 @@ def hoist_editor_open_attribution(lifecycle: dict[str, Any]) -> dict[str, Any]:
 
 COMPACT_OPERATION_PAYLOADS = {
     "unity.project.refresh",
+    "unity.project_action.currency",
     "unity.compile.player_scripts",
     "unity.compile.matrix",
     "unity.tests.run_editmode",
@@ -889,6 +890,40 @@ def _compact_game_view_configure_payload(payload: dict[str, Any], operation: str
     return compact
 
 
+def _compact_project_action_currency_payload(payload: dict[str, Any], operation: str) -> dict[str, Any]:
+    compact = {
+        "payload_mode": "compact_operation",
+        "operation": operation,
+    }
+    _copy_if_present(
+        compact,
+        payload,
+        (
+            "project_root",
+            "action_id",
+            "catalog_path",
+            "requires_fresh_assets",
+            "asset_refresh_performed",
+            "asset_refresh_step_id",
+            "editor_domain_loaded_utc",
+            "editor_domain_current",
+            "editor_domain_currency_known",
+            "editor_domain_currency",
+            "newest_editor_input_path",
+            "newest_editor_input_write_utc",
+            "editor_input_count",
+            "currency_basis",
+            "safe_to_invoke",
+            "reason",
+            "recommended_next_action",
+            "application_run_in_background",
+            "native_autofocus_enabled",
+            "validation_evidence",
+        ),
+    )
+    return compact
+
+
 def compact_operation_payload(payload: dict[str, Any], operation: str) -> dict[str, Any]:
     if operation in {"unity.compile.player_scripts", "unity.compile.matrix"}:
         return _compact_compile_payload(payload, operation)
@@ -906,6 +941,8 @@ def compact_operation_payload(payload: dict[str, Any], operation: str) -> dict[s
         return _compact_scene_snapshot_payload(payload, operation)
     if operation == "unity.game_view.configure":
         return _compact_game_view_configure_payload(payload, operation)
+    if operation == "unity.project_action.currency":
+        return _compact_project_action_currency_payload(payload, operation)
     return payload
 
 

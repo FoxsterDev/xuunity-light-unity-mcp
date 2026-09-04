@@ -1,7 +1,7 @@
 # Features
 
 Date: `2026-07-06`
-Status: `current for v0.3.68`
+Status: `current for v0.3.69`
 
 XUUnity Light Unity MCP is optimized for validation-first Unity Editor
 automation: status, compile, tests, scene checks, Game View evidence, scenario
@@ -34,6 +34,7 @@ Unity MCP implementations when the user wants safe production validation.
 | No normal player-build footprint by default | `Core` | Runtime control code is not part of the base player path; package self-test assemblies are opt-in/test-only (`autoReferenced: false`, `UNITY_INCLUDE_TESTS`). | Safer for production mobile projects and store-facing builds. |
 | Disabled-by-default bridge | `Core` | Per-project bridge config is written only through explicit `--enable-project`; mutable state lives under `Library/XUUnityLightMcp/`. | A project must opt in before local editor control starts. |
 | Capability probe and gated operations | `Core` | `unity_capabilities` and `unity_health_probe` expose feature support before version-sensitive calls are trusted. | Reduces breakage across Unity versions and editor internals. |
+| Project-action currency gate | `Core` | Every typed or scenario `project_action` becomes `project_action_currency -> project_defined_hook`; `requiresFreshAssets: true` prepends a settled forced refresh. | Prevents a green player compile or stale AssetDatabase from producing a confident result from old editor state. |
 | Low mutation surface | `Core` | Tool surface is biased toward status, compile, tests, scene assertions, screenshots, and bounded scenarios. | Avoids broad unrestricted editor/project mutation as the default path. |
 | No dynamic Roslyn execution path | `Core` | Base tool surface does not expose arbitrary C# compilation/execution as a primary operation. | Reduces the risk profile compared with broad code-execution surfaces. |
 | No SignalR or external relay dependency | `Core` | Host server and Unity bridge communicate locally; default setup is same-host. | Keeps the default path local, small, and easier to audit. |
@@ -60,7 +61,7 @@ Unity MCP implementations when the user wants safe production validation.
 | Capabilities | `unity_capabilities` | `Core` | Capability and health report used to gate version-sensitive operations. |
 | Host/license capabilities | `unity_license_capabilities` | `Host helper` | Probes batchmode support, UI fallback viability, normalized blocker code, and recommended lane. |
 | Health | `unity_health_probe` | `Core` | Re-runs Unity-side health checks and persists a fresh report. |
-| Status summary | `unity_status_summary` | `Core` | Compact polling-friendly project status summary by default; pass `includeFullPayload=true` for nested discovery, transport, state-group, timing, and artifact details. Surfaces play-mode liveness evidence (`playmode_loop_liveness`, frame advance, editor focus, throttle warning), `compiler_diagnostics_trust_class` provenance, and the `editor_launch_lane` split-log-lane notice. |
+| Status summary | `unity_status_summary` | `Core` | Compact polling-friendly project status summary by default; pass `includeFullPayload=true` for nested discovery, transport, state-group, timing, and artifact details. Surfaces editor-domain currency, runtime background execution, play-mode liveness evidence (`playmode_loop_liveness`, frame advance, editor focus, throttle warning), `compiler_diagnostics_trust_class` provenance, and the `editor_launch_lane` split-log-lane notice. |
 | Final accounting | `unity_request_final_status` | `Core` | Resolves final request disposition from journal plus current bridge state. |
 | Build target | `unity_build_target_get` | `Core` | Reads active build target and target group. |
 | Build target | `unity_build_target_switch` | `Supported` | Mutates active target intentionally and waits for idle. |
@@ -91,7 +92,8 @@ Unity MCP implementations when the user wants safe production validation.
 | Scenarios | `unity_scenario_result_latest` | `Project-dependent` | Returns latest persisted scenario result, optionally filtered by name. |
 | Scenarios | `unity_scenario_run_and_wait` | `Project-dependent` | Starts a scenario and waits for a terminal compact decision verdict with trust class, failure class, recommended next action, compact steps, and lifecycle relaunch attribution (`editor_relaunched`, previous/current editor PID, bridge generations, and cold-start reason) when applicable. |
 | Project actions | `unity_project_action_list` | `Project-dependent` | Lists catalog-backed project actions from `project_actions.yaml`. |
-| Project actions | `unity_project_action_invoke` | `Project-dependent` | Invokes a typed project action by compiling it to a one-step Unity scenario and enforcing mutation approval. Compact envelope by default (action id, outcome, evidence scalars, mutation trust verdict); `includeFullPayload=true` restores the scenario echo and nested scenario summary. |
+| Project actions | `unity_project_action_currency` | `Core` | Read-only preflight reporting whether the loaded editor domain is current with editor inputs under `Assets`; optionally resolves an action's `requiresFreshAssets` declaration without refreshing or invoking it. |
+| Project actions | `unity_project_action_invoke` | `Project-dependent` | Invokes a typed project action through a persisted scenario with mutation approval and a mandatory editor-domain currency gate. `requiresFreshAssets: true` actions receive an automatic settled AssetDatabase refresh before the shared gate and hook. Compact envelope by default (currency, action id, outcome, evidence scalars, mutation trust verdict); `includeFullPayload=true` restores the scenario echo and nested scenario summary. |
 | Artifacts | `unity_artifact_register` | `Supported` | Registers artifact metadata in the project MCP artifact registry without invoking Unity. |
 | Artifacts | `unity_artifact_write_report` | `Supported` | Writes a text report to an approved project output root and registers it. |
 | UI reference | `unity_ui_reference_register` | `Supported` | Registers a supplied design reference as a `ui-reference.v1` acceptance contract with viewport, regions, declared masks, tolerance profile, and acceptance lanes. |
@@ -159,8 +161,8 @@ Unity MCP implementations when the user wants safe production validation.
 
 | Target | Status | Validation notes |
 | --- | --- | --- |
-| Current package path | `Validated` | Production Git UPM path is `packages/com.xuunity.light-mcp#v0.3.68`; old `templates/unity-package#v0.3.11` is migration-only. |
-| macOS host tools | `Validated in this release environment` | Host Python unittest suite passed for `v0.3.68`: `966` tests with `14` expected platform skips. |
+| Current package path | `Validated` | Production Git UPM path is `packages/com.xuunity.light-mcp#v0.3.69`; old `templates/unity-package#v0.3.11` is migration-only. |
+| macOS host tools | `Validated in this release environment` | Host Python unittest suite passed for `v0.3.69`: `966` tests with `14` expected platform skips. |
 | Linux host tools | `Portable path provided` | Unix launcher is bash-compatible and avoids zsh-only expansion; Linux host execution should still be smoke-tested on a Linux Unity workstation. |
 | Native Windows clients | `Template provided` | Windows JSON/TOML configs, `run.cmd`, and `run.ps1` are included and syntax/config files are statically validated; native Windows MCP connection still needs host smoke validation. |
 | Claude Code | `Template provided` | Project `.mcp.json`, Windows `.mcp.windows.json`, and user-scope installer path are documented. |

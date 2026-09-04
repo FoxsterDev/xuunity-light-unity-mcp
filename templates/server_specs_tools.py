@@ -266,8 +266,26 @@ TOOLS: dict[str, dict[str, Any]] = {
             "required": ["projectRoot"]
         }
     },
+    "unity_project_action_currency": {
+        "bridgeOperation": "unity.project_action.currency",
+        "description": "Report whether the loaded Unity editor domain is current with editor inputs under Assets. With actionId, also resolve the catalog requiresFreshAssets contract without performing a refresh or invoking the action.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "projectRoot": {"type": "string"},
+                "actionId": {"type": "string", "description": "Optional catalog action id or alias."},
+                "catalogPath": {
+                    "type": "string",
+                    "description": "Optional explicit project_actions.yaml path. Defaults to the host output location for the project."
+                },
+                "timeoutMs": {"type": "integer", "default": 15000, "minimum": 1000},
+                "includeFullPayload": {"type": "boolean", "default": False}
+            },
+            "required": ["projectRoot"]
+        }
+    },
     "unity_project_action_invoke": {
-        "description": "Invoke a typed project action from project_actions.yaml through a one-step Unity scenario. Completed mutating actions are decision-ready only when their hook payload reports a valid xuunity.mutation-delta.v1; missing, invalid, or destructive-drop deltas produce an explicit operator warning without rewriting Unity execution success.",
+        "description": "Invoke a typed project action through a persisted Unity scenario. Every action is gated by editor-domain currency; actions declaring requiresFreshAssets run and settle an automatic AssetDatabase refresh before the currency gate and hook. Completed mutating actions are decision-ready only when their hook payload reports a valid xuunity.mutation-delta.v1.",
         "inputSchema": {
             "type": "object",
             "properties": {

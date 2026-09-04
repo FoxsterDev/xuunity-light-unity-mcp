@@ -12,6 +12,7 @@ namespace XUUnity.LightMcp.Editor.Bridge
         internal static string BridgeSessionId = "";
         internal static int BridgeGeneration;
         internal static bool BridgeBootstrapAttached;
+        internal static string EditorDomainLoadedUtc = "";
         internal static bool DomainReloadInProgress;
         internal static string DomainReloadStartedUtc = "";
         internal static bool AssetImportInProgress;
@@ -80,6 +81,11 @@ namespace XUUnity.LightMcp.Editor.Bridge
         internal static string UtcNow()
         {
             return DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ");
+        }
+
+        internal static string UtcNowPrecise()
+        {
+            return DateTime.UtcNow.ToString("O", System.Globalization.CultureInfo.InvariantCulture);
         }
 
         internal static bool HasUtcAgeExceeded(string startedAtUtc, double maxAgeSeconds)

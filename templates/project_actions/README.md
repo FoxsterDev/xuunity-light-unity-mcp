@@ -25,6 +25,15 @@ requires `build_target` or `target`. When such an action is embedded in a
 larger scenario, the author must place those three gate steps immediately after
 it; `project_refresh` is rejected in that position.
 
+Every typed action now passes through `project_action_currency` before its hook.
+The gate compares the loaded editor-domain timestamp with the newest editor
+input under `Assets` and fails closed when it is stale or unknown. An action
+that reads assets which may have changed outside Unity should also declare
+`requiresFreshAssets: true`; invocation then automatically runs a forced
+AssetDatabase refresh without package resolution or an extra health probe,
+waits for settle/domain reload, re-checks currency, and invokes the hook only
+when both preconditions pass.
+
 ```yaml
   project.apply_profile:
     hookName: example.project_environment
@@ -34,6 +43,7 @@ it; `project_refresh` is rejected in that position.
   project.switch_host_target:
     hookName: example.host_build
     hostScoped: true
+    requiresFreshAssets: true
     requiredPayloadFields: [config_resource_path]
     payload:
       config_resource_path: project-specific resource path

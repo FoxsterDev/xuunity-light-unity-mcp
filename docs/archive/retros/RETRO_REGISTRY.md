@@ -1,8 +1,8 @@
 # XUUnity Light Unity MCP Public Retro Registry
 
 Status: active public registry
-Last triage: 2026-09-03 (greenfield scene-authoring findings implemented and moved to completed history)
-Current release candidate: `v0.3.68`
+Last triage: 2026-09-03 (greenfield hardening currency P1s released in v0.3.69)
+Current release: `v0.3.69`
 
 Update this file whenever a public-safe MCP retro is added, moved, renamed, or
 deleted. Host-private and project-specific retros belong in the host's single
@@ -27,6 +27,22 @@ host-local registry.
 - Prompt templates are listed separately and are not backlog items.
 
 ## Re-Evaluation 2026-09-03 (greenfield authoring)
+
+### Greenfield hardening currency follow-up
+
+- Both P1 findings in `2026-09-03_greenfield_hardening_operator_retro.md`
+  are released in `v0.3.69` through one shared persisted
+  `project_action_currency` preflight. Every typed/raw catalog action checks
+  editor-domain currency before its hook; `requiresFreshAssets: true` actions
+  first run and settle a forced AssetDatabase refresh.
+- The same evidence is exposed by `unity_project_action_currency`,
+  `unity_project_action_invoke`, and `unity_status_summary`. Runtime
+  `Application.runInBackground` is enabled while the bridge is active, but
+  native autofocus remains intentionally disabled and measured liveness stays
+  authoritative.
+- The compact build/EDM4U envelopes and mutation-advisory de-duplication remain
+  the open P2 items from this retro. The optional focus operation and inline
+  screenshot remain P3 and are not part of this release.
 
 - All required P0-P2 findings from the greenfield scene-authoring retro are
   implemented in current source. UI reads/clicks, screenshots, and scenario
@@ -531,7 +547,7 @@ the entire Windows install root-cause set (python3 delegation, UTF-8 BOM,
 | 2026-05-07 | `2026-05-07_token_stability_and_summary_first_recovery_retro.md` | token stability and summary-first recovery | implemented history | Sanitized from host-private single-project evidence; private source removed after promotion. |
 | undated | `xuunity_mcp_chat_retro.md` | legacy general MCP chat/session postmortem (PASS/EXCELLENT) | history; asks shipped | Both improvement asks are shipped: `no_tests` treated as an acceptable status (`run_multi_project.py` `acceptable_test_statuses={"passed","no_tests"}`) and compact-by-default final/latest surfaces (`v0.3.44`). Legacy wrapper terminology predates the current MCP tool surface; kept as history. |
 | undated | `xuunity_mcp_install_retro.md` | legacy end-to-end install/verify/Android-compile success record (v0.3.21) | history; no open items | Clean happy-path install postmortem with zero open items; the described flow still exists and was hardened through `v0.3.42`-`v0.3.44`. No backlog to implement. |
-| 2026-09-03 | `2026-09-03_greenfield_hardening_operator_retro.md` | staleness surfacing (editor domain + AssetDatabase), compact build envelope, advisory de-duplication | open | Written against `v0.3.67` during a full-day greenfield hardening session. P1s are both about currency: a green player compile hides a stale editor domain, and asset-reading project actions can return confident wrong verdicts. Re-check against `v0.3.68` before implementing. |
+| 2026-09-03 | `2026-09-03_greenfield_hardening_operator_retro.md` | staleness surfacing (editor domain + AssetDatabase), compact build envelope, advisory de-duplication | **both P1 currency findings released in `v0.3.69`; P2/P3 residuals open** | Every catalog-backed action now passes a shared editor-domain currency gate, while `requiresFreshAssets: true` prepends a settled forced refresh. Runtime background execution is enabled without native autofocus. Remaining: compact build/EDM4U envelopes and advisory de-duplication (P2), plus the inline-image idea (P3); native autofocus was deliberately declined. |
 
 ## Prompt Templates
 

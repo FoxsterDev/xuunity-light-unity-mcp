@@ -1,7 +1,7 @@
 # AI Integration Instructions
 
 Date: `2026-07-01`
-Status: `current for package v0.3.68`
+Status: `current for package v0.3.69`
 
 Use this document when an AI agent is integrating this Unity package into a new
 project.
@@ -32,7 +32,7 @@ The full system requires:
 Current Git UPM package URL:
 
 ```text
-https://github.com/FoxsterDev/xuunity-mcp.git?path=/packages/com.xuunity.light-mcp#v0.3.68
+https://github.com/FoxsterDev/xuunity-mcp.git?path=/packages/com.xuunity.light-mcp#v0.3.69
 ```
 
 ## Safety Rules
@@ -44,6 +44,8 @@ An AI agent should:
 - treat EditMode and PlayMode tests as optional capabilities backed by
   `com.unity.test-framework`, not as core readiness requirements
 - prefer validation before mutation
+- require current editor-domain currency before trusting a project action, and
+  declare `requiresFreshAssets: true` when its hook reads externally edited assets
 - keep validation gaps explicit
 
 An AI agent should not:
@@ -52,6 +54,7 @@ An AI agent should not:
 - inject broad define symbols
 - add `com.unity.test-framework` without explicit user approval
 - assume Game View reflection is always valid
+- steal OS focus or treat background execution as proof of player-loop progress
 - treat shell compile as equivalent to Unity validation
 
 ## Current Recommended First Pass
@@ -66,7 +69,7 @@ An AI agent should not:
 8. scenario validate
 9. scenario run-and-wait compact verdict
 10. raw scenario result only when verbose/full-payload diagnostics are needed
-11. project-action list/invoke when the project publishes `project_actions.yaml`
+11. project-action list/invoke, with the shared currency preflight, when the project publishes `project_actions.yaml`
 12. implement `IXUUnityLightMcpScenarioHook` in `Assets/Editor/` when the project needs local scenario automation not worth promoting upstream yet
 
 ## Upstream Docs

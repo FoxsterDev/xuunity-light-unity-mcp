@@ -12,7 +12,7 @@ namespace XUUnity.LightMcp.Editor.Helpers
 {
     internal static class XUUnityLightMcpHealthProbe
     {
-        const int ProbeVersion = 3;
+        const int ProbeVersion = 4;
         static readonly BindingFlags StaticBindings = BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Static;
         static XUUnityLightMcpCapabilitiesReport _cachedReport;
 
@@ -341,6 +341,7 @@ namespace XUUnity.LightMcp.Editor.Helpers
                     "unity.editor.quit",
                     "unity.package.install_test_framework",
                     "unity.project.refresh",
+                    XUUnityLightMcpProjectActionCurrencyOperation.RegisteredOperationName,
                     "unity.edm4u.resolve",
                     "unity.sdk.dependency.verify",
                     "unity.console.tail",

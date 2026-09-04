@@ -40,6 +40,17 @@ namespace XUUnity.LightMcp.Editor.Bridge
             }
         }
 
+        public static string EditorDomainLoadedUtc
+        {
+            get
+            {
+                lock (XUUnityLightMcpBridgeRuntimeStorage.Gate)
+                {
+                    return XUUnityLightMcpBridgeRuntimeStorage.EditorDomainLoadedUtc;
+                }
+            }
+        }
+
         public static void InitializeBridgeSession()
         {
             lock (XUUnityLightMcpBridgeRuntimeStorage.Gate)
@@ -81,6 +92,7 @@ namespace XUUnity.LightMcp.Editor.Bridge
             XUUnityLightMcpBridgeRuntimeStorage.BridgeGeneration = nextGeneration;
             XUUnityLightMcpBridgeRuntimeStorage.BridgeSessionId = Guid.NewGuid().ToString("N");
             XUUnityLightMcpBridgeRuntimeStorage.BridgeBootstrapAttached = true;
+            XUUnityLightMcpBridgeRuntimeStorage.EditorDomainLoadedUtc = XUUnityLightMcpBridgeRuntimeStorage.UtcNowPrecise();
             XUUnityLightMcpBridgeRuntimeStorage.DomainReloadInProgress = false;
             XUUnityLightMcpBridgeRuntimeStorage.DomainReloadStartedUtc = "";
             XUUnityLightMcpBridgeRuntimeStorage.AssetImportInProgress = false;
@@ -129,7 +141,8 @@ namespace XUUnity.LightMcp.Editor.Bridge
             {
                 bridge_generation = XUUnityLightMcpBridgeRuntimeStorage.BridgeGeneration,
                 bridge_session_id = XUUnityLightMcpBridgeRuntimeStorage.BridgeSessionId,
-                bootstrap_attached_at_utc = XUUnityLightMcpBridgeRuntimeStorage.UtcNow(),
+                bootstrap_attached_at_utc = XUUnityLightMcpBridgeRuntimeStorage.EditorDomainLoadedUtc,
+                editor_domain_loaded_utc = XUUnityLightMcpBridgeRuntimeStorage.EditorDomainLoadedUtc,
             };
 
             XUUnityLightMcpAtomicFileWriter.WriteAllText(XUUnityLightMcpFileIpcPaths.BridgeGenerationStatePath, JsonUtility.ToJson(payload, true));

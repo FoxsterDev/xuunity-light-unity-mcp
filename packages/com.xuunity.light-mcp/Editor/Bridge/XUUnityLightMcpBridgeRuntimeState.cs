@@ -7,6 +7,7 @@ namespace XUUnity.LightMcp.Editor.Bridge
         public static string BridgeSessionId => XUUnityLightMcpBridgeSessionRuntime.BridgeSessionId;
         public static int BridgeGeneration => XUUnityLightMcpBridgeSessionRuntime.BridgeGeneration;
         public static bool BridgeBootstrapAttached => XUUnityLightMcpBridgeSessionRuntime.BridgeBootstrapAttached;
+        public static string EditorDomainLoadedUtc => XUUnityLightMcpBridgeSessionRuntime.EditorDomainLoadedUtc;
         public static bool DomainReloadInProgress => XUUnityLightMcpEditorLifecycleRuntime.DomainReloadInProgress;
         public static string DomainReloadStartedUtc => XUUnityLightMcpEditorLifecycleRuntime.DomainReloadStartedUtc;
         public static bool AssetImportInProgress => XUUnityLightMcpEditorLifecycleRuntime.AssetImportInProgress;

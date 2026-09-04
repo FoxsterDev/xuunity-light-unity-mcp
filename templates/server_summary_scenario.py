@@ -259,6 +259,55 @@ def build_project_defined_hook_summary(steps: list[Any]) -> dict[str, Any]:
     }
 
 
+def build_project_action_currency_summary(steps: list[Any]) -> dict[str, Any]:
+    currency_steps: list[dict[str, Any]] = []
+    for raw_step in steps:
+        if not isinstance(raw_step, dict) or str(raw_step.get("kind") or "") != "project_action_currency":
+            continue
+
+        payload = _parse_step_payload_json(raw_step)
+        item: dict[str, Any] = {
+            "step_id": str(raw_step.get("stepId") or raw_step.get("step_id") or ""),
+            "status": str(raw_step.get("status") or ""),
+            "outcome": str(raw_step.get("outcome") or ""),
+        }
+        for key in (
+            "action_id",
+            "requires_fresh_assets",
+            "asset_refresh_performed",
+            "asset_refresh_step_id",
+            "editor_domain_loaded_utc",
+            "editor_domain_current",
+            "editor_domain_currency_known",
+            "editor_domain_currency",
+            "newest_editor_input_path",
+            "newest_editor_input_write_utc",
+            "editor_input_count",
+            "currency_basis",
+            "safe_to_invoke",
+            "reason",
+            "recommended_next_action",
+            "application_run_in_background",
+            "native_autofocus_enabled",
+        ):
+            if key in payload:
+                item[key] = payload.get(key)
+        if raw_step.get("error_code"):
+            item["error_code"] = str(raw_step.get("error_code") or "")
+        if raw_step.get("error_message"):
+            item["error_message"] = truncate_text(raw_step.get("error_message") or "", 240)
+        currency_steps.append(item)
+
+    if not currency_steps:
+        return {}
+    return {
+        "preflight_count": len(currency_steps),
+        "all_safe_to_invoke": all(bool(item.get("safe_to_invoke")) for item in currency_steps),
+        "preflights": currency_steps,
+        "final": currency_steps[-1],
+    }
+
+
 def _extract_ui_fixture_summary(payload: dict[str, Any], step: dict[str, Any]) -> dict[str, Any]:
     raw = extract_ui_fixture_block(payload)
     if raw is None:
@@ -1274,6 +1323,7 @@ def build_scenario_result_summary(payload: dict[str, Any], scenario_terminal_sta
                 if len(ui_smoke_summaries) == 1
                 else {"hook_count": len(ui_smoke_summaries), "hooks": ui_smoke_summaries}
             )
+
         path_coverage_summaries = [
             hook.get("path_coverage_summary")
             for hook in project_defined_hook_summary.get("hooks", [])
@@ -1285,6 +1335,10 @@ def build_scenario_result_summary(payload: dict[str, Any], scenario_terminal_sta
                 if len(path_coverage_summaries) == 1
                 else {"hook_count": len(path_coverage_summaries), "hooks": path_coverage_summaries}
             )
+
+    project_action_currency = build_project_action_currency_summary(step_items)
+    if project_action_currency:
+        summary["project_action_currency"] = project_action_currency
 
     cleanup_summary = build_scenario_cleanup_summary(step_items, normalized.get("cleanup_start_index"))
     if cleanup_summary["cleanup_step_count"] > 0:

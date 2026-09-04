@@ -159,6 +159,7 @@ class ServerProtocolAndParserTests(unittest.TestCase):
         self.assertIn("unity_scenario_results_list", tool_names)
         self.assertIn("unity_scenario_result_latest", tool_names)
         self.assertIn("unity_project_action_list", tool_names)
+        self.assertIn("unity_project_action_currency", tool_names)
         self.assertIn("unity_project_action_invoke", tool_names)
         self.assertIn("xuunity_project_hook_scaffold", tool_names)
         self.assertIn("unity_artifact_register", tool_names)
@@ -890,6 +891,7 @@ actions:
   project.safe:
     aliases: [safe]
     hookName: example.project
+    requiresFreshAssets: true
     payload:
       mode: string
     mutates: []
@@ -914,6 +916,7 @@ actions:
         self.assertEqual("project.safe", action["action_id"])
         self.assertEqual("safe", action["resolved_by_alias"])
         self.assertEqual("example.project", action["hook_name"])
+        self.assertTrue(action["requires_fresh_assets"])
 
     def test_host_scoped_project_action_requires_named_payload_fields(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -951,7 +954,7 @@ actions:
                 action_record=action,
                 action_payload={"config_resource_path": "Configs/Satellite"},
             )
-            self.assertIn("Configs/Satellite", scenario["steps"][0]["hookPayloadJson"])
+            self.assertIn("Configs/Satellite", scenario["steps"][1]["hookPayloadJson"])
 
     def test_apply_then_gate_project_action_builds_authoritative_settle_sequence(self) -> None:
         action = {
@@ -965,11 +968,11 @@ actions:
         )
 
         self.assertEqual(
-            ["project_defined_hook", "wait", "status", "compile_player_scripts"],
+            ["project_action_currency", "project_defined_hook", "wait", "status", "compile_player_scripts"],
             [step["kind"] for step in scenario["steps"]],
         )
-        self.assertEqual("apply_then_gate", scenario["steps"][0]["mutationSettlePolicy"])
-        self.assertEqual("Android", scenario["steps"][3]["target"])
+        self.assertEqual("apply_then_gate", scenario["steps"][1]["mutationSettlePolicy"])
+        self.assertEqual("Android", scenario["steps"][4]["target"])
 
         with self.assertRaises(server.ToolInvocationError) as ctx:
             server_project_actions.build_project_action_scenario(
@@ -977,6 +980,30 @@ actions:
                 action_payload={},
             )
         self.assertEqual("mutation_settle_target_required", ctx.exception.code)
+
+    def test_fresh_asset_project_action_builds_refresh_currency_hook_sequence(self) -> None:
+        scenario = server_project_actions.build_project_action_scenario(
+            action_record={
+                "action_id": "project.validate_assets",
+                "hook_name": "example.project",
+                "requires_fresh_assets": True,
+            },
+            action_payload={},
+        )
+
+        self.assertEqual(
+            ["project_refresh", "project_action_currency", "project_defined_hook"],
+            [step["kind"] for step in scenario["steps"]],
+        )
+        refresh, currency, hook = scenario["steps"]
+        self.assertTrue(refresh["forceAssetRefresh"])
+        self.assertFalse(refresh["resolvePackages"])
+        self.assertFalse(refresh["rerunHealthProbe"])
+        self.assertEqual(180.0, refresh["timeoutSeconds"])
+        self.assertTrue(currency["requiresFreshAssets"])
+        self.assertEqual(refresh["stepId"], currency["assetRefreshStepId"])
+        self.assertEqual([refresh["stepId"]], currency["dependsOn"])
+        self.assertEqual([currency["stepId"]], hook["dependsOn"])
 
     def test_plain_project_hook_object_payload_is_promoted_instead_of_dropped(self) -> None:
         scenario = server_project_actions.normalize_poll_until_scenario(
@@ -1058,7 +1085,8 @@ actions:
             action_record=self_named,
             action_payload={},
         )
-        self.assertEqual("project_defined_hook", scenario["steps"][0]["kind"])
+        self.assertEqual("project_action_currency", scenario["steps"][0]["kind"])
+        self.assertEqual("project_defined_hook", scenario["steps"][1]["kind"])
 
     def test_project_action_list_tool_returns_catalog_without_editor_bridge(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -1142,6 +1170,28 @@ actions:
                 timeout_ms: int,
             ) -> dict[str, object]:
                 invoke_calls.append((operation, dict(operation_args), timeout_ms))
+                if operation == "unity.project_action.currency":
+                    return {
+                        "status": "ok",
+                        "payload_type": "unity.project_action.currency",
+                        "payload_json": json.dumps(
+                            {
+                                "action_id": "project.safe",
+                                "requires_fresh_assets": False,
+                                "editor_domain_loaded_utc": "2026-09-03T12:00:00.0000000Z",
+                                "editor_domain_current": True,
+                                "editor_domain_currency_known": True,
+                                "editor_domain_currency": "current",
+                                "newest_editor_input_path": "Assets/Scripts/Game.cs",
+                                "newest_editor_input_write_utc": "2026-09-03T11:59:59.0000000Z",
+                                "asset_refresh_performed": False,
+                                "safe_to_invoke": True,
+                                "recommended_next_action": "none",
+                                "application_run_in_background": True,
+                                "native_autofocus_enabled": False,
+                            }
+                        ),
+                    }
                 return {
                     "status": "ok",
                     "payload_type": "unity.scenario.run",
@@ -1220,6 +1270,9 @@ actions:
         self.assertEqual("project.safe", structured["action_id"])
         self.assertEqual("safe", structured["resolved_by_alias"])
         self.assertTrue(structured["succeeded"])
+        self.assertTrue(structured["editor_domain_current"])
+        self.assertTrue(structured["application_run_in_background"])
+        self.assertFalse(structured["native_autofocus_enabled"])
         hook_summary = structured["project_defined_hook_summary"]["hooks"][0]
         self.assertEqual("done", hook_summary["outcome"])
         self.assertEqual(2, hook_summary["payload_scalars"]["changed_file_count"])
@@ -1230,15 +1283,94 @@ actions:
         self.assertTrue(structured["full_payload_available"])
         self.assertEqual({"includeFullPayload": True}, structured["full_payload_tool_arguments"])
 
-        self.assertEqual(1, len(invoke_calls))
-        operation, scenario_args, timeout_ms = invoke_calls[0]
+        self.assertEqual(2, len(invoke_calls))
+        self.assertEqual("unity.project_action.currency", invoke_calls[0][0])
+        operation, scenario_args, timeout_ms = invoke_calls[1]
         self.assertEqual("unity.scenario.run", operation)
         self.assertEqual(15000, timeout_ms)
         scenario = scenario_args["scenario"]
-        hook_payload_json = scenario["steps"][0]["hookPayloadJson"]
+        self.assertEqual("project_action_currency", scenario["steps"][0]["kind"])
+        hook_payload_json = scenario["steps"][1]["hookPayloadJson"]
         hook_payload = json.loads(hook_payload_json)
         self.assertEqual("project.safe", hook_payload["action"])
         self.assertEqual("bar", hook_payload["foo"])
+
+    def test_project_action_invoke_blocks_stale_editor_domain_before_hook(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project_root = Path(temp_dir) / "FakeProject"
+            project_root.mkdir()
+            catalog_path = Path(temp_dir) / "project_actions.yaml"
+            catalog_path.write_text(
+                """
+schemaVersion: xuunity.project-actions.v1
+project: FakeProject
+hookName: example.project
+actions:
+  project.safe:
+    payload: {}
+    mutates: []
+""".strip(),
+                encoding="utf-8",
+            )
+            invoke_calls: list[str] = []
+
+            def fake_invoke_bridge(
+                project_root_value: str,
+                operation: str,
+                operation_args: dict[str, object],
+                timeout_ms: int,
+            ) -> dict[str, object]:
+                invoke_calls.append(operation)
+                return {
+                    "status": "ok",
+                    "payload_type": "unity.project_action.currency",
+                    "payload_json": json.dumps(
+                        {
+                            "action_id": "project.safe",
+                            "editor_domain_loaded_utc": "2026-09-03T12:00:00.0000000Z",
+                            "editor_domain_current": False,
+                            "editor_domain_currency_known": True,
+                            "editor_domain_currency": "stale",
+                            "newest_editor_input_path": "Assets/Scripts/Game.cs",
+                            "newest_editor_input_write_utc": "2026-09-03T12:00:01.0000000Z",
+                            "safe_to_invoke": False,
+                            "reason": "assets_editor_input_newer_than_loaded_editor_domain",
+                            "recommended_next_action": "run_unity_project_refresh_before_invoking",
+                            "application_run_in_background": True,
+                            "native_autofocus_enabled": False,
+                        }
+                    ),
+                }
+
+            with (
+                mock.patch.object(server, "ensure_project_root", return_value=project_root),
+                mock.patch.object(server, "invoke_bridge", side_effect=fake_invoke_bridge),
+            ):
+                response = server.handle_json_rpc_message(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 26,
+                        "method": "tools/call",
+                        "params": {
+                            "name": "unity_project_action_invoke",
+                            "arguments": {
+                                "projectRoot": str(project_root),
+                                "catalogPath": str(catalog_path),
+                                "actionId": "project.safe",
+                            },
+                        },
+                    },
+                    {"initialized": True, "protocolVersion": server.PROTOCOL_VERSION},
+                )
+
+        result = response["result"]
+        self.assertTrue(result["isError"])
+        structured = result["structuredContent"]
+        self.assertEqual("blocked_by_preflight", structured["status"])
+        self.assertEqual("editor_domain_stale", structured["error"]["code"])
+        self.assertFalse(structured["hook_invoked"])
+        self.assertFalse(structured["editor_domain_current"])
+        self.assertEqual(["unity.project_action.currency"], invoke_calls)
 
     def test_project_action_invoke_tool_requires_explicit_mutation_approval(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -1483,8 +1615,12 @@ actions:
         self.assertEqual(1, len(invoke_calls))
         operation, scenario_args, _ = invoke_calls[0]
         self.assertEqual("unity.scenario.run", operation)
-        sent_step = scenario_args["scenario"]["steps"][0]
-        self.assertEqual("project_defined_hook", sent_step["kind"])
+        sent_steps = scenario_args["scenario"]["steps"]
+        self.assertEqual(
+            ["project_action_currency", "project_defined_hook"],
+            [step["kind"] for step in sent_steps],
+        )
+        sent_step = sent_steps[1]
         self.assertEqual("example.localization", sent_step["hookName"])
         self.assertEqual(
             {"action": "localization.list_actions"},
@@ -1664,8 +1800,11 @@ actions:
                 },
             )
 
-        sent_step = normalized["steps"][0]
-        self.assertEqual("project_defined_hook", sent_step["kind"])
+        self.assertEqual(
+            ["project_action_currency", "project_defined_hook"],
+            [step["kind"] for step in normalized["steps"]],
+        )
+        sent_step = normalized["steps"][1]
         self.assertNotIn("payloadJson", sent_step)
         self.assertEqual(
             {"target_language": "pt-BR", "action": "localization.scan"},

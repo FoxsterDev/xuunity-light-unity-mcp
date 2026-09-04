@@ -142,6 +142,16 @@ namespace XUUnity.LightMcp.Editor.Helpers
                 case "scene_snapshot":
                 case "project_refresh":
                     break;
+                case "project_action_currency":
+                    if (string.IsNullOrWhiteSpace(step.actionId))
+                    {
+                        AddIssue(payload, "error", "missing_project_action", "project_action_currency requires actionId.", stepId, index);
+                    }
+                    if (step.requiresFreshAssets && string.IsNullOrWhiteSpace(step.assetRefreshStepId))
+                    {
+                        AddIssue(payload, "error", "missing_asset_refresh_step", "Fresh-assets currency checks require assetRefreshStepId.", stepId, index);
+                    }
+                    break;
                 case "scene_open":
                     if (string.IsNullOrWhiteSpace(step.scenePath))
                     {

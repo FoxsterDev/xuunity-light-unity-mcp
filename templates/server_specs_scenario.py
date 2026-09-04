@@ -11,6 +11,7 @@ SCENARIO_STEP_KINDS = (
     "scene_open",
     "assert_scene",
     "project_refresh",
+    "project_action_currency",
     "console_tail",
     "console_grep",
     "playmode_set",
@@ -142,6 +143,8 @@ SCENARIO_STEP_SCHEMA: dict[str, Any] = {
         "payload": {"type": "object"},
         "payloadJson": {"type": "string"},
         "allowMutating": {"type": "boolean", "default": False},
+        "requiresFreshAssets": {"type": "boolean", "default": False},
+        "assetRefreshStepId": {"type": "string"},
         "interactionId": {
             "type": "string",
             "description": "ui_click only. Stable id a reference can require via required_interactions.",

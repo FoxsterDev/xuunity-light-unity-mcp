@@ -49,6 +49,8 @@ namespace XUUnity.LightMcp.Editor.Bridge
                 bridge_session_id = XUUnityLightMcpBridgeRuntimeState.BridgeSessionId,
                 bridge_generation = XUUnityLightMcpBridgeRuntimeState.BridgeGeneration,
                 bridge_bootstrap_attached = XUUnityLightMcpBridgeRuntimeState.BridgeBootstrapAttached,
+                editor_domain_loaded_utc = XUUnityLightMcpBridgeRuntimeState.EditorDomainLoadedUtc,
+                application_run_in_background = Application.runInBackground,
                 domain_reload_in_progress = XUUnityLightMcpBridgeRuntimeState.DomainReloadInProgress,
                 domain_reload_started_utc = XUUnityLightMcpBridgeRuntimeState.DomainReloadStartedUtc,
                 asset_import_in_progress = XUUnityLightMcpBridgeRuntimeState.AssetImportInProgress,

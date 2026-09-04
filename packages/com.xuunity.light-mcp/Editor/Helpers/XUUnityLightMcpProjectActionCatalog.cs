@@ -38,6 +38,7 @@ namespace XUUnity.LightMcp.Editor.Helpers
         public readonly List<string> Aliases = new();
         public readonly List<string> Mutates = new();
         public bool HostScoped;
+        public bool RequiresFreshAssets;
         public readonly List<string> RequiredPayloadFields = new();
         public string SettlePolicy = "";
     }
@@ -186,6 +187,13 @@ namespace XUUnity.LightMcp.Editor.Helpers
                     else if (string.Equals(key, "hostScoped", StringComparison.Ordinal))
                     {
                         currentAction.HostScoped = string.Equals(
+                            NormalizeYamlScalar(value),
+                            "true",
+                            StringComparison.OrdinalIgnoreCase);
+                    }
+                    else if (string.Equals(key, "requiresFreshAssets", StringComparison.Ordinal))
+                    {
+                        currentAction.RequiresFreshAssets = string.Equals(
                             NormalizeYamlScalar(value),
                             "true",
                             StringComparison.OrdinalIgnoreCase);

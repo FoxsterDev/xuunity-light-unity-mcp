@@ -46,6 +46,8 @@ namespace XUUnity.LightMcp.Editor.Helpers
                     return ProcessAssertSceneStep(step, stepResult);
                 case "project_refresh":
                     return ProcessProjectRefreshStep(state, step, stepResult);
+                case "project_action_currency":
+                    return XUUnityLightMcpScenarioProjectActionCurrencyStepHandler.Process(state, step, stepResult);
                 case "console_tail":
                     return ProcessConsoleTailStep(step, stepResult);
                 case "console_grep":

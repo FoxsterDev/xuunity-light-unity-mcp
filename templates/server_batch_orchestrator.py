@@ -303,7 +303,7 @@ from server_batch_recovery import (
 PROTOCOL_VERSION = "2025-06-18"
 SERVER_INFO = {
     "name": "xuunity-mcp",
-    "version": "0.3.68",
+    "version": "0.3.69",
 }
 
 # === Block A: Registry & Discovery Helpers ===
@@ -2750,6 +2750,53 @@ def invoke_project_action_from_catalog(
         action_payload=action_payload,
         scenario_name=scenario_name,
     )
+    currency_response = invoke_bridge(
+        str(project_root),
+        "unity.project_action.currency",
+        {
+            "actionId": str(action_record.get("action_id") or ""),
+            "catalogPath": str(catalog.get("catalog_path") or ""),
+        },
+        max(5000, min(timeout_ms, 15000)),
+    )
+    currency_tool_result = bridge_response_to_tool_result(currency_response, include_full_payload=False)
+    if currency_tool_result.get("isError"):
+        return dict(currency_tool_result.get("structuredContent") or {}), True
+    currency_preflight = currency_tool_result.get("structuredContent") or {}
+    if not isinstance(currency_preflight, dict):
+        currency_preflight = {}
+
+    requires_fresh_assets = bool(action_record.get("requires_fresh_assets"))
+    if not requires_fresh_assets and not bool(currency_preflight.get("safe_to_invoke")):
+        currency_known = bool(currency_preflight.get("editor_domain_currency_known"))
+        error_code = "editor_domain_stale" if currency_known else "editor_domain_currency_unknown"
+        blocked = build_project_action_invocation_payload(
+            project_root=project_root,
+            catalog=catalog,
+            action_record=action_record,
+            requested_action=requested_action,
+            action_payload=action_payload,
+            scenario=scenario,
+            run_payload={"status": "blocked_by_preflight"},
+            scenario_summary=None,
+            wait_for_result=False,
+            project_action_currency_preflight=currency_preflight,
+            include_full_payload=include_full_payload,
+        )
+        blocked.update(
+            {
+                "status": "blocked_by_preflight",
+                "terminal": True,
+                "succeeded": False,
+                "hook_invoked": False,
+                "error": {
+                    "code": error_code,
+                    "message": str(currency_preflight.get("reason") or error_code),
+                },
+            }
+        )
+        return blocked, True
+
     run_response = invoke_bridge(
         str(project_root),
         "unity.scenario.run",
@@ -2790,6 +2837,7 @@ def invoke_project_action_from_catalog(
         run_payload=run_payload,
         scenario_summary=scenario_summary,
         wait_for_result=wait_for_result,
+        project_action_currency_preflight=currency_preflight,
         include_full_payload=include_full_payload,
     )
     return result, wait_for_result and not bool(result.get("succeeded"))

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using XUUnity.LightMcp.Editor.Operations;
 
 namespace XUUnity.LightMcp.Editor.Core
 {
@@ -29,6 +30,7 @@ namespace XUUnity.LightMcp.Editor.Core
             "unity.health.probe",
             "unity.build_target.get",
             "unity.project.refresh",
+            XUUnityLightMcpProjectActionCurrencyOperation.RegisteredOperationName,
             "unity.edm4u.resolve",
             "unity.sdk.dependency.verify",
             "unity.package.install_test_framework",
@@ -39,6 +41,7 @@ namespace XUUnity.LightMcp.Editor.Core
         {
             { "unity.status", CoreCapability },
             { "unity.project.refresh", CoreCapability },
+            { XUUnityLightMcpProjectActionCurrencyOperation.RegisteredOperationName, CoreCapability },
             { "unity.edm4u.resolve", CoreCapability },
             { "unity.sdk.android_resolve", SdkAndroidResolverCapability },
             { "unity.sdk.dependency.verify", CoreCapability },

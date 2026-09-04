@@ -15,7 +15,12 @@ namespace XUUnity.LightMcp.Editor.Helpers
             "payloadJson",
             "allowMutating",
             "catalogPath",
+            "requiresFreshAssets",
+            "assetRefreshStepId",
         };
+
+        const string CurrencySuffix = "__currency";
+        const string RefreshSuffix = "__refresh_assets";
 
         public static bool TryBuildExecutableProjectActionStep(
             XUUnityLightMcpScenarioStepDefinition step,
@@ -127,6 +132,7 @@ namespace XUUnity.LightMcp.Editor.Helpers
                 payloadJson = payload.ToJson(),
                 allowMutating = step?.allowMutating ?? false,
                 mutationSettlePolicy = action.SettlePolicy,
+                requiresFreshAssets = action.RequiresFreshAssets,
             };
             return true;
         }
@@ -146,20 +152,34 @@ namespace XUUnity.LightMcp.Editor.Helpers
                 return true;
             }
 
+            var normalizedSteps = new List<LightJsonNode>();
             for (var i = 0; i < steps.Array.Count; i++)
             {
                 var step = steps.Array[i];
                 if (step.Kind != LightJsonKind.Object
                     || !string.Equals(step.GetString("kind"), "project_action", StringComparison.Ordinal))
                 {
+                    normalizedSteps.Add(step);
                     continue;
                 }
 
-                if (!TryNormalizeProjectActionStep(step, arrayKey, i, catalog, out errorCode, out errorMessage))
+                if (!TryNormalizeProjectActionStep(
+                        step,
+                        arrayKey,
+                        i,
+                        catalog,
+                        out var replacements,
+                        out errorCode,
+                        out errorMessage))
                 {
                     return false;
                 }
+
+                normalizedSteps.AddRange(replacements);
             }
+
+            steps.Array.Clear();
+            steps.Array.AddRange(normalizedSteps);
 
             return true;
         }
@@ -169,9 +189,11 @@ namespace XUUnity.LightMcp.Editor.Helpers
             string stepGroup,
             int stepIndex,
             ProjectActionCatalog catalog,
+            out List<LightJsonNode> replacements,
             out string errorCode,
             out string errorMessage)
         {
+            replacements = null;
             errorCode = "";
             errorMessage = "";
 
@@ -227,25 +249,96 @@ namespace XUUnity.LightMcp.Editor.Helpers
                 return false;
             }
 
-            var replacement = LightJsonNode.ObjectNode();
+            var hookStep = LightJsonNode.ObjectNode();
             foreach (var pair in step.Object)
             {
                 if (!ProjectActionStepKeys.Contains(pair.Key))
                 {
-                    replacement.Object[pair.Key] = pair.Value;
+                    hookStep.Object[pair.Key] = pair.Value.Clone();
                 }
             }
 
-            replacement.Object["kind"] = LightJsonNode.String("project_defined_hook");
-            replacement.Object["hookName"] = LightJsonNode.String(action.HookName);
-            replacement.Object["hookPayloadJson"] = LightJsonNode.String(hookPayload.ToJson());
+            var currencyStepId = stepId + CurrencySuffix;
+            var refreshStepId = action.RequiresFreshAssets ? stepId + RefreshSuffix : "";
+            var currencyStep = BuildCurrencyStep(step, action, currencyStepId, refreshStepId);
+            hookStep.Object["stepId"] = LightJsonNode.String(stepId);
+            hookStep.Object["kind"] = LightJsonNode.String("project_defined_hook");
+            hookStep.Object["hookName"] = LightJsonNode.String(action.HookName);
+            hookStep.Object["hookPayloadJson"] = LightJsonNode.String(hookPayload.ToJson());
+            hookStep.Object["dependsOn"] = BuildStringArray(currencyStepId);
+            hookStep.Object.Remove("runIfStepPassed");
             if (!string.IsNullOrWhiteSpace(action.SettlePolicy))
             {
-                replacement.Object["mutationSettlePolicy"] = LightJsonNode.String(action.SettlePolicy);
+                hookStep.Object["mutationSettlePolicy"] = LightJsonNode.String(action.SettlePolicy);
             }
 
-            step.ReplaceWith(replacement);
+            replacements = new List<LightJsonNode>();
+            if (action.RequiresFreshAssets)
+            {
+                replacements.Add(BuildRefreshStep(step, refreshStepId));
+            }
+            replacements.Add(currencyStep);
+            replacements.Add(hookStep);
             return true;
+        }
+
+        static LightJsonNode BuildCurrencyStep(
+            LightJsonNode sourceStep,
+            ProjectActionRecord action,
+            string currencyStepId,
+            string refreshStepId)
+        {
+            var currencyStep = LightJsonNode.ObjectNode();
+            currencyStep.Object["stepId"] = LightJsonNode.String(currencyStepId);
+            currencyStep.Object["kind"] = LightJsonNode.String("project_action_currency");
+            currencyStep.Object["actionId"] = LightJsonNode.String(action.ActionId);
+            currencyStep.Object["requiresFreshAssets"] = new LightJsonNode
+            {
+                Kind = LightJsonKind.Bool,
+                BoolValue = action.RequiresFreshAssets,
+            };
+            if (action.RequiresFreshAssets)
+            {
+                currencyStep.Object["assetRefreshStepId"] = LightJsonNode.String(refreshStepId);
+                currencyStep.Object["dependsOn"] = BuildStringArray(refreshStepId);
+            }
+            else
+            {
+                CopyConditionalDependencies(sourceStep, currencyStep);
+            }
+
+            return currencyStep;
+        }
+
+        static LightJsonNode BuildRefreshStep(LightJsonNode sourceStep, string refreshStepId)
+        {
+            var refreshStep = LightJsonNode.ObjectNode();
+            refreshStep.Object["stepId"] = LightJsonNode.String(refreshStepId);
+            refreshStep.Object["kind"] = LightJsonNode.String("project_refresh");
+            refreshStep.Object["forceAssetRefresh"] = new LightJsonNode { Kind = LightJsonKind.Bool, BoolValue = true };
+            refreshStep.Object["resolvePackages"] = new LightJsonNode { Kind = LightJsonKind.Bool, BoolValue = false };
+            refreshStep.Object["rerunHealthProbe"] = new LightJsonNode { Kind = LightJsonKind.Bool, BoolValue = false };
+            refreshStep.Object["timeoutSeconds"] = new LightJsonNode { Kind = LightJsonKind.Number, NumberValue = "180" };
+            CopyConditionalDependencies(sourceStep, refreshStep);
+            return refreshStep;
+        }
+
+        static void CopyConditionalDependencies(LightJsonNode sourceStep, LightJsonNode targetStep)
+        {
+            foreach (var key in new[] { "dependsOn", "runIfStepPassed" })
+            {
+                if (sourceStep.Object.TryGetValue(key, out var value))
+                {
+                    targetStep.Object[key] = value.Clone();
+                }
+            }
+        }
+
+        static LightJsonNode BuildStringArray(string value)
+        {
+            var array = LightJsonNode.ArrayNode();
+            array.Array.Add(LightJsonNode.String(value));
+            return array;
         }
 
         static bool ValidateHostScopedPayload(

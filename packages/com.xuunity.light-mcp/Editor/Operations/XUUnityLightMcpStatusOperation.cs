@@ -13,7 +13,9 @@ namespace XUUnity.LightMcp.Editor.Operations
 
         public XUUnityLightMcpResponse Execute(XUUnityLightMcpRequest request)
         {
+            XUUnityLightMcpBackgroundExecution.EnsureEnabled();
             var report = XUUnityLightMcpHealthProbe.EnsureCurrentReport();
+            var currency = XUUnityLightMcpProjectActionCurrency.Capture();
             var visiblePendingRequestCount = GetVisiblePendingRequestCount(request);
             var activeOperation = GetVisibleActiveOperation(request);
             var activeRequestId = GetVisibleActiveRequestId(request);
@@ -33,6 +35,18 @@ namespace XUUnity.LightMcp.Editor.Operations
                 bridge_session_id = XUUnityLightMcpBridgeRuntimeState.BridgeSessionId,
                 bridge_generation = XUUnityLightMcpBridgeRuntimeState.BridgeGeneration,
                 bridge_bootstrap_attached = XUUnityLightMcpBridgeRuntimeState.BridgeBootstrapAttached,
+                editor_domain_loaded_utc = currency.editor_domain_loaded_utc,
+                editor_domain_current = currency.editor_domain_current,
+                editor_domain_currency_known = currency.editor_domain_currency_known,
+                editor_domain_currency = currency.editor_domain_currency,
+                newest_editor_input_path = currency.newest_editor_input_path,
+                newest_editor_input_write_utc = currency.newest_editor_input_write_utc,
+                editor_input_count = currency.editor_input_count,
+                editor_domain_currency_reason = currency.reason,
+                editor_domain_currency_basis = currency.currency_basis,
+                editor_domain_currency_recommended_next_action = currency.recommended_next_action,
+                application_run_in_background = currency.application_run_in_background,
+                native_autofocus_enabled = currency.native_autofocus_enabled,
                 domain_reload_in_progress = XUUnityLightMcpBridgeRuntimeState.DomainReloadInProgress,
                 domain_reload_started_utc = XUUnityLightMcpBridgeRuntimeState.DomainReloadStartedUtc,
                 asset_import_in_progress = XUUnityLightMcpBridgeRuntimeState.AssetImportInProgress,

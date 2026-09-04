@@ -709,10 +709,89 @@ namespace XUUnity.LightMcp.Tests.EditMode
             Assert.That(payload.playmode_state, Is.Not.Empty);
             Assert.That(payload.health_status, Is.Not.Empty);
             Assert.That(payload.supported_operations, Does.Contain("unity.status"));
+            Assert.That(payload.supported_operations, Does.Contain("unity.project_action.currency"));
             Assert.That(payload.playmode_loop_liveness, Is.EqualTo("not_playing"));
             Assert.That(payload.playmode_frame_count, Is.GreaterThanOrEqualTo(0));
             Assert.That(payload.playmode_liveness_warning, Is.Empty);
             Assert.That(payload.playmode_liveness_remediation, Is.Empty);
+            Assert.That(payload.editor_domain_loaded_utc, Is.Not.Empty);
+            Assert.That(payload.editor_domain_currency, Is.Not.Empty);
+            Assert.That(payload.application_run_in_background, Is.True);
+            Assert.That(payload.native_autofocus_enabled, Is.False);
+        }
+
+        [Test]
+        public void ProjectActionCurrency_ClassifiesCurrentStaleAndUnknownDomains()
+        {
+            var current = XUUnityLightMcpProjectActionCurrency.ClassifyEditorDomainCurrency(
+                "2026-09-03T12:00:00.0000000Z",
+                "2026-09-03T11:59:59.0000000Z",
+                true,
+                out var currentFlag,
+                out var currentKnown,
+                out var currentReason);
+            var stale = XUUnityLightMcpProjectActionCurrency.ClassifyEditorDomainCurrency(
+                "2026-09-03T12:00:00.0000000Z",
+                "2026-09-03T12:00:01.0000000Z",
+                true,
+                out var staleFlag,
+                out var staleKnown,
+                out var staleReason);
+            var unknown = XUUnityLightMcpProjectActionCurrency.ClassifyEditorDomainCurrency(
+                "",
+                "2026-09-03T12:00:01.0000000Z",
+                true,
+                out var unknownFlag,
+                out var unknownKnown,
+                out var unknownReason);
+
+            Assert.That(current, Is.EqualTo("current"));
+            Assert.That(currentFlag, Is.True);
+            Assert.That(currentKnown, Is.True);
+            Assert.That(currentReason, Is.EqualTo("editor_domain_loaded_after_newest_assets_input"));
+            Assert.That(stale, Is.EqualTo("stale"));
+            Assert.That(staleFlag, Is.False);
+            Assert.That(staleKnown, Is.True);
+            Assert.That(staleReason, Is.EqualTo("assets_editor_input_newer_than_loaded_editor_domain"));
+            Assert.That(unknown, Is.EqualTo("unknown"));
+            Assert.That(unknownFlag, Is.False);
+            Assert.That(unknownKnown, Is.False);
+            Assert.That(unknownReason, Is.EqualTo("editor_domain_load_time_unavailable"));
+        }
+
+        [Test]
+        public void ProjectActionCurrencyOperation_ResolvesFreshAssetsContractWithoutRefreshing()
+        {
+            var catalogPath = WriteTemporaryProjectActionCatalog(true);
+            try
+            {
+                var response = new XUUnityLightMcpProjectActionCurrencyOperation().Execute(new XUUnityLightMcpRequest
+                {
+                    request_id = "project-action-currency-selftest",
+                    operation = "unity.project_action.currency",
+                    args_json = JsonUtility.ToJson(new XUUnityLightMcpProjectActionCurrencyArgs
+                    {
+                        actionId = "localization.scan",
+                        catalogPath = catalogPath,
+                    }),
+                });
+                var payload = JsonUtility.FromJson<XUUnityLightMcpProjectActionCurrencyPayload>(response.payload_json);
+
+                Assert.That(response.status, Is.EqualTo("ok"));
+                Assert.That(payload.action_id, Is.EqualTo("localization.scan"));
+                Assert.That(payload.catalog_path, Is.EqualTo(catalogPath));
+                Assert.That(payload.requires_fresh_assets, Is.True);
+                Assert.That(payload.asset_refresh_performed, Is.False);
+                Assert.That(payload.safe_to_invoke, Is.False);
+                Assert.That(payload.reason, Is.EqualTo("catalog_requires_fresh_assets_without_completed_refresh"));
+                Assert.That(payload.recommended_next_action, Is.EqualTo("run_automatic_project_refresh_before_invoking"));
+                Assert.That(payload.application_run_in_background, Is.True);
+                Assert.That(payload.native_autofocus_enabled, Is.False);
+            }
+            finally
+            {
+                File.Delete(catalogPath);
+            }
         }
 
         [Test]
@@ -839,10 +918,57 @@ namespace XUUnity.LightMcp.Tests.EditMode
 
                 Assert.That(normalized, Is.True, $"{errorCode}: {errorMessage}");
                 var args = JsonUtility.FromJson<XUUnityLightMcpScenarioValidateArgs>(normalizedArgsJson);
-                Assert.That(args.scenario.steps[0].kind, Is.EqualTo("project_defined_hook"));
-                Assert.That(args.scenario.steps[0].hookName, Is.EqualTo("sample.localization"));
-                Assert.That(args.scenario.steps[0].hookPayloadJson, Does.Contain("\"action\":\"localization.scan\""));
-                Assert.That(args.scenario.steps[0].hookPayloadJson, Does.Contain("\"target_language\":\"pt-BR\""));
+                Assert.That(args.scenario.steps.Count, Is.EqualTo(2));
+                Assert.That(args.scenario.steps[0].kind, Is.EqualTo("project_action_currency"));
+                Assert.That(args.scenario.steps[0].stepId, Is.EqualTo("scan__currency"));
+                Assert.That(args.scenario.steps[1].kind, Is.EqualTo("project_defined_hook"));
+                Assert.That(args.scenario.steps[1].hookName, Is.EqualTo("sample.localization"));
+                CollectionAssert.AreEqual(new[] { "scan__currency" }, args.scenario.steps[1].dependsOn);
+                Assert.That(args.scenario.steps[1].hookPayloadJson, Does.Contain("\"action\":\"localization.scan\""));
+                Assert.That(args.scenario.steps[1].hookPayloadJson, Does.Contain("\"target_language\":\"pt-BR\""));
+            }
+            finally
+            {
+                File.Delete(catalogPath);
+            }
+        }
+
+        [Test]
+        public void ScenarioProjectActionNormalizer_AutomaticallyRefreshesFreshAssetActions()
+        {
+            var catalogPath = WriteTemporaryProjectActionCatalog(true);
+            try
+            {
+                var argsJson = "{\"scenario\":{\"name\":\"fresh_assets\",\"steps\":[{\"stepId\":\"scan\",\"kind\":\"project_action\",\"actionId\":\"localization.scan\",\"allowMutating\":true,\"dependsOn\":[\"prepare\"],\"runIfStepPassed\":[\"prepare\"],\"payload\":{}}]}}";
+
+                var normalized = XUUnityLightMcpScenarioProjectActionNormalizer.TryNormalizeArgsJson(
+                    argsJson,
+                    catalogPath,
+                    out var normalizedArgsJson,
+                    out var errorCode,
+                    out var errorMessage);
+
+                Assert.That(normalized, Is.True, $"{errorCode}: {errorMessage}");
+                var args = JsonUtility.FromJson<XUUnityLightMcpScenarioValidateArgs>(normalizedArgsJson);
+                Assert.That(args.scenario.steps.Count, Is.EqualTo(3));
+                var refresh = args.scenario.steps[0];
+                var currency = args.scenario.steps[1];
+                var hook = args.scenario.steps[2];
+                Assert.That(refresh.kind, Is.EqualTo("project_refresh"));
+                Assert.That(refresh.stepId, Is.EqualTo("scan__refresh_assets"));
+                Assert.That(refresh.forceAssetRefresh, Is.True);
+                Assert.That(refresh.resolvePackages, Is.False);
+                Assert.That(refresh.rerunHealthProbe, Is.False);
+                CollectionAssert.AreEqual(new[] { "prepare" }, refresh.dependsOn);
+                CollectionAssert.AreEqual(new[] { "prepare" }, refresh.runIfStepPassed);
+                Assert.That(currency.kind, Is.EqualTo("project_action_currency"));
+                Assert.That(currency.requiresFreshAssets, Is.True);
+                Assert.That(currency.assetRefreshStepId, Is.EqualTo("scan__refresh_assets"));
+                CollectionAssert.AreEqual(new[] { "scan__refresh_assets" }, currency.dependsOn);
+                Assert.That(hook.kind, Is.EqualTo("project_defined_hook"));
+                Assert.That(hook.stepId, Is.EqualTo("scan"));
+                CollectionAssert.AreEqual(new[] { "scan__currency" }, hook.dependsOn);
+                Assert.That(hook.runIfStepPassed, Is.Null);
             }
             finally
             {
@@ -1254,7 +1380,7 @@ namespace XUUnity.LightMcp.Tests.EditMode
             Assert.That(XUUnityLightMcpScenarioRunner.HasActiveRun(), Is.False);
         }
 
-        static string WriteTemporaryProjectActionCatalog()
+        static string WriteTemporaryProjectActionCatalog(bool requiresFreshAssets = false)
         {
             var catalogPath = Path.Combine(Path.GetTempPath(), $"xuunity_project_actions_{Guid.NewGuid():N}.yaml");
             File.WriteAllText(
@@ -1267,6 +1393,7 @@ namespace XUUnity.LightMcp.Tests.EditMode
                 + "    aliases:\n"
                 + "      - localization.discovery\n"
                 + "    hookName: sample.localization\n"
+                + (requiresFreshAssets ? "    requiresFreshAssets: true\n" : "")
                 + "    payload: {}\n"
                 + "    mutates:\n"
                 + "      - repo-level localization pipeline reports\n");

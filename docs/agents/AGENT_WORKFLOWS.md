@@ -49,6 +49,9 @@ Every agent workflow should follow this contract:
 14. Treat a play-mode observation as evidence only while
     `playmode_loop_liveness` is `advancing`; an unfocused editor throttles the
     game loop while every editor health field stays green.
+15. Treat `editor_domain_current=true` as a precondition for project actions;
+    mark asset-reading actions `requiresFreshAssets: true` so refresh and settle
+    happen automatically before the shared currency gate.
 
 Stop immediately when:
 
@@ -99,6 +102,7 @@ Use these MCP tools from compatible clients:
 - `unity_request_final_status`
 - `unity_project_refresh`
 - `unity_project_action_list`
+- `unity_project_action_currency`
 - `unity_project_action_invoke`
 - `unity_artifact_register`
 - `unity_artifact_write_report`
@@ -250,7 +254,7 @@ Minimum evidence object:
   "workflowId": "post_change_validation",
   "projectRoot": "$PROJECT_ROOT",
   "unityVersion": "6000.0.58f2",
-  "packageVersion": "0.3.68",
+  "packageVersion": "0.3.69",
   "packageSourceMode": "git",
   "verdict": "pass",
   "checks": [
@@ -1013,7 +1017,7 @@ Production route:
 
 ```bash
 # First synchronize release-facing version references, for example with
-# --version 0.3.68 when preparing the next patch release.
+# --version 0.3.69 when preparing the next patch release.
 python3 scripts/tools/sync_release_version.py --version <next-version>
 python3 scripts/testing/check_release_version_consistency.py
 scripts/testing/run_host_python_tests.sh

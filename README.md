@@ -124,14 +124,14 @@ Use this contract when the user gives a short request such as:
 > path.
 
 ```text
-Set up XUUnity Light Unity MCP release v0.3.68 from the canonical repository
+Set up XUUnity Light Unity MCP release v0.3.69 from the canonical repository
 https://github.com/FoxsterDev/xuunity-mcp for /path/to/UnityProject, follow
-https://github.com/FoxsterDev/xuunity-mcp/blob/v0.3.68/README.md. Before executing
-an existing helper, compare its version and .source_root with v0.3.68 and refresh
+https://github.com/FoxsterDev/xuunity-mcp/blob/v0.3.69/README.md. Before executing
+an existing helper, compare its version and .source_root with v0.3.69 and refresh
 stale files from that release. On native Windows, migrate only the XUUnity client
 block to cmd.exe plus run_installed_or_refresh_xuunity_mcp.cmd. After any helper
 or client-config change, restart or refresh the client, list the live MCP tools,
-and run unity_status_summary. Require mcp_server_info.version=0.3.68 in that live
+and run unity_status_summary. Require mcp_server_info.version=0.3.69 in that live
 result. Only then run EditMode tests.
 ```
 
@@ -153,7 +153,7 @@ Agent defaults:
 ### Required Sequence
 
 1. Read the release-pinned
-   `https://github.com/FoxsterDev/xuunity-mcp/blob/v0.3.68/README.md`, its
+   `https://github.com/FoxsterDev/xuunity-mcp/blob/v0.3.69/README.md`, its
    `INSTALL.md`, and the matching `docs/clients/*` guide for the current host
    client.
 2. Run a non-mutating preflight:
@@ -193,7 +193,7 @@ Agent defaults:
 9. After any helper or client-config change, restart or refresh the client,
    confirm that `xuunity_light_unity` appears in its MCP server list, list the
    live MCP tools, and run `unity_status_summary`; require
-   `mcp_server_info.version=0.3.68`. Helper-only validation does
+   `mcp_server_info.version=0.3.69`. Helper-only validation does
    not prove that the current MCP client session is connected.
 10. When the user requested tests, run EditMode tests only after the live status
     summary is healthy.
@@ -235,14 +235,14 @@ Preflight review
 - Unity project root: <approved project root>
 - Additional discovered Unity projects: <none or list>
 - Existing helper directory: <present | missing>
-- Requested package release: <v0.3.68>
+- Requested package release: <v0.3.69>
 - Current package pin: <missing | current | stale | custom>
 - Helper state: <current | refresh required | missing> (<installed version and source root>)
 - Client launcher: <native/current | migration required>
 - Planned project file changes: <manifest, bridge config, lockfile, none>
 - Planned user-level config changes: <exact file paths or none>
 - Restart or refresh required after mutation: <yes/no and which client>
-- Required live proof after restart: <server listed, tools listed, unity_status_summary healthy with mcp_server_info.version=0.3.68>
+- Required live proof after restart: <server listed, tools listed, unity_status_summary healthy with mcp_server_info.version=0.3.69>
 - Planned commands after approval: <setup-apply, validate-setup, ensure-ready, request-status-summary, unity_status_summary after reload, ...>
 
 Do not run setup-apply, installer commands, helper sync, or client config edits
@@ -443,8 +443,8 @@ first requested MCP operation after setup.
 
 Inputs:
 - Canonical source repository: https://github.com/FoxsterDev/xuunity-mcp
-- Required release: v0.3.68
-- Release README: https://github.com/FoxsterDev/xuunity-mcp/blob/v0.3.68/README.md
+- Required release: v0.3.69
+- Release README: https://github.com/FoxsterDev/xuunity-mcp/blob/v0.3.69/README.md
 - Unity project root: <absolute path to the Unity project>
 - Workspace root: <absolute path to workspace; may equal the project root>
 - First operation after setup: <optional, for example EditMode tests, health check, compile, or none>
@@ -463,8 +463,8 @@ Rules:
 - Install the required tagged Git UPM release unless the user explicitly
   requests local package development.
 - Reuse an existing helper install directory only after checking its installed
-  version, `.source_root`, and refresh launcher against v0.3.68. Do not execute
-  stale helper files; refresh them from the approved v0.3.68 source first.
+  version, `.source_root`, and refresh launcher against v0.3.69. Do not execute
+  stale helper files; refresh them from the approved v0.3.69 source first.
 - Preserve existing config. Merge the `xuunity_light_unity` server block; do
   not overwrite unrelated MCP servers, editor settings, or package entries. On
   native Windows, replace only an existing XUUnity `bash`/`run.sh` block with
@@ -483,7 +483,7 @@ Required procedure:
    topology, current package pin, installed helper version/source, and client
    launcher flavor.
 2. Use the canonical source repository
-   https://github.com/FoxsterDev/xuunity-mcp. If its v0.3.68 source is missing
+   https://github.com/FoxsterDev/xuunity-mcp. If its v0.3.69 source is missing
    locally, ask before cloning it outside the Unity Assets folder and treat it
    as <MCP_REPO_ROOT>.
 3. Produce a non-mutating setup plan from <MCP_REPO_ROOT>. `setup-plan` must
@@ -498,7 +498,7 @@ Required procedure:
    - intended wiring target
    - requested Unity project root
    - additional discovered Unity projects
-   - requested v0.3.68 package release and current manifest pin
+   - requested v0.3.69 package release and current manifest pin
    - installed helper version/source and whether refresh is required
    - current client launcher and whether native Windows migration is required
    - files that will change, including user-level config
@@ -508,11 +508,11 @@ Required procedure:
    wiring, setup-apply, manifest edits, lockfile edits, or user-level config
    changes.
 6. After approval, refresh the host helper whenever its version/source does not
-   match v0.3.68. Reuse the install directory, not stale files:
+   match v0.3.69. Reuse the install directory, not stale files:
    - POSIX: `bash init_xuunity_light_unity_mcp.sh`
    - native Windows Codex: set
      `XUUNITY_LIGHT_UNITY_MCP_INSTALL_TARGET=codex`, then run
-     `.\xuunity_light_unity_mcp.cmd server-help` from the v0.3.68 source
+     `.\xuunity_light_unity_mcp.cmd server-help` from the v0.3.69 source
 7. Apply the approved plan only to the approved Unity project roots:
    bash xuunity_light_unity_mcp.sh setup-apply --plan-file /tmp/xuunity-setup-plan.json --project-root "<UNITY_PROJECT_ROOT>" --yes
 8. Wire the selected client using templates/clients/ or the matching
@@ -557,7 +557,7 @@ In Unity: `Window > Package Manager > + > Add package from git URL...`
 > Tip
 >
 > ```text
-> https://github.com/FoxsterDev/xuunity-mcp.git?path=/packages/com.xuunity.light-mcp#v0.3.68
+> https://github.com/FoxsterDev/xuunity-mcp.git?path=/packages/com.xuunity.light-mcp#v0.3.69
 > ```
 
 Or add it directly to `Packages/manifest.json`:
@@ -565,7 +565,7 @@ Or add it directly to `Packages/manifest.json`:
 ```json
 {
   "dependencies": {
-    "com.xuunity.light-mcp": "https://github.com/FoxsterDev/xuunity-mcp.git?path=/packages/com.xuunity.light-mcp#v0.3.68"
+    "com.xuunity.light-mcp": "https://github.com/FoxsterDev/xuunity-mcp.git?path=/packages/com.xuunity.light-mcp#v0.3.69"
   }
 }
 ```
@@ -592,8 +592,8 @@ delegates to the installed low-level `run.sh` or `run.cmd` launcher.
 
 This refresh is source-relative, not an update-to-latest service. If
 `.source_root` still points at an older checkout, the old helper can consider
-itself current. Before executing an existing helper for a v0.3.68 setup, compare
-its installed version and `.source_root` with the approved v0.3.68 source and
+itself current. Before executing an existing helper for a v0.3.69 setup, compare
+its installed version and `.source_root` with the approved v0.3.69 source and
 refresh it from that source when they differ.
 
 ### 2. Install The Host MCP Helper
@@ -800,7 +800,8 @@ Popular MCP tools:
 `unity_game_view_configure` | `unity_game_view_screenshot` |
 `unity_scenario_validate` | `unity_scenario_run_and_wait` |
 `unity_request_final_status` | `unity_project_refresh` |
-`unity_project_action_list` | `unity_project_action_invoke` |
+`unity_project_action_list` | `unity_project_action_currency` |
+`unity_project_action_invoke` |
 `unity_artifact_register` | `unity_artifact_write_report` |
 `unity_ui_reference_register` | `unity_ui_reference_validate` |
 `unity_ui_reference_compare` | `unity_ui_fixture_validate` |
@@ -898,8 +899,18 @@ licensing resolution, artifact pointers, and next action. Rerun without
 
 Scenario JSON may use Unity-native `project_action` steps for catalog-backed
 project actions. Unity resolves `project_actions.yaml`, enforces mutation
-approval, and executes the matching `project_defined_hook`; the host wrapper
-also performs the same normalization before dispatch as an early diagnostic.
+approval, checks that the loaded editor domain is current with the newest
+`.cs`, `.asmdef`, `.asmref`, or `.rsp` input under `Assets`, and only then
+executes the matching `project_defined_hook`; the host wrapper also performs
+the same normalization before dispatch as an early diagnostic. A stale or
+unknown editor domain fails closed before the hook and returns the timestamps,
+newest input, reason, and `run_unity_project_refresh_before_invoking` recovery.
+Actions that read assets changed outside Unity can declare
+`requiresFreshAssets: true`; they automatically expand to a forced
+`project_refresh` without package resolution, then the shared currency gate,
+then the hook. `unity_project_action_currency` exposes the same preflight
+without invoking or refreshing anything, and `unity_status_summary` carries
+the editor-domain currency fields for polling.
 The invoker always injects the catalog action id into the hook payload's
 `action` key, so hooks must accept the fully-qualified action id; a catalog
 `payload.action` declaration that disagrees is reported as a
@@ -1053,6 +1064,10 @@ For prefab-only UI acceptance, prefer `unity_prefab_render` over Play Mode plus
 a second, needs no boot flow, and is immune to editor throttling while
 unfocused. Reserve play-mode screenshots for flows that genuinely need the
 running app, and trust them only while `playmode_loop_liveness` is `advancing`.
+While the bridge is active it keeps runtime `Application.runInBackground=true`
+without changing `PlayerSettings`. It deliberately does not steal OS focus:
+`native_autofocus_enabled=false` is reported in status/currency payloads, and
+point-of-use player-loop liveness remains the acceptance gate.
 
 UI prefab authoring is one lane, not two. `unity_prefab_mutate` covers typed
 fields, RectTransform geometry, CanvasGroup state, child structure, allow-listed

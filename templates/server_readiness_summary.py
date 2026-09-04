@@ -18,6 +18,8 @@ def _compact_bridge_state(state: dict[str, Any]) -> dict[str, Any]:
         "bridge_version": _int_or_zero(state.get("bridge_version")),
         "bridge_generation": _int_or_zero(state.get("bridge_generation")),
         "bridge_session_id": str(state.get("bridge_session_id") or ""),
+        "editor_domain_loaded_utc": str(state.get("editor_domain_loaded_utc") or ""),
+        "application_run_in_background": bool(state.get("application_run_in_background")),
         "editor_pid": _int_or_zero(state.get("editor_pid")),
         "unity_version": str(state.get("unity_version") or ""),
         "health_status": str(state.get("health_status") or ""),
