@@ -13,7 +13,6 @@ namespace XUUnity.LightMcp.Editor.Operations
 
         public XUUnityLightMcpResponse Execute(XUUnityLightMcpRequest request)
         {
-            XUUnityLightMcpBackgroundExecution.EnsureEnabled();
             var report = XUUnityLightMcpHealthProbe.EnsureCurrentReport();
             var currency = XUUnityLightMcpProjectActionCurrency.Capture();
             var visiblePendingRequestCount = GetVisiblePendingRequestCount(request);
@@ -47,6 +46,7 @@ namespace XUUnity.LightMcp.Editor.Operations
                 editor_domain_currency_recommended_next_action = currency.recommended_next_action,
                 application_run_in_background = currency.application_run_in_background,
                 native_autofocus_enabled = currency.native_autofocus_enabled,
+                background_execution_mode = currency.background_execution_mode,
                 domain_reload_in_progress = XUUnityLightMcpBridgeRuntimeState.DomainReloadInProgress,
                 domain_reload_started_utc = XUUnityLightMcpBridgeRuntimeState.DomainReloadStartedUtc,
                 asset_import_in_progress = XUUnityLightMcpBridgeRuntimeState.AssetImportInProgress,

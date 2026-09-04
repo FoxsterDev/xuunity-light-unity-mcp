@@ -193,11 +193,16 @@ def require_package_source_root(source_root: str) -> None:
     raise SystemExit(1)
 
 
+PAYLOAD_SHAPE_KEYS = ("action", "status", "error", "payload_mode", "payload_type", "request_id")
+
+
 def _extract_last_json_object(payload_text: str) -> dict:
     decoder = json.JSONDecoder()
     last: dict = {}
     last_end = -1
     last_start = -1
+    payload_shaped: dict = {}
+    payload_shaped_end = -1
     text = str(payload_text or "")
     for index, character in enumerate(text):
         if character != "{":
@@ -206,14 +211,17 @@ def _extract_last_json_object(payload_text: str) -> dict:
             value, consumed = decoder.raw_decode(text[index:])
         except json.JSONDecodeError:
             continue
+        if not isinstance(value, dict):
+            continue
         absolute_end = index + consumed
-        if isinstance(value, dict) and (
-            absolute_end > last_end or (absolute_end == last_end and (last_start < 0 or index < last_start))
-        ):
+        if any(key in value for key in PAYLOAD_SHAPE_KEYS) and absolute_end >= payload_shaped_end:
+            payload_shaped = value
+            payload_shaped_end = absolute_end
+        if absolute_end > last_end or (absolute_end == last_end and (last_start < 0 or index < last_start)):
             last = value
             last_end = absolute_end
             last_start = index
-    return last
+    return payload_shaped or last
 
 
 def _artifact_pointers(payload: dict) -> dict:
@@ -389,6 +397,12 @@ def build_compact_terminal_envelope(payload: dict, exit_code: int, stderr_text: 
                 str(stderr_text),
             )[-600:],
         }
+    if stderr_text and (exit_code != 0 or error) and "child_stderr_tail" not in envelope:
+        envelope["child_stderr_tail"] = re.sub(
+            r"(?:Unity-)?LicenseClient-[A-Za-z0-9._-]+",
+            "<redacted-licensing-channel>",
+            str(stderr_text),
+        )[-600:]
 
     first_failures = payload.get("first_failures")
     if "first_failure" not in envelope and isinstance(first_failures, list) and first_failures:

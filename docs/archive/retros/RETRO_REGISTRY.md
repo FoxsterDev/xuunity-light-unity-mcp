@@ -1,8 +1,8 @@
 # XUUnity Light Unity MCP Public Retro Registry
 
 Status: active public registry
-Last triage: 2026-09-04 (compile-warning evidence released in v0.3.70)
-Current release: `v0.3.70`
+Last triage: 2026-09-04 (principal review of v0.3.63-v0.3.70 fixed in v0.3.71)
+Current release: `v0.3.71`
 
 Update this file whenever a public-safe MCP retro is added, moved, renamed, or
 deleted. Host-private and project-specific retros belong in the host's single
@@ -25,6 +25,32 @@ host-local registry.
 - `Completed Public History` is the place to find reusable lessons already
   implemented, applied, superseded, or retained only for history.
 - Prompt templates are listed separately and are not backlog items.
+
+## Re-Evaluation 2026-09-04 (principal review of `v0.3.63`-`v0.3.70`)
+
+- An independent principal-level review of the `v0.3.63`-`v0.3.70` range was
+  triaged finding by finding and fixed in `v0.3.71`. The corrections that
+  changed product behavior: the editor-domain currency gate now mirrors Unity's
+  own asset-import exclusions and converges after a settled forced refresh
+  instead of blocking forever; background execution is opt-in and restores the
+  project's value, because an editor-time `Application.runInBackground`
+  assignment is `PlayerSettings`-backed and had been reaching consumers'
+  `ProjectSettings.asset`; point-of-use liveness evidence no longer defaults to
+  `editor_truth_confirmed`; and request attribution separates the operator's own
+  CLI from another client session.
+- The evidence gap the review named is closed at the source: the package
+  self-test runner derives its assembly plan from the package instead of a
+  hand-maintained filter, runs each planned assembly as its own request, and
+  fails when one contributes no tests. That put the uGUI EditMode, uGUI PlayMode
+  and TextMeshPro EditMode suites under execution proof; the TextMeshPro suite
+  had never run in that lane.
+- Release-notes errata for `v0.3.63`, `v0.3.66`, `v0.3.69` and `v0.3.70` are
+  recorded in the `0.3.71` changelog section rather than left standing.
+- Deliberately not done in a patch release: renaming the `playmode_throttled`
+  token that serves both as a warning code and as a trust class, and unifying
+  the two `result_trust_class` namespaces. Both are breaking renames; the whole
+  published vocabulary is now one table in `docs/reference/GLOSSARY.md` so the
+  next drift is visible.
 
 ## Re-Evaluation 2026-09-04 (compile-warning evidence)
 

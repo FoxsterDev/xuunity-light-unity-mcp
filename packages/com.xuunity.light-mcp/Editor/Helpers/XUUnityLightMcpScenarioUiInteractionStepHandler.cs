@@ -211,7 +211,7 @@ namespace XUUnity.LightMcp.Editor.Helpers
             }
 
             stepResult.status = "passed";
-            stepResult.outcome = "interaction_delivered";
+            stepResult.outcome = click.no_observable_effect ? "delivered_no_observable_effect" : "interaction_delivered";
             return true;
         }
 

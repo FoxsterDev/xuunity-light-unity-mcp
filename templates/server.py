@@ -10,7 +10,7 @@ from typing import Any
 
 SERVER_INFO = {
     "name": "xuunity-mcp",
-    "version": "0.3.70",
+    "version": "0.3.71",
 }
 PROTOCOL_VERSION = "2025-06-18"
 
@@ -43,6 +43,7 @@ from server_editor_host import (
     force_terminate_verified_project_editor,
 )
 from server_bridge_runtime import (
+    HOST_CLIENT_KIND_CLI,
     bridge_enabled,
     bridge_identity_from_state,
     heartbeat_age_seconds,
@@ -53,6 +54,7 @@ from server_bridge_runtime import (
     derive_busy_reason,
     pid_is_alive,
     read_best_effort_bridge_state,
+    mark_host_client_kind,
 )
 from server_discovery import discover_project_context_state
 from server_project_context import (
@@ -247,6 +249,7 @@ def main() -> None:
         if len(sys.argv) == 1:
             raise SystemExit(serve_stdio())
 
+        mark_host_client_kind(HOST_CLIENT_KIND_CLI)
         parser = build_parser()
         try:
             args = parser.parse_args()

@@ -16,6 +16,7 @@ import server_bridge_final_status
 import server_cli_commands
 import server_core
 import server_editor_host
+import server_host_platform
 import server_hub_licensing
 import server_launcher
 
@@ -378,6 +379,82 @@ class OperatorEnvelopeAndLifecycleTests(unittest.TestCase):
 
         self.assertEqual("unity_version_mismatch", raised.exception.code)
         self.assertTrue(raised.exception.details["explicit_unity_app_refused"])
+
+
+LINUX_HUB_PARENT_COMMANDS = (
+    "/usr/bin/unityhub",
+    "/opt/unityhub/unityhub --no-sandbox",
+    "/opt/unityhub/unityhub-bin --no-sandbox --disable-gpu-sandbox",
+    "/tmp/.mount_UnityHub3l2Kq9/unityhub-bin --type=renderer",
+    "/home/dev/Applications/UnityHub-3.13.1.AppImage --no-sandbox",
+    "/snap/unityhub/current/opt/unityhub/unityhub-bin",
+)
+
+LINUX_HUB_LOOKALIKE_COMMANDS = (
+    "/usr/bin/vim /opt/unityhub/unityhub-bin",
+    "/usr/bin/tail -f /opt/unityhub/logs/info-log.json",
+    "python3 /home/dev/tools/unityhub_watch.py",
+    "/home/dev/scripts/unityhub-installer.sh --check",
+    "/opt/unityhub-old/unityhub-bin.bak",
+    "bash -c /opt/unityhub/unityhub-bin",
+)
+
+MAC_AND_WINDOWS_HUB_COMMANDS = (
+    "/Applications/Unity Hub.app/Contents/MacOS/Unity Hub",
+    '"C:/Program Files/Unity Hub/Unity Hub.exe"',
+    "C:\\Program Files\\Unity Hub\\Unity Hub.exe",
+)
+
+
+class HubParentCommandRecognitionTests(unittest.TestCase):
+    maxDiff = None
+
+    def parsed_commands(self, ps_stdout: str) -> list[str]:
+        adapter = server_host_platform.HostPlatformAdapter(platform_kind="linux")
+        completed = mock.Mock(returncode=0, stdout=ps_stdout, stderr="")
+        with (
+            mock.patch.object(server_host_platform.os, "name", "posix"),
+            mock.patch.object(server_host_platform, "is_wsl", return_value=False),
+            mock.patch.object(server_host_platform.subprocess, "run", return_value=completed),
+        ):
+            report = adapter.list_process_commands_report()
+        self.assertTrue(report["available"], report)
+        return [str(entry.get("command") or "") for entry in report["processes"]]
+
+    def test_real_ps_output_classifies_every_linux_hub_process_form(self) -> None:
+        lines = [
+            f"{4000 + index:>6} {1:>6} {command}"
+            for index, command in enumerate(LINUX_HUB_PARENT_COMMANDS)
+        ]
+        commands = self.parsed_commands("\n".join(lines) + "\n")
+
+        self.assertEqual(len(LINUX_HUB_PARENT_COMMANDS), len(commands))
+        for command in commands:
+            self.assertTrue(
+                server_hub_licensing._is_unity_hub_command(command),
+                f"a running Unity Hub was not recognized: {command}",
+            )
+
+    def test_real_ps_output_refuses_hub_lookalikes(self) -> None:
+        lines = [
+            f"{5000 + index:>6} {1:>6} {command}"
+            for index, command in enumerate(LINUX_HUB_LOOKALIKE_COMMANDS)
+        ]
+        commands = self.parsed_commands("\n".join(lines) + "\n")
+
+        self.assertEqual(len(LINUX_HUB_LOOKALIKE_COMMANDS), len(commands))
+        for command in commands:
+            self.assertFalse(
+                server_hub_licensing._is_unity_hub_command(command),
+                f"a process that only mentions the Hub was classified as the Hub: {command}",
+            )
+
+    def test_mac_and_windows_hub_forms_stay_recognized(self) -> None:
+        for command in MAC_AND_WINDOWS_HUB_COMMANDS:
+            self.assertTrue(
+                server_hub_licensing._is_unity_hub_command(command),
+                f"a running Unity Hub was not recognized: {command}",
+            )
 
 
 if __name__ == "__main__":

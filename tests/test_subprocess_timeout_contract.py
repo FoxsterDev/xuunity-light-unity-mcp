@@ -48,6 +48,7 @@ HIDDEN_WINDOW_FILES = (
     "server_editor_host_lifecycle.py",
     "server_launcher.py",
     "server_workspace_effects.py",
+    "server_hub_licensing.py",
 )
 
 

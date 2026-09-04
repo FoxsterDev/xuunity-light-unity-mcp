@@ -20,6 +20,7 @@ def _compact_bridge_state(state: dict[str, Any]) -> dict[str, Any]:
         "bridge_session_id": str(state.get("bridge_session_id") or ""),
         "editor_domain_loaded_utc": str(state.get("editor_domain_loaded_utc") or ""),
         "application_run_in_background": bool(state.get("application_run_in_background")),
+        "background_execution_mode": str(state.get("background_execution_mode") or ""),
         "editor_pid": _int_or_zero(state.get("editor_pid")),
         "unity_version": str(state.get("unity_version") or ""),
         "health_status": str(state.get("health_status") or ""),

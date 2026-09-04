@@ -70,6 +70,23 @@ namespace XUUnity.LightMcp.Tests.EditMode
         }
 
         [Test]
+        public void CompilerDiagnosticCode_IsReadFromTheDiagnosticNotThePath()
+        {
+            Assert.That(
+                XUUnityLightMcpCompileUtility.ExtractCompilerDiagnosticCode(
+                    "Assets/Physics2020/Board.cs(12,7): warning CS0168: variable declared but never used"),
+                Is.EqualTo("CS0168"));
+            Assert.That(
+                XUUnityLightMcpCompileUtility.ExtractCompilerDiagnosticCode(
+                    "Assets/CS2024Tools/Board.cs(3,1): error CS1002: ; expected"),
+                Is.EqualTo("CS1002"));
+            Assert.That(
+                XUUnityLightMcpCompileUtility.ExtractCompilerDiagnosticCode("Assets/Docs2024/Note.cs(1,1): note"),
+                Is.Empty);
+            Assert.That(XUUnityLightMcpCompileUtility.ExtractCompilerDiagnosticCode(null), Is.Empty);
+        }
+
+        [Test]
         public void CompileMatrixWarnings_AggregateUniqueEvidenceAcrossConfigurations()
         {
             var shared = new XUUnityLightMcpCompileErrorItem
@@ -785,8 +802,19 @@ namespace XUUnity.LightMcp.Tests.EditMode
             Assert.That(payload.playmode_liveness_remediation, Is.Empty);
             Assert.That(payload.editor_domain_loaded_utc, Is.Not.Empty);
             Assert.That(payload.editor_domain_currency, Is.Not.Empty);
-            Assert.That(payload.application_run_in_background, Is.True);
+            Assert.That(payload.application_run_in_background, Is.EqualTo(Application.runInBackground));
             Assert.That(payload.native_autofocus_enabled, Is.False);
+            Assert.That(payload.background_execution_mode, Is.EqualTo(XUUnityLightMcpBackgroundExecution.Mode));
+        }
+
+        [Test]
+        public void BackgroundExecution_DefaultsToProjectOwnedWithoutExplicitOptIn()
+        {
+            var config = new XUUnityLightMcpBridgeConfig();
+
+            Assert.That(config.background_execution_enabled, Is.False);
+            Assert.That(XUUnityLightMcpBackgroundExecution.ProjectOwnedMode, Is.EqualTo("project_owned"));
+            Assert.That(XUUnityLightMcpBackgroundExecution.ManagedMode, Is.EqualTo("managed"));
         }
 
         [Test]
@@ -796,36 +824,147 @@ namespace XUUnity.LightMcp.Tests.EditMode
                 "2026-09-03T12:00:00.0000000Z",
                 "2026-09-03T11:59:59.0000000Z",
                 true,
+                "",
+                false,
                 out var currentFlag,
                 out var currentKnown,
-                out var currentReason);
+                out var currentReason,
+                out var currentBasis);
             var stale = XUUnityLightMcpProjectActionCurrency.ClassifyEditorDomainCurrency(
                 "2026-09-03T12:00:00.0000000Z",
                 "2026-09-03T12:00:01.0000000Z",
                 true,
+                "",
+                false,
                 out var staleFlag,
                 out var staleKnown,
-                out var staleReason);
+                out var staleReason,
+                out var staleBasis);
             var unknown = XUUnityLightMcpProjectActionCurrency.ClassifyEditorDomainCurrency(
                 "",
                 "2026-09-03T12:00:01.0000000Z",
                 true,
+                "",
+                false,
                 out var unknownFlag,
                 out var unknownKnown,
-                out var unknownReason);
+                out var unknownReason,
+                out _);
 
             Assert.That(current, Is.EqualTo("current"));
             Assert.That(currentFlag, Is.True);
             Assert.That(currentKnown, Is.True);
             Assert.That(currentReason, Is.EqualTo("editor_domain_loaded_after_newest_assets_input"));
+            Assert.That(currentBasis, Is.EqualTo("editor_domain_load_vs_newest_assets_editor_input"));
             Assert.That(stale, Is.EqualTo("stale"));
             Assert.That(staleFlag, Is.False);
             Assert.That(staleKnown, Is.True);
             Assert.That(staleReason, Is.EqualTo("assets_editor_input_newer_than_loaded_editor_domain"));
+            Assert.That(staleBasis, Is.EqualTo("editor_domain_load_vs_newest_assets_editor_input"));
             Assert.That(unknown, Is.EqualTo("unknown"));
             Assert.That(unknownFlag, Is.False);
             Assert.That(unknownKnown, Is.False);
             Assert.That(unknownReason, Is.EqualTo("editor_domain_load_time_unavailable"));
+        }
+
+        [Test]
+        public void ProjectActionCurrency_ConvergesAfterASettledForcedRefreshButNotOnFailedCompilation()
+        {
+            var converged = XUUnityLightMcpProjectActionCurrency.ClassifyEditorDomainCurrency(
+                "2026-09-03T12:00:00.0000000Z",
+                "2026-09-03T12:00:01.0000000Z",
+                true,
+                "2026-09-03T12:00:05.0000000Z",
+                false,
+                out var convergedFlag,
+                out var convergedKnown,
+                out var convergedReason,
+                out var convergedBasis);
+            var touchedAfterRefresh = XUUnityLightMcpProjectActionCurrency.ClassifyEditorDomainCurrency(
+                "2026-09-03T12:00:00.0000000Z",
+                "2026-09-03T12:00:07.0000000Z",
+                true,
+                "2026-09-03T12:00:05.0000000Z",
+                false,
+                out var touchedFlag,
+                out _,
+                out var touchedReason,
+                out var touchedBasis);
+            var brokenCompilation = XUUnityLightMcpProjectActionCurrency.ClassifyEditorDomainCurrency(
+                "2026-09-03T12:00:00.0000000Z",
+                "2026-09-03T12:00:01.0000000Z",
+                true,
+                "2026-09-03T12:00:05.0000000Z",
+                true,
+                out var brokenFlag,
+                out _,
+                out var brokenReason,
+                out var brokenBasis);
+
+            Assert.That(converged, Is.EqualTo("current"));
+            Assert.That(convergedFlag, Is.True);
+            Assert.That(convergedKnown, Is.True);
+            Assert.That(
+                convergedReason,
+                Is.EqualTo("settled_forced_asset_refresh_after_newest_assets_input_without_script_reload"));
+            Assert.That(
+                convergedBasis,
+                Is.EqualTo("settled_forced_asset_refresh_covers_newest_assets_editor_input"));
+            Assert.That(touchedAfterRefresh, Is.EqualTo("stale"));
+            Assert.That(touchedFlag, Is.False);
+            Assert.That(touchedReason, Is.EqualTo("assets_editor_input_newer_than_loaded_editor_domain"));
+            Assert.That(touchedBasis, Is.EqualTo("editor_domain_load_vs_newest_assets_editor_input"));
+            Assert.That(brokenCompilation, Is.EqualTo("stale"));
+            Assert.That(brokenFlag, Is.False);
+            Assert.That(
+                brokenReason,
+                Is.EqualTo("assets_editor_input_newer_than_loaded_editor_domain_with_failed_script_compilation"));
+            Assert.That(brokenBasis, Is.EqualTo("editor_domain_load_vs_newest_assets_editor_input"));
+        }
+
+        [Test]
+        public void ProjectActionCurrency_SkipsUnityIgnoredEntriesWhenScanningEditorInputs()
+        {
+            Assert.That(XUUnityLightMcpProjectActionCurrency.IsUnityIgnoredEntryName("Samples~"), Is.True);
+            Assert.That(XUUnityLightMcpProjectActionCurrency.IsUnityIgnoredEntryName(".git"), Is.True);
+            Assert.That(XUUnityLightMcpProjectActionCurrency.IsUnityIgnoredEntryName("CVS"), Is.True);
+            Assert.That(XUUnityLightMcpProjectActionCurrency.IsUnityIgnoredEntryName("Scripts"), Is.False);
+            Assert.That(XUUnityLightMcpProjectActionCurrency.IsUnityIgnoredEntryName("Board.cs"), Is.False);
+
+            var scanRoot = Path.Combine(Path.GetTempPath(), "XUUnityMcpCurrencyScan" + Guid.NewGuid().ToString("N"));
+            var ignoredDirectory = Path.Combine(scanRoot, "Samples~");
+            var importedDirectory = Path.Combine(scanRoot, "Scripts");
+            try
+            {
+                Directory.CreateDirectory(ignoredDirectory);
+                Directory.CreateDirectory(importedDirectory);
+                var importedScript = Path.Combine(importedDirectory, "Imported.cs");
+                var ignoredScript = Path.Combine(ignoredDirectory, "Ignored.cs");
+                File.WriteAllText(importedScript, "// imported");
+                File.WriteAllText(ignoredScript, "// ignored");
+                File.SetLastWriteTimeUtc(importedScript, new DateTime(2026, 9, 3, 12, 0, 0, DateTimeKind.Utc));
+                File.SetLastWriteTimeUtc(ignoredScript, new DateTime(2026, 9, 4, 12, 0, 0, DateTimeKind.Utc));
+
+                var scanned = XUUnityLightMcpProjectActionCurrency.TryFindNewestEditorInput(
+                    scanRoot,
+                    out var newestPath,
+                    out var newestWriteUtc,
+                    out var inputCount,
+                    out var scanError);
+
+                Assert.That(scanned, Is.True);
+                Assert.That(scanError, Is.Empty);
+                Assert.That(inputCount, Is.EqualTo(1));
+                Assert.That(newestPath, Does.EndWith("Imported.cs"));
+                Assert.That(newestWriteUtc, Does.StartWith("2026-09-03T12:00:00"));
+            }
+            finally
+            {
+                if (Directory.Exists(scanRoot))
+                {
+                    Directory.Delete(scanRoot, true);
+                }
+            }
         }
 
         [Test]
@@ -854,8 +993,9 @@ namespace XUUnity.LightMcp.Tests.EditMode
                 Assert.That(payload.safe_to_invoke, Is.False);
                 Assert.That(payload.reason, Is.EqualTo("catalog_requires_fresh_assets_without_completed_refresh"));
                 Assert.That(payload.recommended_next_action, Is.EqualTo("run_automatic_project_refresh_before_invoking"));
-                Assert.That(payload.application_run_in_background, Is.True);
+                Assert.That(payload.application_run_in_background, Is.EqualTo(Application.runInBackground));
                 Assert.That(payload.native_autofocus_enabled, Is.False);
+                Assert.That(payload.background_execution_mode, Is.EqualTo(XUUnityLightMcpBackgroundExecution.Mode));
             }
             finally
             {
@@ -873,6 +1013,22 @@ namespace XUUnity.LightMcp.Tests.EditMode
             Assert.That(payload.playmode_frame_count, Is.GreaterThanOrEqualTo(0));
             Assert.That(payload.playmode_frames_advanced_last_interval, Is.GreaterThanOrEqualTo(0));
             Assert.That(payload.playmode_liveness_warning, Is.Empty);
+        }
+
+        [Test]
+        public void LivenessEvidence_WithoutPopulationClaimsNoTrustClass()
+        {
+            Assert.That(new XUUnityLightMcpPlayModeStatePayload().result_trust_class, Is.Empty);
+            Assert.That(new XUUnityLightMcpScenarioStepResult().result_trust_class, Is.Empty);
+            Assert.That(new XUUnityLightMcpUiClickPayload().result_trust_class, Is.Empty);
+            Assert.That(
+                JsonUtility.FromJson<XUUnityLightMcpScenarioStepResult>("{\"stepId\":\"legacy\"}").result_trust_class,
+                Is.Empty);
+
+            var populated = new XUUnityLightMcpScenarioStepResult();
+            XUUnityLightMcpPlayModeStateOperation.PopulateLivenessEvidence(populated);
+
+            Assert.That(populated.result_trust_class, Is.EqualTo("editor_truth_confirmed"));
         }
 
         [Test]
@@ -906,6 +1062,13 @@ namespace XUUnity.LightMcp.Tests.EditMode
             Assert.That(
                 XUUnityLightMcpPlayModeLivenessTracker.ResolveRemediation("playmode_throttled_editor_unfocused"),
                 Is.EqualTo("focus_the_unity_editor_or_set_interaction_mode_to_no_throttling"));
+            Assert.That(
+                XUUnityLightMcpPlayModeLivenessTracker.ResolveRemediation("playmode_throttled"),
+                Is.EqualTo("focus_the_unity_editor_or_set_interaction_mode_to_no_throttling"));
+            Assert.That(
+                XUUnityLightMcpPlayModeLivenessTracker.ResolveRemediation(
+                    XUUnityLightMcpPlayModeLivenessTracker.UnprovenUnfocusedWarning),
+                Is.EqualTo("wait_for_playmode_liveness_sample_and_retry"));
             Assert.That(XUUnityLightMcpPlayModeLivenessTracker.ResolveRemediation(""), Is.Empty);
         }
 
@@ -1028,9 +1191,11 @@ namespace XUUnity.LightMcp.Tests.EditMode
                 Assert.That(refresh.forceAssetRefresh, Is.True);
                 Assert.That(refresh.resolvePackages, Is.False);
                 Assert.That(refresh.rerunHealthProbe, Is.False);
+                Assert.That(refresh.timeoutSeconds, Is.EqualTo(180.0d));
                 CollectionAssert.AreEqual(new[] { "prepare" }, refresh.dependsOn);
                 CollectionAssert.AreEqual(new[] { "prepare" }, refresh.runIfStepPassed);
                 Assert.That(currency.kind, Is.EqualTo("project_action_currency"));
+                Assert.That(currency.actionId, Is.EqualTo("localization.scan"));
                 Assert.That(currency.requiresFreshAssets, Is.True);
                 Assert.That(currency.assetRefreshStepId, Is.EqualTo("scan__refresh_assets"));
                 CollectionAssert.AreEqual(new[] { "scan__refresh_assets" }, currency.dependsOn);

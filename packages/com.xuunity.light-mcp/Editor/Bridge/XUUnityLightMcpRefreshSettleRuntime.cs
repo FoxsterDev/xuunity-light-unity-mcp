@@ -1,3 +1,5 @@
+using UnityEditor;
+
 namespace XUUnity.LightMcp.Editor.Bridge
 {
     internal static class XUUnityLightMcpRefreshSettleRuntime
@@ -70,13 +72,26 @@ namespace XUUnity.LightMcp.Editor.Bridge
             }
         }
 
-        public static void BeginRefreshSettleTracking(string requestId, bool packageResolveRequested)
+        public static string SettledForcedAssetRefreshRequestedUtc
+        {
+            get
+            {
+                lock (XUUnityLightMcpBridgeRuntimeStorage.Gate)
+                {
+                    return XUUnityLightMcpBridgeRuntimeStorage.SettledForcedAssetRefreshRequestedUtc;
+                }
+            }
+        }
+
+        public static void BeginRefreshSettleTracking(string requestId, bool packageResolveRequested, bool forcedAssetRefresh)
         {
             lock (XUUnityLightMcpBridgeRuntimeStorage.Gate)
             {
                 XUUnityLightMcpBridgeRuntimeStorage.RefreshSettlePending = true;
                 XUUnityLightMcpBridgeRuntimeStorage.RefreshSettleRequestId = requestId ?? "";
                 XUUnityLightMcpBridgeRuntimeStorage.RefreshSettleStartedUtc = XUUnityLightMcpBridgeRuntimeStorage.UtcNow();
+                XUUnityLightMcpBridgeRuntimeStorage.RefreshSettleForcedAssetRefresh = forcedAssetRefresh;
+                XUUnityLightMcpBridgeRuntimeStorage.RefreshSettleRequestedPreciseUtc = XUUnityLightMcpBridgeRuntimeStorage.UtcNowPrecise();
                 XUUnityLightMcpBridgeRuntimeStorage.RefreshSettleCompletedUtc = "";
                 XUUnityLightMcpBridgeRuntimeStorage.RefreshSettlePhase = packageResolveRequested ? "waiting_for_package_settle" : "waiting_for_editor_idle";
                 XUUnityLightMcpBridgeRuntimeStorage.RefreshSettlePackageResolveRequested = packageResolveRequested;
@@ -104,12 +119,31 @@ namespace XUUnity.LightMcp.Editor.Bridge
                     XUUnityLightMcpBridgeRuntimeStorage.RefreshSettlePending = false;
                     XUUnityLightMcpBridgeRuntimeStorage.RefreshSettleCompletedUtc = XUUnityLightMcpBridgeRuntimeStorage.UtcNow();
                     XUUnityLightMcpBridgeRuntimeStorage.RefreshSettlePhase = "settled";
+                    XUUnityLightMcpBridgeRuntimeStorage.SettledForcedAssetRefreshRequestedUtc = ResolveSettledForcedAssetRefreshMarker(
+                        XUUnityLightMcpBridgeRuntimeStorage.RefreshSettleForcedAssetRefresh,
+                        EditorApplication.isPlaying || EditorApplication.isPlayingOrWillChangePlaymode,
+                        XUUnityLightMcpBridgeRuntimeStorage.RefreshSettleRequestedPreciseUtc,
+                        XUUnityLightMcpBridgeRuntimeStorage.SettledForcedAssetRefreshRequestedUtc);
                 }
             }
             else
             {
                 XUUnityLightMcpBridgeRuntimeStorage.RefreshSettleStableTickCount = 0;
             }
+        }
+
+        internal static string ResolveSettledForcedAssetRefreshMarker(
+            bool forcedAssetRefresh,
+            bool playModeActive,
+            string requestedPreciseUtc,
+            string existingMarker)
+        {
+            if (!forcedAssetRefresh || playModeActive || string.IsNullOrWhiteSpace(requestedPreciseUtc))
+            {
+                return existingMarker ?? "";
+            }
+
+            return requestedPreciseUtc;
         }
     }
 }

@@ -1,7 +1,7 @@
 # XUUnity Light MCP Unity Package
 
 Date: `2026-07-01`
-Status: `current for package v0.3.70`
+Status: `current for package v0.3.71`
 
 This Unity package provides the editor-side bridge for the lightweight
 XUUnity Light Unity MCP service.
@@ -24,7 +24,7 @@ Add this to `Packages/manifest.json`:
 ```json
 {
   "dependencies": {
-    "com.xuunity.light-mcp": "https://github.com/FoxsterDev/xuunity-mcp.git?path=/packages/com.xuunity.light-mcp#v0.3.70"
+    "com.xuunity.light-mcp": "https://github.com/FoxsterDev/xuunity-mcp.git?path=/packages/com.xuunity.light-mcp#v0.3.71"
   }
 }
 ```
@@ -57,10 +57,14 @@ authoritative post-settle result fields for host-side compact MCP summaries.
 Full raw bridge payloads remain available through the host server's documented
 full-payload opt-in.
 
-The bridge keeps runtime `Application.runInBackground=true` while active, but
-does not change `PlayerSettings` or request native OS focus. Status and currency
-payloads report that policy explicitly; Play Mode evidence still requires an
-advancing point-of-use liveness sample.
+Background execution is opt-in, because an editor-time
+`Application.runInBackground` assignment is backed by the project setting
+`PlayerSettings.runInBackground` and can reach a consumer's committed
+`ProjectSettings.asset`. The bridge changes it only when the project's bridge
+config sets `background_execution_enabled: true`, and then restores the original
+value on bridge disable or editor quit. It never requests native OS focus.
+Status and currency payloads report `background_execution_mode`; Play Mode
+evidence still requires an advancing point-of-use liveness sample.
 
 Before EditMode and PlayMode test execution, the package runs a best-effort
 test preflight that closes Unity Android Logcat editor windows when they are

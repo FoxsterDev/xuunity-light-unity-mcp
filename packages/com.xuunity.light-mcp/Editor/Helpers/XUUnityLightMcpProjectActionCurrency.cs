@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using UnityEditor;
 using UnityEngine;
 using XUUnity.LightMcp.Editor.Bridge;
 using XUUnity.LightMcp.Editor.Core;
@@ -10,6 +11,9 @@ namespace XUUnity.LightMcp.Editor.Helpers
 {
     internal static class XUUnityLightMcpProjectActionCurrency
     {
+        const string DomainLoadCurrencyBasis = "editor_domain_load_vs_newest_assets_editor_input";
+        const string SettledForcedAssetRefreshCurrencyBasis = "settled_forced_asset_refresh_covers_newest_assets_editor_input";
+
         static readonly HashSet<string> EditorInputExtensions = new(StringComparer.OrdinalIgnoreCase)
         {
             ".cs",
@@ -25,7 +29,6 @@ namespace XUUnity.LightMcp.Editor.Helpers
             bool assetRefreshPerformed = false,
             string assetRefreshStepId = "")
         {
-            XUUnityLightMcpBackgroundExecution.EnsureEnabled();
             var payload = new XUUnityLightMcpProjectActionCurrencyPayload
             {
                 project_root = XUUnityLightMcpFileIpcPaths.ProjectRootPath,
@@ -37,9 +40,11 @@ namespace XUUnity.LightMcp.Editor.Helpers
                 editor_domain_loaded_utc = XUUnityLightMcpBridgeRuntimeState.EditorDomainLoadedUtc,
                 application_run_in_background = Application.runInBackground,
                 native_autofocus_enabled = false,
+                background_execution_mode = XUUnityLightMcpBackgroundExecution.Mode,
             };
 
             var scanSucceeded = TryFindNewestEditorInput(
+                Path.Combine(XUUnityLightMcpFileIpcPaths.ProjectRootPath, "Assets"),
                 out var newestPath,
                 out var newestWriteUtc,
                 out var inputCount,
@@ -47,15 +52,22 @@ namespace XUUnity.LightMcp.Editor.Helpers
             payload.newest_editor_input_path = newestPath;
             payload.newest_editor_input_write_utc = newestWriteUtc;
             payload.editor_input_count = inputCount;
+            payload.script_compilation_failed = EditorUtility.scriptCompilationFailed;
+            payload.settled_forced_asset_refresh_requested_utc =
+                XUUnityLightMcpBridgeRuntimeState.SettledForcedAssetRefreshRequestedUtc;
             payload.editor_domain_currency = ClassifyEditorDomainCurrency(
                 payload.editor_domain_loaded_utc,
                 newestWriteUtc,
                 scanSucceeded,
+                payload.settled_forced_asset_refresh_requested_utc,
+                payload.script_compilation_failed,
                 out var editorDomainCurrent,
                 out var currencyKnown,
-                out var currencyReason);
+                out var currencyReason,
+                out var currencyBasis);
             payload.editor_domain_current = editorDomainCurrent;
             payload.editor_domain_currency_known = currencyKnown;
+            payload.currency_basis = currencyBasis;
 
             if (!scanSucceeded)
             {
@@ -74,7 +86,9 @@ namespace XUUnity.LightMcp.Editor.Helpers
             else if (!editorDomainCurrent)
             {
                 payload.reason = currencyReason;
-                payload.recommended_next_action = "run_unity_project_refresh_before_invoking";
+                payload.recommended_next_action = payload.script_compilation_failed
+                    ? "fix_script_compilation_errors_before_invoking"
+                    : "run_unity_project_refresh_before_invoking";
             }
             else if (!assetsCurrent)
             {
@@ -94,13 +108,17 @@ namespace XUUnity.LightMcp.Editor.Helpers
             string editorDomainLoadedUtc,
             string newestEditorInputWriteUtc,
             bool scanSucceeded,
+            string settledForcedAssetRefreshRequestedUtc,
+            bool scriptCompilationFailed,
             out bool editorDomainCurrent,
             out bool currencyKnown,
-            out string reason)
+            out string reason,
+            out string currencyBasis)
         {
             editorDomainCurrent = false;
             currencyKnown = false;
             reason = "";
+            currencyBasis = DomainLoadCurrencyBasis;
             if (!scanSucceeded)
             {
                 reason = "editor_input_scan_failed";
@@ -128,14 +146,31 @@ namespace XUUnity.LightMcp.Editor.Helpers
             }
 
             currencyKnown = true;
-            editorDomainCurrent = newestInputUtc <= domainLoadedUtc;
-            reason = editorDomainCurrent
-                ? "editor_domain_loaded_after_newest_assets_input"
+            if (newestInputUtc <= domainLoadedUtc)
+            {
+                editorDomainCurrent = true;
+                reason = "editor_domain_loaded_after_newest_assets_input";
+                return "current";
+            }
+
+            if (!scriptCompilationFailed
+                && TryParseUtc(settledForcedAssetRefreshRequestedUtc, out var forcedRefreshRequestedUtc)
+                && newestInputUtc <= forcedRefreshRequestedUtc)
+            {
+                editorDomainCurrent = true;
+                currencyBasis = SettledForcedAssetRefreshCurrencyBasis;
+                reason = "settled_forced_asset_refresh_after_newest_assets_input_without_script_reload";
+                return "current";
+            }
+
+            reason = scriptCompilationFailed
+                ? "assets_editor_input_newer_than_loaded_editor_domain_with_failed_script_compilation"
                 : "assets_editor_input_newer_than_loaded_editor_domain";
-            return editorDomainCurrent ? "current" : "stale";
+            return "stale";
         }
 
-        static bool TryFindNewestEditorInput(
+        internal static bool TryFindNewestEditorInput(
+            string assetsRoot,
             out string newestPath,
             out string newestWriteUtc,
             out int inputCount,
@@ -145,8 +180,7 @@ namespace XUUnity.LightMcp.Editor.Helpers
             newestWriteUtc = "";
             inputCount = 0;
             error = "";
-            var assetsRoot = Path.Combine(XUUnityLightMcpFileIpcPaths.ProjectRootPath, "Assets");
-            if (!Directory.Exists(assetsRoot))
+            if (string.IsNullOrEmpty(assetsRoot) || !Directory.Exists(assetsRoot))
             {
                 return true;
             }
@@ -154,22 +188,39 @@ namespace XUUnity.LightMcp.Editor.Helpers
             try
             {
                 var newestUtc = DateTime.MinValue;
-                foreach (var path in Directory.EnumerateFiles(assetsRoot, "*", SearchOption.AllDirectories))
+                var pendingDirectories = new Stack<string>();
+                pendingDirectories.Push(assetsRoot);
+                while (pendingDirectories.Count > 0)
                 {
-                    if (!EditorInputExtensions.Contains(Path.GetExtension(path)))
+                    var currentDirectory = pendingDirectories.Pop();
+                    foreach (var childDirectory in Directory.EnumerateDirectories(currentDirectory))
                     {
-                        continue;
+                        if (IsUnityIgnoredEntryName(Path.GetFileName(childDirectory)))
+                        {
+                            continue;
+                        }
+
+                        pendingDirectories.Push(childDirectory);
                     }
 
-                    inputCount++;
-                    var writeUtc = File.GetLastWriteTimeUtc(path);
-                    if (writeUtc <= newestUtc)
+                    foreach (var path in Directory.EnumerateFiles(currentDirectory))
                     {
-                        continue;
-                    }
+                        if (!EditorInputExtensions.Contains(Path.GetExtension(path))
+                            || IsUnityIgnoredEntryName(Path.GetFileName(path)))
+                        {
+                            continue;
+                        }
 
-                    newestUtc = writeUtc;
-                    newestPath = MakeProjectRelative(path);
+                        inputCount++;
+                        var writeUtc = File.GetLastWriteTimeUtc(path);
+                        if (writeUtc <= newestUtc)
+                        {
+                            continue;
+                        }
+
+                        newestUtc = writeUtc;
+                        newestPath = MakeProjectRelative(path);
+                    }
                 }
 
                 if (newestUtc != DateTime.MinValue)
@@ -184,6 +235,24 @@ namespace XUUnity.LightMcp.Editor.Helpers
                 error = ex.GetType().Name;
                 return false;
             }
+        }
+
+        internal static bool IsUnityIgnoredEntryName(string name)
+        {
+            if (string.IsNullOrEmpty(name))
+            {
+                return false;
+            }
+
+            if (name[0] == '.' || name[name.Length - 1] == '~')
+            {
+                return true;
+            }
+
+            return name.Length == 3
+                && (name[0] == 'c' || name[0] == 'C')
+                && (name[1] == 'v' || name[1] == 'V')
+                && (name[2] == 's' || name[2] == 'S');
         }
 
         static string MakeProjectRelative(string path)

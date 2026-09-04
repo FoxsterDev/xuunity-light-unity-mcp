@@ -254,7 +254,7 @@ Minimum evidence object:
   "workflowId": "post_change_validation",
   "projectRoot": "$PROJECT_ROOT",
   "unityVersion": "6000.0.58f2",
-  "packageVersion": "0.3.70",
+  "packageVersion": "0.3.71",
   "packageSourceMode": "git",
   "verdict": "pass",
   "checks": [
@@ -794,7 +794,14 @@ when the workflow must fail unless real batchmode is proven.
 If GUI admission reports multiple Hub licensing candidates, stop rather than
 choosing one. If it reports `manual_user_action_required`, let the user resolve
 Hub sign-in/session state; do not reinterpret it as package import, Test
-Framework, or compile failure.
+Framework, or compile failure. That refusal is an observability limit, not a
+proof that the editor cannot license itself: it fires when no live process whose
+parent is Unity Hub owns a licensing client, which is also what a standalone
+Licensing Client, a floating/license-server host, or a host with the Hub closed
+looks like. A host whose GUI editor does license itself can set
+`XUUNITY_LIGHT_UNITY_MCP_GUI_ADMISSION_OVERRIDE=1` to admit the GUI lane; the
+override is recorded in the lane payload as `gui_admission_override_active` with
+the waived blocker, and it waives only that preflight, never the license.
 
 Compile route:
 
@@ -1017,7 +1024,7 @@ Production route:
 
 ```bash
 # First synchronize release-facing version references, for example with
-# --version 0.3.70 when preparing the next patch release.
+# --version 0.3.71 when preparing the next patch release.
 python3 scripts/tools/sync_release_version.py --version <next-version>
 python3 scripts/testing/check_release_version_consistency.py
 scripts/testing/run_host_python_tests.sh

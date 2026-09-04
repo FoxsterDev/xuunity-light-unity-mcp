@@ -94,7 +94,7 @@ namespace XUUnity.LightMcp.Editor.Operations
                     settle_request_id = request.request_id,
                 };
 
-                XUUnityLightMcpBridgeRuntimeState.BeginRefreshSettleTracking(request.request_id, true);
+                XUUnityLightMcpBridgeRuntimeState.BeginRefreshSettleTracking(request.request_id, true, false);
 
                 if (args.refreshBefore)
                 {

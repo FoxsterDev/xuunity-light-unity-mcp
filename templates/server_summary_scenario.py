@@ -142,6 +142,10 @@ def summarize_scenario_step(step: dict[str, Any] | None) -> dict[str, Any] | Non
         if bool(playmode_set_summary.get("stale_playmode_state_detected")):
             summary["stale_playmode_state_detected"] = True
             summary["recommended_next_action"] = "exit_playmode_then_rerun_if_fresh_start_required"
+
+    ui_interaction_summary = _extract_ui_interaction_summary(step, payload)
+    if ui_interaction_summary:
+        summary["ui_interaction_summary"] = ui_interaction_summary
     return summary
 
 
@@ -283,12 +287,15 @@ def build_project_action_currency_summary(steps: list[Any]) -> dict[str, Any]:
             "newest_editor_input_path",
             "newest_editor_input_write_utc",
             "editor_input_count",
+            "settled_forced_asset_refresh_requested_utc",
+            "script_compilation_failed",
             "currency_basis",
             "safe_to_invoke",
             "reason",
             "recommended_next_action",
             "application_run_in_background",
             "native_autofocus_enabled",
+            "background_execution_mode",
         ):
             if key in payload:
                 item[key] = payload.get(key)
@@ -769,6 +776,26 @@ def _extract_playmode_set_summary(step: dict[str, Any], payload: dict[str, Any])
     if stale_playmode_state_detected:
         summary["recommended_next_action"] = "exit_playmode_then_rerun_if_fresh_start_required"
     return summary
+
+
+def _extract_ui_interaction_summary(step: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
+    if str(step.get("kind") or "") != "ui_click":
+        return {}
+    block = payload.get("ui_interaction")
+    if not isinstance(block, dict):
+        return {}
+    delivered = bool(block.get("delivered"))
+    state_changed = bool(block.get("state_changed"))
+    return {
+        "interaction_id": str(block.get("interaction_id") or ""),
+        "delivered": delivered,
+        "state_changed": state_changed,
+        "effective": bool(block.get("effective", delivered and state_changed)),
+        "no_observable_effect": bool(block.get("no_observable_effect", delivered and not state_changed)),
+        "expect_state_change": bool(payload.get("expect_state_change", True)),
+        "click_status": str(payload.get("click_status") or ""),
+        "refusal_code": str(block.get("refusal_code") or ""),
+    }
 
 
 def build_playmode_guard_summary(steps: list[Any]) -> dict[str, Any]:

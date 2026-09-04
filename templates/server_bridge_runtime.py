@@ -37,11 +37,13 @@ from server_bridge_final_status import (
     try_take_recovered_response,
 )
 from server_bridge_journal import (
+    HOST_CLIENT_KIND_CLI,
     bridge_identity_changed,
     bridge_identity_from_state,
     emit_operation_progress_phase,
     emit_request_not_submitted_ack,
     emit_request_submission_ack,
+    mark_host_client_kind,
     parse_journal_utc_timestamp,
     read_request_journal_events,
     record_operation_progress_event,

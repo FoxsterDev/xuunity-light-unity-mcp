@@ -10,6 +10,7 @@ namespace XUUnity.LightMcp.Editor.Core
             public int heartbeat_interval_ms = 2000;
             public int pump_interval_ms = 500;
             public bool auto_probe_on_startup = true;
+            public bool background_execution_enabled;
             public string transport = "tcp_loopback";
             public string loopback_host = "127.0.0.1";
             public int loopback_port;
@@ -34,6 +35,7 @@ namespace XUUnity.LightMcp.Editor.Core
             public bool bridge_bootstrap_attached;
             public string editor_domain_loaded_utc = "";
             public bool application_run_in_background;
+            public string background_execution_mode = "";
             public bool domain_reload_in_progress;
             public string domain_reload_started_utc = "";
             public bool asset_import_in_progress;
@@ -178,6 +180,7 @@ namespace XUUnity.LightMcp.Editor.Core
             public string editor_domain_currency_recommended_next_action = "";
             public bool application_run_in_background;
             public bool native_autofocus_enabled;
+            public string background_execution_mode = "";
             public bool domain_reload_in_progress;
             public string domain_reload_started_utc = "";
             public bool asset_import_in_progress;

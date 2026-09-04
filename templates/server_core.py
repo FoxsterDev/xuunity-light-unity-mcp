@@ -136,6 +136,7 @@ def is_windows_like_host() -> bool:
     return (
         os.name == "nt"
         or sys.platform.startswith("win")
+        or sys.platform in ("cygwin", "msys")
         or os.environ.get("OS") == "Windows_NT"
         or str(os.environ.get("MSYSTEM") or "").upper().startswith(("MINGW", "MSYS", "CYGWIN"))
     )

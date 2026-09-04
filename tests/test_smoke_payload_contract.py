@@ -1,4 +1,6 @@
+import json
 import os
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -11,7 +13,8 @@ if str(TESTS_DIR) not in sys.path:
 from bash_support import resolve_bash_executable, run_with_timeout
 
 
-TEMPLATES_DIR = Path(__file__).resolve().parents[1] / "templates"
+REPO_ROOT = Path(__file__).resolve().parents[1]
+TEMPLATES_DIR = REPO_ROOT / "templates"
 SMOKE_DIR = TEMPLATES_DIR / "smoke"
 
 
@@ -203,6 +206,99 @@ esac
                 if lane_case == "both_fail":
                     self.assertNotIn("batch-build-config-compile-matrix", calls)
                     self.assertNotIn("ensure-ready", calls)
+
+
+class PackageSelfTestAssemblyPlanTests(unittest.TestCase):
+    maxDiff = None
+
+    def _discovery_source(self) -> str:
+        script = (SMOKE_DIR / "run_package_self_tests.sh").read_text(encoding="utf-8")
+        marker = '"$RUN_MODE" "$ASSEMBLY_PLAN_PATH" <<\'PY\'\n'
+        start = script.find(marker)
+        self.assertNotEqual(-1, start, "discovery heredoc marker not found")
+        start += len(marker)
+        end = script.find("\nPY\n", start)
+        self.assertNotEqual(-1, end, "discovery heredoc terminator not found")
+        return script[start:end]
+
+    def _plan(self, dependencies: dict) -> list[list[str]]:
+        source = self._discovery_source()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            script_path = root / "discovery.py"
+            script_path.write_text(source, encoding="utf-8")
+            project_root = root / "Project"
+            packages_dir = project_root / "Packages"
+            packages_dir.mkdir(parents=True)
+            manifest_path = packages_dir / "manifest.json"
+            manifest_path.write_text(
+                json.dumps({"dependencies": dependencies, "testables": ["com.xuunity.light-mcp"]}),
+                encoding="utf-8",
+            )
+            lock_path = packages_dir / "packages-lock.json"
+            lock_path.write_text(
+                json.dumps(
+                    {
+                        "dependencies": {
+                            name: {"version": version, "source": "registry"}
+                            for name, version in dependencies.items()
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            plan_path = root / "assembly_plan.tsv"
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(script_path),
+                    str(manifest_path),
+                    str(lock_path),
+                    str(project_root),
+                    str(REPO_ROOT),
+                    "all",
+                    str(plan_path),
+                ],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=120.0,
+            )
+            self.assertEqual(0, completed.returncode, completed.stdout + completed.stderr)
+            self.assertIn("[pass] package-self-test-discovery", completed.stdout)
+            rows = [
+                line.split("\t")
+                for line in plan_path.read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            ]
+            return rows
+
+    def test_plan_includes_every_capability_assembly_whose_dependency_is_installed(self) -> None:
+        rows = self._plan(
+            {
+                "com.unity.test-framework": "1.1.33",
+                "com.unity.ugui": "1.0.0",
+                "com.unity.textmeshpro": "3.0.6",
+            }
+        )
+        planned = {(row[0], row[1]) for row in rows}
+
+        self.assertIn(("editmode", "com.xuunity.light-mcp.Editor.Tests"), planned)
+        self.assertIn(("editmode", "com.xuunity.light-mcp.Editor.Ugui.Tests"), planned)
+        self.assertIn(("editmode", "com.xuunity.light-mcp.Editor.Tmp.Tests"), planned)
+        self.assertIn(("playmode", "com.xuunity.light-mcp.PlayMode.Tests"), planned)
+        self.assertIn(("playmode", "com.xuunity.light-mcp.Editor.Ugui.PlayMode.Tests"), planned)
+
+    def test_plan_drops_capability_assemblies_without_their_dependency(self) -> None:
+        rows = self._plan({"com.unity.test-framework": "1.1.33"})
+        planned = {(row[0], row[1]) for row in rows}
+
+        self.assertIn(("editmode", "com.xuunity.light-mcp.Editor.Tests"), planned)
+        self.assertIn(("playmode", "com.xuunity.light-mcp.PlayMode.Tests"), planned)
+        self.assertNotIn(("editmode", "com.xuunity.light-mcp.Editor.Ugui.Tests"), planned)
+        self.assertNotIn(("editmode", "com.xuunity.light-mcp.Editor.Tmp.Tests"), planned)
+        self.assertNotIn(("playmode", "com.xuunity.light-mcp.Editor.Ugui.PlayMode.Tests"), planned)
 
 
 if __name__ == "__main__":

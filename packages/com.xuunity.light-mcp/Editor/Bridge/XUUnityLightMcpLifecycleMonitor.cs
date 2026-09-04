@@ -124,7 +124,6 @@ namespace XUUnity.LightMcp.Editor.Bridge
 
         static void OnPlayModeStateChanged(PlayModeStateChange stateChange)
         {
-            XUUnityLightMcpBackgroundExecution.EnsureEnabled();
             if (stateChange == PlayModeStateChange.ExitingEditMode)
             {
                 XUUnityLightMcpEditorLogAnchors.CapturePlayModeStart();

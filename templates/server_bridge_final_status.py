@@ -862,7 +862,7 @@ def _test_console_pressure_summary(
     current = active_state or {}
     if "console_error_count_since_request_start" in source:
         count = max(0, int(source.get("console_error_count_since_request_start") or 0))
-        trust_class = str(source.get("console_error_count_trust_class") or "unity_reported")
+        trust_class = str(source.get("console_error_count_trust_class") or "lower_bound_without_request_baseline")
     else:
         baseline_session = str(source.get("console_error_counter_session_id_at_request_start") or "")
         current_session = str(current.get("console_error_counter_session_id") or "")
@@ -877,7 +877,7 @@ def _test_console_pressure_summary(
                 trust_class = "lower_bound_after_domain_reload"
         elif str(current.get("active_test_console_error_count_trust_class") or "") not in {"", "unavailable"}:
             count = max(0, int(current.get("active_test_console_error_count_since_request_start") or 0))
-            trust_class = str(current.get("active_test_console_error_count_trust_class") or "bridge_heartbeat")
+            trust_class = str(current.get("active_test_console_error_count_trust_class") or "")
         else:
             count = 0
             trust_class = "unavailable"

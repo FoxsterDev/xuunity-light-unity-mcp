@@ -1,7 +1,7 @@
 # XUUnity Light Unity MCP Devmode Validation
 
 Date: `2026-05-23`
-Status: `current for v0.3.70`
+Status: `current for v0.3.71`
 
 Use this document when changing the XUUnity Light Unity MCP host, server,
 wrapper scripts, Unity package, package metadata, smoke runners, or package
@@ -28,19 +28,20 @@ templates/smoke/run_package_self_tests.sh \
   --mode all
 ```
 
-The lane must include both core package assemblies:
+The runner no longer carries a hand-maintained assembly filter. It derives the
+run plan from the package source: every shipped test assembly whose tests carry
+the selected mode's category and whose `versionDefines` capability dependencies
+are installed in the consumer project. The plan is printed as `editmode_plan=`
+and `playmode_plan=` on the `package-self-test-discovery` line, each planned
+assembly runs as its own filtered request, and an assembly that contributes
+zero tests fails the lane with
+`package_self_tests_assembly_contributed_no_tests: assembly=<name>`.
 
-- `com.xuunity.light-mcp.Editor.Tests`
-- `com.xuunity.light-mcp.PlayMode.Tests`
-
-When the consumer has the corresponding optional dependency, the lane must
-also include each capability-gated package assembly. Current source includes:
-
-- `com.xuunity.light-mcp.Editor.Ugui.PlayMode.Tests` when `com.unity.ugui` is
-  available
-
-This split keeps the runtime uGUI interaction path under execution proof
-without making uGUI a hard package dependency.
+This keeps capability-gated assemblies such as the uGUI EditMode/PlayMode and
+TextMeshPro EditMode suites under execution proof without making uGUI or
+TextMeshPro a hard package dependency: in a project without those packages they
+drop out of the plan instead of failing the lane. Adding a new test assembly to
+the package needs no runner edit, and it can no longer be silently skipped.
 
 If the package self-test lane cannot run, report that as an explicit MCP
 validation gap instead of calling the MCP change fully validated.

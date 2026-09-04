@@ -221,8 +221,7 @@ class UiReadSurfaceContractTest(unittest.TestCase):
             "search_truncated",
             "search_truncation_reason",
         ):
-            self.assertIn(f"public ", models)
-            self.assertIn(field, models)
+            self.assertRegex(models, rf"public\s+\w[\w<>\[\]]*\s+{field}\b")
 
     def test_render_is_isolated_and_non_persistent(self) -> None:
         text = read(EDITOR_ROOT / "Ugui" / "XUUnityLightMcpPrefabRenderOperation.cs")

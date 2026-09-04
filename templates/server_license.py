@@ -21,6 +21,7 @@ from server_hub_licensing import resolve_hub_licensing_ipc
 LICENSE_CAPABILITIES_CACHE_SCHEMA = 4
 LICENSE_PROBE_DEFAULT_TIMEOUT_MS = 30000
 BATCHMODE_SUPPORT_OVERRIDE_ENV = "XUUNITY_LIGHT_UNITY_MCP_BATCHMODE_SUPPORT_OVERRIDE"
+GUI_ADMISSION_OVERRIDE_ENV = "XUUNITY_LIGHT_UNITY_MCP_GUI_ADMISSION_OVERRIDE"
 
 
 def license_capabilities_cache_path(project_root: Path) -> Path:
@@ -432,6 +433,10 @@ def read_cached_license_capabilities(cache_path: Path, cache_key: dict[str, str]
     if str(cached_key.get("unity_version") or "") != cache_key["unity_version"]:
         return None
     return dict(payload)
+
+
+def gui_admission_override_enabled() -> bool:
+    return str(os.environ.get(GUI_ADMISSION_OVERRIDE_ENV, "")).strip().lower() in {"1", "true", "allow"}
 
 
 def parse_batchmode_support_override(raw_value: str) -> dict[str, Any] | None:

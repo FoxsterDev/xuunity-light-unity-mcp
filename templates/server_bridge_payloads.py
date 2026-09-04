@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 from typing import Any, Callable
 
+from server_bridge_constants import COMPILE_WARNING_SAMPLE_LIMIT
 from server_health import read_editor_log_scope
 
 
@@ -668,16 +669,25 @@ def _compact_compile_payload(payload: dict[str, Any], operation: str) -> dict[st
             "failed",
             "skipped",
             "stop_on_first_failure",
-            "settle_request_id",
         ),
+    )
+    _copy_if_present(
+        compact,
+        payload,
+        ("settle_request_id",),
     )
     warnings = decision_source.get("warnings")
     if isinstance(warnings, list) and warnings:
-        compact["warnings"] = warnings[:20]
+        compact["warnings"] = warnings[:COMPILE_WARNING_SAMPLE_LIMIT]
     errors = decision_source.get("errors")
     if isinstance(errors, list) and errors:
         compact["errors"] = errors[:3]
-    configurations = payload.get("results") or payload.get("configurations")
+    configurations = (
+        decision_source.get("results")
+        or decision_source.get("configurations")
+        or payload.get("results")
+        or payload.get("configurations")
+    )
     if isinstance(configurations, list):
         compact["configuration_count"] = len(configurations)
         failed_rows = [
@@ -941,12 +951,15 @@ def _compact_project_action_currency_payload(payload: dict[str, Any], operation:
             "newest_editor_input_path",
             "newest_editor_input_write_utc",
             "editor_input_count",
+            "settled_forced_asset_refresh_requested_utc",
+            "script_compilation_failed",
             "currency_basis",
             "safe_to_invoke",
             "reason",
             "recommended_next_action",
             "application_run_in_background",
             "native_autofocus_enabled",
+            "background_execution_mode",
             "validation_evidence",
         ),
     )

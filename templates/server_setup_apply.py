@@ -33,17 +33,24 @@ def set_manifest_dependency(project_root: Path, package_name: str, value: str) -
 def write_bridge_config(project_root: Path) -> None:
     config_path = project_root / "Library" / "XUUnityLightMcp" / "config" / "bridge_config.json"
     config_path.parent.mkdir(parents=True, exist_ok=True)
-    write_json(
-        config_path,
-        {
-            "enabled": True,
-            "heartbeat_interval_ms": 2000,
-            "pump_interval_ms": 500,
-            "transport": "tcp_loopback",
-            "loopback_host": "127.0.0.1",
-            "loopback_port": 0,
-        },
-    )
+    existing = {}
+    if config_path.is_file():
+        try:
+            decoded = json.loads(config_path.read_text(encoding="utf-8-sig"))
+        except (OSError, ValueError):
+            decoded = None
+        if isinstance(decoded, dict):
+            existing = decoded
+    managed = {
+        "enabled": True,
+        "heartbeat_interval_ms": 2000,
+        "pump_interval_ms": 500,
+        "transport": "tcp_loopback",
+        "loopback_host": "127.0.0.1",
+        "loopback_port": 0,
+    }
+    preserved = {key: value for key, value in existing.items() if key not in managed}
+    write_json(config_path, {**managed, **preserved})
 
 
 def apply_setup_plan(

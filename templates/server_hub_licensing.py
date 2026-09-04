@@ -5,11 +5,10 @@ import os
 import re
 import signal
 import subprocess
-import sys
 import time
 from typing import Any, Callable
 
-from server_core import ToolInvocationError, hidden_window_subprocess_kwargs
+from server_core import ToolInvocationError, hidden_window_subprocess_kwargs, is_windows_like_host
 from server_host_platform import current_host_platform_adapter, is_wsl
 
 
@@ -43,7 +42,7 @@ def _is_unity_hub_command(command: str) -> bool:
     return bool(
         re.match(r"^/(?:[^\"\r\n]*/)?unity hub\.app/contents/macos/unity hub(?:\"|\s|$)", normalized)
         or re.match(r"^(?:[a-z]:/|//)[^\"\r\n]*/unity hub\.exe(?:\"|\s|$)", normalized)
-        or re.match(r"^/[^\"\s]*/unityhub(?:\"|\s|$)", normalized)
+        or re.match(r"^/[^\"\s]*/unityhub(?:-bin|[^/\"\s]*\.appimage)?(?:\"|\s|$)", normalized)
     )
 
 
@@ -275,24 +274,25 @@ def _terminate_verified_pid(pid: int, timeout_ms: int) -> bool:
     adapter = current_host_platform_adapter()
     if pid <= 0 or not adapter.pid_is_alive(pid):
         return True
-    windows_like = os.name == "nt" or sys.platform in ("win32", "cygwin", "msys") or is_wsl()
-    if windows_like:
-        command = "taskkill.exe" if is_wsl() else "taskkill"
-        try:
-            completed = subprocess.run(
-                [command, "/F", "/PID", str(pid)],
-                check=False,
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                timeout=TASKKILL_TIMEOUT_SECONDS,
-                **hidden_window_subprocess_kwargs(),
-            )
-            if completed.returncode != 0:
-                return False
-        except (OSError, subprocess.TimeoutExpired):
-            return False
+    wsl_host = is_wsl()
+    if wsl_host or is_windows_like_host():
+        # WSL candidates come from the Windows process table, so these are taskkill pids, never Linux pids.
+        for command in (["taskkill.exe", "taskkill"] if wsl_host else ["taskkill", "taskkill.exe"]):
+            try:
+                completed = subprocess.run(
+                    [command, "/F", "/PID", str(pid)],
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                    encoding="utf-8",
+                    errors="replace",
+                    timeout=TASKKILL_TIMEOUT_SECONDS,
+                    **hidden_window_subprocess_kwargs(),
+                )
+            except (OSError, subprocess.TimeoutExpired):
+                continue
+            if completed.returncode == 0:
+                break
     else:
         try:
             os.kill(pid, signal.SIGTERM)

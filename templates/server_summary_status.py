@@ -145,6 +145,7 @@ def build_status_summary(
         ),
         "application_run_in_background": bool(effective.get("application_run_in_background")),
         "native_autofocus_enabled": bool(effective.get("native_autofocus_enabled")),
+        "background_execution_mode": str(effective.get("background_execution_mode") or ""),
         "playmode_state": str(effective.get("playmode_state") or ""),
         "script_compilation_failed": bool(effective.get("script_compilation_failed")),
         "compiler_error_count": int(effective.get("compiler_error_count") or 0),

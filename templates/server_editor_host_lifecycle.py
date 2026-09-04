@@ -27,6 +27,7 @@ from server_bridge_runtime import (
 from server_core import (
     ToolInvocationError,
     hidden_window_subprocess_kwargs,
+    is_windows_like_host,
     read_json,
     render_launcher_cli,
     write_json,
@@ -604,7 +605,7 @@ def terminate_editor_pid(pid: int, timeout_ms: int) -> bool:
     if pid <= 0 or not pid_is_alive(pid):
         return True
 
-    is_windows_like = (os.name == "nt" or sys.platform in ("win32", "cygwin", "msys"))
+    is_windows_like = is_windows_like_host() and not is_wsl()
 
     if is_windows_like:
         taskkill_success = False

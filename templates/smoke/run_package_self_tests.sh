@@ -3,13 +3,14 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 OPS_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-WRAPPER="$OPS_ROOT/xuunity_light_unity_mcp.sh"
+WRAPPER="${XUUNITY_LIGHT_UNITY_MCP_WRAPPER:-$OPS_ROOT/xuunity_light_unity_mcp.sh}"
 
 PROJECT_ROOT=""
 OPEN_EDITOR="true"
 RUN_MODE="all"
 TIMEOUT_MS="240000"
 UNITY_ARGS=()
+PLANNED_ASSEMBLIES=()
 TMP_DIR=""
 MANIFEST_BACKUP=""
 MANIFEST_WAS_PATCHED="false"
@@ -81,6 +82,7 @@ done
 TMP_DIR="$(mktemp -d)"
 MANIFEST_PATH="$PROJECT_ROOT/Packages/manifest.json"
 MANIFEST_BACKUP="$TMP_DIR/manifest.json"
+ASSEMBLY_PLAN_PATH="$TMP_DIR/assembly_plan.tsv"
 
 cleanup() {
   if [[ "$MANIFEST_WAS_PATCHED" == "true" && -f "$MANIFEST_BACKUP" ]]; then
@@ -116,7 +118,7 @@ PY
 
 print_package_self_test_discovery() {
   local lock_path="$PROJECT_ROOT/Packages/packages-lock.json"
-  python3 - "$MANIFEST_PATH" "$lock_path" "$PROJECT_ROOT" "$OPS_ROOT" "$RUN_MODE" <<'PY'
+  python3 - "$MANIFEST_PATH" "$lock_path" "$PROJECT_ROOT" "$OPS_ROOT" "$RUN_MODE" "$ASSEMBLY_PLAN_PATH" <<'PY'
 import json
 import re
 import sys
@@ -127,6 +129,7 @@ lock_path = Path(sys.argv[2])
 project_root = Path(sys.argv[3])
 ops_root = Path(sys.argv[4])
 run_mode = sys.argv[5]
+plan_path = Path(sys.argv[6])
 
 
 def read_json(path):
@@ -185,18 +188,87 @@ cs_files = sorted(tests_root.rglob("*.cs")) if tests_root.is_dir() else []
 category_pattern = re.compile(r'\[Category\s*\(\s*"([^"]+)"\s*\)\s*\]')
 test_pattern = re.compile(r"\[(?:Unity)?Test(?:\s*\(|\])")
 
+
+def assembly_mode(path):
+    platforms = read_json(path).get("includePlatforms")
+    platforms = platforms if isinstance(platforms, list) else []
+    return "editmode" if "Editor" in platforms else "playmode"
+
+
+def resolved_package_version(name):
+    locked = lock_dependencies.get(name)
+    if isinstance(locked, dict) and str(locked.get("version") or ""):
+        return str(locked.get("version"))
+    declared = str(dependencies.get(name) or "")
+    return declared if declared[:1].isdigit() else ""
+
+
+def version_parts(value):
+    numbers = []
+    for chunk in str(value).split("."):
+        digits = ""
+        for character in chunk:
+            if not character.isdigit():
+                break
+            digits += character
+        numbers.append(int(digits or 0))
+    return (numbers + [0, 0, 0])[:3]
+
+
+def capability_dependencies_installed(path):
+    data = read_json(path)
+    version_defines = data.get("versionDefines")
+    version_defines = version_defines if isinstance(version_defines, list) else []
+    for constraint in [str(item) for item in (data.get("defineConstraints") or [])]:
+        sources = [entry for entry in version_defines if str((entry or {}).get("define") or "") == constraint]
+        if not sources:
+            continue
+        satisfied = False
+        for entry in sources:
+            resolved = resolved_package_version(str(entry.get("name") or ""))
+            expression = str(entry.get("expression") or "")
+            if not resolved:
+                continue
+            if not expression[:1].isdigit() or version_parts(resolved) >= version_parts(expression):
+                satisfied = True
+                break
+        if not satisfied:
+            return False
+    return True
+
+
+assembly_dirs = sorted(
+    ((path.parent, asmdef_name(path)) for path in asmdefs),
+    key=lambda item: len(item[0].parts),
+    reverse=True,
+)
+assembly_mode_by_name = {asmdef_name(path): assembly_mode(path) for path in asmdefs}
+
+
+def owning_assembly(cs_path):
+    for directory, name in assembly_dirs:
+        if directory == cs_path.parent or directory in cs_path.parents:
+            return name
+    return ""
+
+
 categories = set()
+assembly_categories = {}
 editmode_tests = 0
 playmode_tests = 0
 for cs_path in cs_files:
     text = cs_path.read_text(encoding="utf-8", errors="replace")
-    categories.update(category_pattern.findall(text))
+    file_categories = category_pattern.findall(text)
+    categories.update(file_categories)
     test_count = len(test_pattern.findall(text))
-    path_parts = set(cs_path.parts)
-    if "PlayMode" in path_parts:
+    owner = owning_assembly(cs_path)
+    owner_mode = assembly_mode_by_name.get(owner, "")
+    if owner_mode == "playmode":
         playmode_tests += test_count
-    elif "EditMode" in path_parts:
+    elif owner_mode == "editmode":
         editmode_tests += test_count
+    if test_count > 0 and owner:
+        assembly_categories.setdefault(owner, set()).update(file_categories)
 
 required_by_mode = {
     "all": {
@@ -238,6 +310,20 @@ required_by_mode = {
 }
 required = required_by_mode.get(run_mode, {})
 asmdef_name_set = set(asmdef_names)
+required_categories = sorted(required.get("categories") or [])
+
+plan_rows = []
+for path in asmdefs:
+    name = asmdef_name(path)
+    contributed = assembly_categories.get(name) or set()
+    if not required_categories or not contributed.issuperset(required_categories):
+        continue
+    if not capability_dependencies_installed(path):
+        continue
+    plan_rows.append((assembly_mode(path), name, ",".join(required_categories)))
+plan_rows.sort()
+editmode_plan = [row[1] for row in plan_rows if row[0] == "editmode"]
+playmode_plan = [row[1] for row in plan_rows if row[0] == "playmode"]
 
 errors = []
 if not testables_enabled:
@@ -258,9 +344,17 @@ if editmode_tests < int(required.get("editmode_min") or 0):
     errors.append("editmode_test_count_zero")
 if playmode_tests < int(required.get("playmode_min") or 0):
     errors.append("playmode_test_count_zero")
+if int(required.get("editmode_min") or 0) > 0 and not editmode_plan:
+    errors.append("editmode_assembly_plan_empty")
+if int(required.get("playmode_min") or 0) > 0 and not playmode_plan:
+    errors.append("playmode_assembly_plan_empty")
 
 if errors:
     raise SystemExit("package self-test discovery failed: " + ",".join(errors))
+
+with plan_path.open("w", encoding="utf-8", newline="\n") as plan_file:
+    for row_mode, row_assembly, row_categories in plan_rows:
+        plan_file.write(f"{row_mode}\t{row_assembly}\t{row_categories}\n")
 
 package_source = str(package_lock.get("source") or "manifest")
 test_framework_manifest = str(dependencies.get("com.unity.test-framework") or "-")
@@ -276,6 +370,8 @@ print(
     f"asmdefs={len(asmdefs)} "
     f"editmode_tests={editmode_tests} "
     f"playmode_tests={playmode_tests} "
+    f"editmode_plan={','.join(editmode_plan) or '-'} "
+    f"playmode_plan={','.join(playmode_plan) or '-'} "
     f"categories={categories_summary} "
     f"source_root={source_root}"
 )
@@ -306,20 +402,22 @@ print_package_self_test_discovery
 
 run_mcp_json_step() {
   local label="$1"
-  shift
+  local assembly="$2"
+  shift 2
   local output_path="$TMP_DIR/${label}.json"
   if ! "$@" >"$output_path"; then
     cat "$output_path"
     return 1
   fi
   cat "$output_path"
-  python3 - "$output_path" "$label" <<'PY'
+  python3 - "$output_path" "$label" "$assembly" <<'PY'
 import json
 import sys
 from pathlib import Path
 
 path = Path(sys.argv[1])
 label = sys.argv[2]
+assembly = sys.argv[3]
 payload = json.loads(path.read_text(encoding="utf-8"))
 status = str(payload.get("status") or "")
 if status not in {"ok", "success"}:
@@ -345,8 +443,11 @@ skipped = int(test_payload.get("skipped") or 0)
 
 if test_status == "no_tests" or total <= 0:
     print(
-        f"{label} failed: package_self_tests_no_tests: "
-        f"Unity discovered no package self-tests for the requested filters.",
+        f"{label} failed: package_self_tests_assembly_contributed_no_tests: "
+        f"assembly={assembly} contributed 0 tests. That assembly ships in the package and its "
+        f"capability dependencies are installed in this project, so either the run filter or the "
+        f"test categories regressed. Compare the assembly against the editmode_plan/playmode_plan "
+        f"printed by package-self-test-discovery.",
         file=sys.stderr,
     )
     raise SystemExit(1)
@@ -366,26 +467,48 @@ print(
 PY
 }
 
+load_planned_assemblies() {
+  local wanted_mode="$1"
+  local row_mode=""
+  local row_assembly=""
+  PLANNED_ASSEMBLIES=()
+  while IFS=$'\t' read -r row_mode row_assembly _; do
+    if [[ "$row_mode" == "$wanted_mode" ]]; then
+      PLANNED_ASSEMBLIES+=("$row_assembly")
+    fi
+  done < "$ASSEMBLY_PLAN_PATH"
+  if (( ${#PLANNED_ASSEMBLIES[@]} == 0 )); then
+    echo "package self-test $wanted_mode assembly plan is empty for mode=$RUN_MODE" >&2
+    return 1
+  fi
+}
+
 run_editmode() {
   local category="$1"
-  run_mcp_json_step "editmode_${category//[^A-Za-z0-9_]/_}" \
-    "$WRAPPER" request-editmode-tests \
-    --project-root "$PROJECT_ROOT" \
-    --assembly-name com.xuunity.light-mcp.Editor.Tests \
-    --assembly-name com.xuunity.light-mcp.Editor.Ugui.Tests \
-    --category-name "$category" \
-    --timeout-ms "$TIMEOUT_MS"
+  local assembly=""
+  load_planned_assemblies editmode
+  for assembly in "${PLANNED_ASSEMBLIES[@]}"; do
+    run_mcp_json_step "editmode_${assembly//[^A-Za-z0-9_]/_}_${category//[^A-Za-z0-9_]/_}" "$assembly" \
+      "$WRAPPER" request-editmode-tests \
+      --project-root "$PROJECT_ROOT" \
+      --assembly-name "$assembly" \
+      --category-name "$category" \
+      --timeout-ms "$TIMEOUT_MS"
+  done
 }
 
 run_playmode() {
   local category="$1"
-  run_mcp_json_step "playmode_${category//[^A-Za-z0-9_]/_}" \
-    "$WRAPPER" request-playmode-tests \
-    --project-root "$PROJECT_ROOT" \
-    --assembly-name com.xuunity.light-mcp.PlayMode.Tests \
-    --assembly-name com.xuunity.light-mcp.Editor.Ugui.PlayMode.Tests \
-    --category-name "$category" \
-    --timeout-ms "$TIMEOUT_MS"
+  local assembly=""
+  load_planned_assemblies playmode
+  for assembly in "${PLANNED_ASSEMBLIES[@]}"; do
+    run_mcp_json_step "playmode_${assembly//[^A-Za-z0-9_]/_}_${category//[^A-Za-z0-9_]/_}" "$assembly" \
+      "$WRAPPER" request-playmode-tests \
+      --project-root "$PROJECT_ROOT" \
+      --assembly-name "$assembly" \
+      --category-name "$category" \
+      --timeout-ms "$TIMEOUT_MS"
+  done
 }
 
 case "$RUN_MODE" in

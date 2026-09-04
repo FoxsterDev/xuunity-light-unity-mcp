@@ -2,6 +2,191 @@
 
 ## Unreleased
 
+## 0.3.71
+
+Release tag: `v0.3.71`
+
+Current Git UPM install URL:
+
+```text
+https://github.com/FoxsterDev/xuunity-mcp.git?path=/packages/com.xuunity.light-mcp#v0.3.71
+```
+
+### Why
+
+- A project action could be blocked forever. The editor-domain currency gate compared
+  file timestamps against the last domain reload, but it also counted scripts in folders
+  Unity never imports, and a file touched without a content change is imported without a
+  recompile. Both states reported `editor_domain_stale` with a remediation
+  (`unity_project_refresh`) that could not change either number.
+- The bridge set `Application.runInBackground = true` on every heartbeat. In the editor
+  that property is backed by the project setting `PlayerSettings.runInBackground`, so the
+  bridge was writing a value into consumers' `ProjectSettings.asset`, with no opt-out and
+  no restore. The `v0.3.69` notes claimed the opposite.
+- Point-of-use liveness evidence defaulted to `editor_truth_confirmed`. A scenario step
+  that had not run yet, a step the run never reached, and a payload that could not be read
+  all claimed confirmed editor truth with no sample behind them.
+- The package self-test runner carried a hand-maintained `--assembly-name` filter and only
+  failed when a whole run reported zero tests, so a capability-gated test assembly could be
+  skipped for weeks while the lane printed a pass.
+- Every wrapper CLI or smoke invocation is a fresh host process with a fresh
+  `client_session_id`, so running them against one's own editor raised the foreign-client
+  alarm on the operator's own server.
+
+### Fixed
+
+- The editor-domain currency scan now skips the entries Unity itself ignores (a name
+  starting with `.`, ending with `~`, or named `cvs`) and prunes those directories instead
+  of walking them, so a script under a folder such as `Samples~` can no longer pin the gate.
+- The gate converges. A forced `unity_project_refresh` that settled at or after the newest
+  editor-input timestamp is now evidence that Unity saw the file and owed no reload:
+  `currency_basis` reports
+  `settled_forced_asset_refresh_covers_newest_assets_editor_input`. A genuinely stale domain
+  still blocks, and a failing script compilation blocks with
+  `fix_script_compilation_errors_before_invoking` instead of a refresh that cannot help.
+- The editor-domain load time is stamped once per domain by the bridge bootstrap before the
+  bridge-enabled gate, so a project without the bridge enabled, a batch-mode editor, and a
+  consumer running the shipped package tests all report it. Enabling the bridge inside one
+  domain can no longer advance that timestamp and mask a stale domain.
+- Background execution is opt-in (`background_execution_enabled` in the project's bridge
+  config, default off). When enabled, the previous value is captured and restored on bridge
+  disable or editor quit, the assignment happens once per domain instead of on every
+  heartbeat/status/currency call, and `background_execution_mode` reports `managed` or
+  `project_owned`. `setup-apply` now preserves operator-set keys in `bridge_config.json`.
+- `result_trust_class` defaults to empty instead of `editor_truth_confirmed`. Every sampled
+  payload keeps the value it reported before.
+- A playing loop with no liveness sample yet reports
+  `wait_for_playmode_liveness_sample_and_retry` instead of the throttle remediation, which
+  told the operator to focus an editor when the correct action was to wait.
+- Compiler diagnostic codes are read from the diagnostic, not from the file path. A message
+  for a file under a folder such as `Physics2020` reported `CS2020` as the warning code.
+- The compact compile response reads each field from the layer that owns it: the verdict
+  from the nested result, the settle id from the envelope. A matrix nested under `result`
+  now keeps its configuration evidence.
+- Unity Hub is detected on Linux. The matcher only accepted a process whose final path
+  segment was exactly `unityhub`, so the `unityhub-bin` and AppImage forms every real Linux
+  install runs were invisible, which reported `no_hub_session` and, with the admission gate
+  below, blocked those hosts.
+- Request attribution separates the operator's own tooling from another agent. Host journal
+  events carry a `client_kind` of `mcp_server` or `cli`, a host publishes its
+  `client_session_id` to its child host processes, and `foreign_request_activity_detected`
+  is scoped to a different non-CLI client session. CLI traffic is reported separately in
+  `cli_requests_since_client_start`. A journal row from a host older than `client_kind`
+  still counts as foreign, so version skew cannot silence the alarm.
+- The compact wrapper envelope keeps a bounded `child_stderr_tail` when the child failed or
+  returned a typed error, so a traceback beside a typed error is no longer dropped. A
+  successful run still suppresses child output.
+- The wrapper's compact payload extraction prefers the child's actual payload over a
+  trailing log line that merely contains a JSON object.
+- The `unity.project_action.currency` probe no longer activates or raises the editor window;
+  it is a read, and the release that added it stated that XUUnity does not mutate OS focus.
+
+### Changed
+
+- The package self-test runner derives its per-mode assembly plan from the package source:
+  every shipped test assembly whose tests carry the selected mode's category and whose
+  `versionDefines` capability dependencies are installed in the consumer. The plan is
+  reported as `editmode_plan=` / `playmode_plan=`, each planned assembly runs as its own
+  filtered request and must contribute at least one test
+  (`package_self_tests_assembly_contributed_no_tests`), and the discovery counter attributes
+  tests to the owning assembly instead of guessing from a path segment.
+- A host whose GUI editor licenses itself without a running Unity Hub can admit the GUI lane
+  with `XUUNITY_LIGHT_UNITY_MCP_GUI_ADMISSION_OVERRIDE=1`. The refusal is unchanged by
+  default and now names the override; when used, the override is recorded in the lane payload
+  with the blocker it waived, so it is never silent.
+- Released `v0.3.71` package metadata, server metadata, package manifests, and Git UPM examples.
+
+### Added
+
+- `docs/reference/GLOSSARY.md` now carries one table of every trust, outcome, warning and
+  gap value this system publishes, with its producer and reader, so the next drift is visible.
+- Regressions that would have caught these defects: the editor-log search bounds are one
+  shared constant across the tool schema, the protocol refusal and the CLI clamp; a
+  cross-language pin holds the `project_action` step expansion in Python and C# to the same
+  step-id suffixes, refresh flags and `dependsOn` wiring; source sweeps hold
+  `Application.runInBackground` to a single opt-in call site applied once per domain; and the
+  Hub matcher is fed real `ps` output through the actual parser, including lookalikes that
+  must not match.
+
+### Benefits
+
+- A project action that is genuinely invokable stops being refused, and a refusal now names
+  an action that can change the outcome.
+- A validation tool no longer edits the project it is validating.
+- An empty trust class is never read as a confirmation, so a scenario result cannot look
+  proven because a step never ran.
+- The uGUI EditMode, uGUI PlayMode and TextMeshPro EditMode suites are under execution
+  proof, and a project without `com.unity.ugui` or `com.unity.textmeshpro` still passes
+  because those assemblies drop out of the plan instead of failing it.
+- The foreign-client alarm keeps its meaning: another client session is driving this editor.
+
+### Validation
+
+- Host Python suite passes `1035` tests with `14` expected platform skips.
+- Public site UI and accessibility checks pass `42/42` across desktop, mobile and
+  narrow Chromium viewports.
+- Release version consistency, documentation freshness and public-release safety pass;
+  `git diff --check` is clean and every Python source parses.
+- A clean uGUI consumer scaffolded from this source passes package EditMode `154/154`
+  across all three shipped EditMode assemblies on both Unity `2022.3.67f2` and
+  `6000.0.58f2`, and the consumer's `ProjectSettings.asset` is unchanged by the run.
+- The full bridge lane (`run_package_self_tests.sh --mode all`) on Unity `2022.3.67f2`
+  executed every assembly in the derived plan and reported each separately: EditMode core
+  `110`, TextMeshPro `6`, uGUI `39`; PlayMode uGUI `13` passed with `1` expected skip, and
+  PlayMode core `5/5`. That run also carried one EditMode probe that is deliberately not
+  shipped, which is why the shipped EditMode total is `154`.
+- The bridge reported `background_execution_mode=project_owned` throughout, which is the
+  opt-in default.
+
+### Known limitations
+
+- Hosted `Unity Package CI` remains explicitly waived because its runners have no Unity
+  license credentials. The local licensed Unity lanes above are the package evidence for
+  this release.
+- Live Unity validation was performed on macOS. Windows and Linux host behavior is covered
+  by the portable host contracts and by fixtures, not by a live run. In particular the new
+  Linux Unity Hub process forms are asserted through the real process-listing parser rather
+  than observed on a Linux host.
+- The helper-owned licensing-child termination path still has no live exercise: in this
+  release's runs the child had already exited, so the guard was again not reached. It is now
+  covered per platform shape (POSIX signal, native Windows `taskkill`, WSL `taskkill.exe`,
+  and the refusal path) by tests instead of by a live kill.
+- Restoring an opted-in `background_execution_enabled` value depends on a graceful bridge
+  disable or editor quit. A force-killed editor cannot restore it, so an opted-in project
+  can retain the enabled value.
+- The GUI admission override waives the preflight, not the license. A host that genuinely
+  cannot license an editor will still fail at launch, with the same evidence as before.
+- `playmode_throttled` still serves as both a warning code and a trust-class value, and the
+  request-status and liveness `result_trust_class` namespaces are still distinct sets under
+  one field name. Both renames are breaking and are deliberately not done in a patch
+  release; the full published vocabulary is now one table in `docs/reference/GLOSSARY.md`.
+- The full bridge self-test lane needs a warm project on Unity `6000`: a cold first import
+  can exceed the lane's `ensure-ready` timeout, which is why the `6000.0.58f2` evidence here
+  comes from the batch lane.
+
+### Errata for earlier releases
+
+- The `v0.3.69` statement that background execution "does not change `PlayerSettings`" was
+  wrong. An editor-time `Application.runInBackground` assignment reaches
+  `PlayerSettings.runInBackground` and can be serialized into a consumer's
+  `ProjectSettings.asset`. Consumers that ran `v0.3.69` or `v0.3.70` should check
+  `ProjectSettings/ProjectSettings.asset` for an unintended `runInBackground` change.
+- The package self-test runner's EditMode filter omitted the optional uGUI EditMode assembly
+  from its introduction on `2026-07-30` until `v0.3.68`, and the TextMeshPro EditMode
+  assembly from its introduction on `2026-07-31` until this release. EditMode counts in
+  release notes whose evidence came from that runner therefore covered fewer assemblies than
+  the package ships. The `v0.3.66` line "EditMode `95/95` in both uGUI and no-uGUI lanes" is
+  the clearest instance: identical counts in both lanes prove the uGUI assembly contributed
+  nothing.
+- The `v0.3.63` statement that a host-opened editor was restored "without terminating the
+  shared Hub licensing client" was not exercised. That run had no helper-owned licensing
+  child, so the guard was never reached and the claim was unproven rather than proven.
+- `v0.3.70` also repaired the default compact response of `unity_compile_player_scripts`
+  without listing it. A direct compile nests its outcome under `result`, and the compact
+  envelope had been reading `status`, `error_count`, `errors`, `compiled_assembly_count` and
+  `duration_seconds` from the outer envelope, where those keys do not exist. From `v0.3.34`
+  through `v0.3.69` that default response therefore carried no field from the compile itself.
+
 ## 0.3.70
 
 Release tag: `v0.3.70`

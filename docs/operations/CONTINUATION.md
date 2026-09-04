@@ -48,8 +48,10 @@ It now has:
 - one shared project-action currency preflight: editor-domain freshness is
   checked before every hook, while catalog `requiresFreshAssets: true` actions
   automatically run and settle a forced AssetDatabase refresh first
-- runtime `Application.runInBackground=true` while the bridge is active,
-  without `PlayerSettings` mutation or native OS autofocus; point-of-use
+- opt-in background execution: `Application.runInBackground` is backed by
+  `PlayerSettings.runInBackground` in the editor, so the bridge changes it only
+  under `background_execution_enabled: true` and restores the original value on
+  disable or editor quit; never native OS autofocus, and point-of-use
   player-loop liveness remains authoritative
 
 The public `xuunity` protocol layer also now understands validation-lane
@@ -330,8 +332,10 @@ Mini-playbook after wrapper churn:
     informational
 12. if `operator_verdict.status=unity_completion_unproven`, inspect the
     surfaced recovery evidence before deciding whether a bounded retry is safe
-13. inspect `foreign_requests_since_client_start`; when non-zero, do not
-    attribute all editor activity to the current terminal
+13. inspect `foreign_requests_since_client_start`; when non-zero, another
+    client session is driving this editor, so pause mutating work until it is
+    identified; `cli_requests_since_client_start` is wrapper-CLI or smoke
+    traffic and is informational, not a reason to stop
 14. if a project action reports `mutation_status=applied` with settle/delivery
     unproven, verify project state and do not replay the mutation
 

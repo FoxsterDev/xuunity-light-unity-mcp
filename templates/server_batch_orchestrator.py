@@ -31,6 +31,8 @@ from server_specs import (
     TOOLS,
 )
 from server_health import (
+    EDITOR_LOG_GREP_ABS_MAX_CHARS,
+    EDITOR_LOG_GREP_MIN_CHARS,
     EDITOR_LOG_GREP_MAX_CHARS,
     FRESH_HEARTBEAT_MAX_AGE_SECONDS,
     annotate_console_grep_false_empty,
@@ -44,8 +46,10 @@ from server_health import (
     SINCE_ANCHORS,
 )
 from server_license import (
+    GUI_ADMISSION_OVERRIDE_ENV,
     build_license_capabilities,
     classify_license_log,
+    gui_admission_override_enabled,
 )
 from server_loading_timing import request_loading_timing_summary
 from server_host_platform import current_host_platform_adapter
@@ -303,7 +307,7 @@ from server_batch_recovery import (
 PROTOCOL_VERSION = "2025-06-18"
 SERVER_INFO = {
     "name": "xuunity-mcp",
-    "version": "0.3.70",
+    "version": "0.3.71",
 }
 
 # === Block A: Registry & Discovery Helpers ===
@@ -1744,8 +1748,11 @@ def call_unity_console_grep_tool(arguments: dict[str, Any]) -> dict[str, Any]:
     max_search_chars = arguments.get("maxSearchChars", EDITOR_LOG_GREP_MAX_CHARS)
     if not isinstance(max_search_chars, int) or isinstance(max_search_chars, bool):
         raise JsonRpcError(-32602, "maxSearchChars must be an integer.")
-    if max_search_chars < 4096 or max_search_chars > 10000000:
-        raise JsonRpcError(-32602, "maxSearchChars must be between 4096 and 10000000.")
+    if max_search_chars < EDITOR_LOG_GREP_MIN_CHARS or max_search_chars > EDITOR_LOG_GREP_ABS_MAX_CHARS:
+        raise JsonRpcError(
+            -32602,
+            f"maxSearchChars must be between {EDITOR_LOG_GREP_MIN_CHARS} and {EDITOR_LOG_GREP_ABS_MAX_CHARS}.",
+        )
 
     regex = arguments.get("regex", False)
     ignore_case = arguments.get("ignoreCase", True)
@@ -3000,6 +3007,8 @@ def batch_lane_preflight_blocker(
         build_license_capabilities=build_license_capabilities,
         attach_license_lane_fields=attach_license_lane_fields,
         build_batch_editor_conflict_details=build_batch_editor_conflict_details,
+        gui_admission_override_enabled=gui_admission_override_enabled,
+        GUI_ADMISSION_OVERRIDE_ENV=GUI_ADMISSION_OVERRIDE_ENV,
         ToolInvocationError=ToolInvocationError,
     )
 

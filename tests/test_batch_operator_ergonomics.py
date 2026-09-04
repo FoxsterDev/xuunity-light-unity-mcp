@@ -46,7 +46,11 @@ class BatchOperatorErgonomicsTests(unittest.TestCase):
         self.assertIn('UNITY_ARGS+=("$1")', script)
         self.assertIn('if (( ${#UNITY_ARGS[@]} > 0 )); then', script)
         self.assertIn('ensure_ready_cmd+=("--unity-arg=$unity_arg")', script)
-        self.assertIn('--assembly-name com.xuunity.light-mcp.Editor.Ugui.Tests', script)
+        self.assertIn('load_planned_assemblies editmode', script)
+        self.assertIn('load_planned_assemblies playmode', script)
+        self.assertIn('--assembly-name "$assembly"', script)
+        self.assertIn('package_self_tests_assembly_contributed_no_tests', script)
+        self.assertNotIn('--assembly-name com.xuunity.light-mcp.', script)
 
     def test_artifact_probe_checks_zip_entries_and_manifest_text(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:

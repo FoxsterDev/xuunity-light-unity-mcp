@@ -24,6 +24,7 @@ namespace XUUnity.LightMcp.Editor.Bridge
         public static string RefreshSettleCompletedUtc => XUUnityLightMcpRefreshSettleRuntime.RefreshSettleCompletedUtc;
         public static string RefreshSettlePhase => XUUnityLightMcpRefreshSettleRuntime.RefreshSettlePhase;
         public static bool RefreshSettlePackageResolveRequested => XUUnityLightMcpRefreshSettleRuntime.RefreshSettlePackageResolveRequested;
+        public static string SettledForcedAssetRefreshRequestedUtc => XUUnityLightMcpRefreshSettleRuntime.SettledForcedAssetRefreshRequestedUtc;
         public static bool CompileSettlePending => XUUnityLightMcpCompileSettleRuntime.CompileSettlePending;
         public static string CompileSettleRequestId => XUUnityLightMcpCompileSettleRuntime.CompileSettleRequestId;
         public static string CompileSettleStartedUtc => XUUnityLightMcpCompileSettleRuntime.CompileSettleStartedUtc;
@@ -56,6 +57,11 @@ namespace XUUnity.LightMcp.Editor.Bridge
         public static bool TryGetActiveRequestSnapshot(out XUUnityLightMcpActiveRequestSnapshot snapshot)
         {
             return XUUnityLightMcpBridgeRuntimeSnapshotBuilder.TryGetActiveRequestSnapshot(out snapshot);
+        }
+
+        public static void StampEditorDomainLoaded()
+        {
+            XUUnityLightMcpBridgeSessionRuntime.StampEditorDomainLoaded();
         }
 
         public static void InitializeBridgeSession()
@@ -103,9 +109,9 @@ namespace XUUnity.LightMcp.Editor.Bridge
             XUUnityLightMcpEditorLifecycleRuntime.MarkPackageOperationCompleted();
         }
 
-        public static void BeginRefreshSettleTracking(string requestId, bool packageResolveRequested)
+        public static void BeginRefreshSettleTracking(string requestId, bool packageResolveRequested, bool forcedAssetRefresh)
         {
-            XUUnityLightMcpRefreshSettleRuntime.BeginRefreshSettleTracking(requestId, packageResolveRequested);
+            XUUnityLightMcpRefreshSettleRuntime.BeginRefreshSettleTracking(requestId, packageResolveRequested, forcedAssetRefresh);
         }
 
         public static void BeginCompileSettleTracking(string requestId, string operationName)

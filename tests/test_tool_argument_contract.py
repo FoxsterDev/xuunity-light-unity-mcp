@@ -467,3 +467,26 @@ class PlatformPathEqualityTests(unittest.TestCase):
             (root / "Editor-prev.log").write_bytes(b"b\n")
 
             self.assertFalse(server_health._same_path(root / "Editor.log", root / "Editor-prev.log"))
+
+
+class EditorLogSearchBoundsContractTests(unittest.TestCase):
+    """The MCP schema, the MCP rejection and the CLI clamp must bound the same window.
+
+    The tool schema refuses an out-of-range maxSearchChars while the CLI clamps it, which is a
+    deliberate split: a protocol call must not be silently narrowed, an operator command may be.
+    The split is only safe while both sides use the same bounds.
+    """
+
+    def test_the_tool_schema_bounds_match_the_shared_constants(self) -> None:
+        schema = TOOLS["unity_console_grep"]["inputSchema"]["properties"]["maxSearchChars"]
+
+        self.assertEqual(server_health.EDITOR_LOG_GREP_MAX_CHARS, schema["default"])
+        self.assertEqual(server_health.EDITOR_LOG_GREP_MIN_CHARS, schema["minimum"])
+        self.assertEqual(server_health.EDITOR_LOG_GREP_ABS_MAX_CHARS, schema["maximum"])
+
+    def test_the_cli_clamps_through_the_same_constants(self) -> None:
+        source = (TEMPLATES / "server_cli_bridge_commands.py").read_text(encoding="utf-8")
+
+        self.assertIn("EDITOR_LOG_GREP_MIN_CHARS", source)
+        self.assertIn("EDITOR_LOG_GREP_ABS_MAX_CHARS", source)
+        self.assertNotIn("min(10000000", source)

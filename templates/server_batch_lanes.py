@@ -118,6 +118,10 @@ def attach_batch_lane_fields_to_summary_data(summary: dict[str, Any], payload: d
         "effective_execution_lane",
         "lane_fallback_reason",
         "batch_fallback_mode",
+        "gui_admission_override_active",
+        "gui_admission_override_env",
+        "gui_admission_override_waived_blocker",
+        "gui_admission_override_waived_classification",
         "license_batchmode_supported",
         "license_blocker_code",
         "batchmode_probe_log_path",
@@ -145,6 +149,8 @@ def batch_lane_preflight_blocker_data(
     build_license_capabilities: Callable[..., dict[str, Any]],
     attach_license_lane_fields: Callable[[dict[str, Any], dict[str, Any] | None], None],
     build_batch_editor_conflict_details: Callable[[Path, list[int]], dict[str, Any]],
+    gui_admission_override_enabled: Callable[[], bool],
+    GUI_ADMISSION_OVERRIDE_ENV: str,
     ToolInvocationError: Any,
 ) -> tuple[str, dict[str, Any] | None]:
     mode = normalize_batch_fallback_mode(batch_fallback_mode)
@@ -232,19 +238,35 @@ def batch_lane_preflight_blocker_data(
         )
     if mode == "auto" and batchmode_supported is False:
         if bool(license_capabilities.get("manual_user_action_required")):
+            handoff_classification = str(
+                license_capabilities.get("licensing_handoff_classification") or "manual_user_action_required"
+            )
+            waived_blocker = str(license_capabilities.get("batchmode_blocker_code") or "")
+            if gui_admission_override_enabled():
+                payload["effective_execution_lane"] = "gui"
+                payload["lane_fallback_reason"] = "gui_admission_override"
+                payload["gui_admission_override_active"] = True
+                payload["gui_admission_override_env"] = GUI_ADMISSION_OVERRIDE_ENV
+                payload["gui_admission_override_waived_blocker"] = waived_blocker
+                payload["gui_admission_override_waived_classification"] = handoff_classification
+                return "gui", license_capabilities
             details = {
                 "requested_execution_lane": "batch",
                 "effective_execution_lane": "none",
                 "batch_fallback_mode": mode,
                 "license_batchmode_supported": False,
-                "license_blocker_code": str(license_capabilities.get("batchmode_blocker_code") or ""),
-                "licensing_handoff_classification": str(
-                    license_capabilities.get("licensing_handoff_classification") or "manual_user_action_required"
-                ),
+                "license_blocker_code": waived_blocker,
+                "licensing_handoff_classification": handoff_classification,
                 "licensing_ipc_resolution": dict(license_capabilities.get("licensing_ipc_resolution") or {}),
                 "license_capabilities": license_capabilities,
                 "recommended_next_action": "complete_unity_hub_or_activation_action",
                 "next_distinct_action": "resolve_license_user_action_then_retry",
+                "gui_admission_override_env": GUI_ADMISSION_OVERRIDE_ENV,
+                "gui_admission_override_hint": (
+                    "A host whose GUI editor licenses itself without a running Unity Hub can set "
+                    f"{GUI_ADMISSION_OVERRIDE_ENV}=1 to admit the GUI lane. The override is recorded in the "
+                    "lane payload and waives only this preflight, not the license itself."
+                ),
             }
             raise ToolInvocationError(
                 "manual_user_action_required",

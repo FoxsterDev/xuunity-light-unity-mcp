@@ -13,6 +13,19 @@ PROJECT_ACTION_SCHEMA_VERSION = "xuunity.project-actions.v1"
 PROJECT_HOOK_SCAFFOLD_VERSION = "xuunity.project-hook-scaffold.v1"
 PROJECT_ACTION_CURRENCY_SUFFIX = "__currency"
 PROJECT_ACTION_REFRESH_SUFFIX = "__refresh_assets"
+PROJECT_ACTION_STEP_KEYS = frozenset(
+    {
+        "kind",
+        "actionId",
+        "projectAction",
+        "payload",
+        "payloadJson",
+        "allowMutating",
+        "catalogPath",
+        "requiresFreshAssets",
+        "assetRefreshStepId",
+    }
+)
 
 
 def parse_project_actions_yaml(text: str) -> dict[str, Any]:
@@ -706,16 +719,7 @@ def normalize_project_action_step(
     normalized = {
         key: value
         for key, value in step.items()
-        if key not in {
-            "kind",
-            "actionId",
-            "projectAction",
-            "payload",
-            "payloadJson",
-            "allowMutating",
-            "requiresFreshAssets",
-            "assetRefreshStepId",
-        }
+        if key not in PROJECT_ACTION_STEP_KEYS
     }
     normalized["stepId"] = step_id
     normalized["kind"] = "project_defined_hook"
@@ -789,9 +793,15 @@ def _attach_project_action_currency_fields(payload: dict[str, Any], currency: di
     payload["newest_editor_input_path"] = str(currency.get("newest_editor_input_path") or "")
     payload["newest_editor_input_write_utc"] = str(currency.get("newest_editor_input_write_utc") or "")
     payload["asset_refresh_performed"] = bool(currency.get("asset_refresh_performed"))
+    payload["settled_forced_asset_refresh_requested_utc"] = str(
+        currency.get("settled_forced_asset_refresh_requested_utc") or ""
+    )
+    payload["script_compilation_failed"] = bool(currency.get("script_compilation_failed"))
+    payload["currency_basis"] = str(currency.get("currency_basis") or "")
     payload["safe_to_invoke"] = bool(currency.get("safe_to_invoke"))
     payload["application_run_in_background"] = bool(currency.get("application_run_in_background"))
     payload["native_autofocus_enabled"] = bool(currency.get("native_autofocus_enabled"))
+    payload["background_execution_mode"] = str(currency.get("background_execution_mode") or "")
     payload["currency_recommended_next_action"] = str(currency.get("recommended_next_action") or "")
 
 

@@ -41,7 +41,6 @@ OPERATION_LIFECYCLE_POLICIES: dict[str, dict[str, Any]] = {
         "post_reset_recovery_cap_ms": 180000,
     },
     "unity.project_action.currency": {
-        "activate_unity": True,
         "wait_for_idle_before": True,
         "wait_for_idle_after": False,
         "idle_stable_cycles_after": 1,

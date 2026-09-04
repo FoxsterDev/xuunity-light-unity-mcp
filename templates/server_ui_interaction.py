@@ -72,6 +72,8 @@ def ui_interaction_contract() -> dict[str, Any]:
             "state_changed": "whether the UI tree signature differed after delivery",
             "effective": "true only when the click was delivered and produced an observable UI-tree change",
             "no_observable_effect": "true when delivery occurred but the before/after UI signatures are identical",
+            "expect_state_change": "the step's expectStateChange; false waives the no_state_change gap but never hides no_observable_effect",
+            "click_status": "the direct-tool status the step recorded: effective, delivered_no_observable_effect, or not_delivered",
             "playmode_state": "edit, playing, or paused at delivery time",
             "refusal_code": "set when the operation refused before delivery",
         },
@@ -79,7 +81,7 @@ def ui_interaction_contract() -> dict[str, Any]:
             "Edit-mode delivery never proves a runtime user path; run the step inside a Play-mode scenario.",
             "A refused or undelivered click is evidence of a broken path, not a missing measurement.",
             "Caller-asserted evidence is never receipt-backed.",
-            "Delivery without a state change is reported, not silently accepted.",
+            "Delivery without a state change is always reported as no_observable_effect; it is a gap only when the step expected a change.",
         ],
         "scenario_step_example": {
             "stepId": "close_popup",
@@ -135,13 +137,14 @@ def normalize_ui_interaction(
     state_changed = bool(raw.get("state_changed", raw.get("stateChanged", False)))
     effective = bool(raw.get("effective", delivered and state_changed))
     no_observable_effect = bool(raw.get("no_observable_effect", delivered and not state_changed))
+    expect_state_change = bool(raw.get("expect_state_change", raw.get("expectStateChange", True)))
     playmode_state = _text(raw, "playmode_state", "playmodeState").lower()
 
     if refusal_code:
         gaps.append("refused")
     elif not delivered:
         gaps.append("not_delivered")
-    elif not state_changed:
+    elif not state_changed and expect_state_change:
         gaps.append("no_state_change")
 
     if delivered and playmode_state not in RUNTIME_PLAYMODE_STATES:
@@ -176,6 +179,8 @@ def normalize_ui_interaction(
             "state_changed": state_changed,
             "effective": effective,
             "no_observable_effect": no_observable_effect,
+            "expect_state_change": expect_state_change,
+            "click_status": _text(raw, "click_status", "clickStatus"),
             "before_signature": _text(raw, "before_signature", "beforeSignature"),
             "after_signature": _text(raw, "after_signature", "afterSignature"),
             "playmode_state": playmode_state,
@@ -428,7 +433,11 @@ def _extract_block(payload: Any) -> dict[str, Any] | None:
     for key in ("ui_interaction", "uiInteraction"):
         raw = payload.get(key)
         if isinstance(raw, dict):
-            return raw
+            block = dict(raw)
+            for parent_key in ("expect_state_change", "expectStateChange", "click_status", "clickStatus"):
+                if parent_key in payload and parent_key not in block:
+                    block[parent_key] = payload.get(parent_key)
+            return block
     return None
 
 
@@ -449,6 +458,8 @@ def _summary(record: dict[str, Any]) -> dict[str, Any]:
         "interaction_id": record.get("interaction_id", ""),
         "delivered": record.get("delivered", False),
         "state_changed": record.get("state_changed", False),
+        "no_observable_effect": record.get("no_observable_effect", False),
+        "expect_state_change": record.get("expect_state_change", True),
         "playmode_state": record.get("playmode_state", ""),
         "runtime_proven": record.get("runtime_proven", False),
         "target_path": record.get("target_path", ""),

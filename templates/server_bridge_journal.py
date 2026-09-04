@@ -11,13 +11,31 @@ from typing import Any
 from server_core import parse_utc_timestamp, read_json, write_json
 from server_bridge_paths import request_journal_dir
 
+HOST_CLIENT_KIND_MCP_SERVER = "mcp_server"
+HOST_CLIENT_KIND_CLI = "cli"
 HOST_CLIENT_SESSION_STARTED_UNIX = time.time()
 _CONFIGURED_CLIENT_SESSION_ID = str(os.environ.get("XUUNITY_CLIENT_SESSION_ID") or "").strip()
 HOST_CLIENT_SESSION_ID = _CONFIGURED_CLIENT_SESSION_ID or uuid.uuid4().hex
+os.environ["XUUNITY_CLIENT_SESSION_ID"] = HOST_CLIENT_SESSION_ID
+_CONFIGURED_CLIENT_KIND = str(os.environ.get("XUUNITY_CLIENT_KIND") or "").strip().lower()
+_HOST_CLIENT_KIND = _CONFIGURED_CLIENT_KIND or HOST_CLIENT_KIND_MCP_SERVER
 
 
 def current_client_session_id() -> str:
     return HOST_CLIENT_SESSION_ID
+
+
+def current_client_kind() -> str:
+    return _HOST_CLIENT_KIND
+
+
+def mark_host_client_kind(kind: str) -> None:
+    global _HOST_CLIENT_KIND
+    if _CONFIGURED_CLIENT_KIND:
+        return
+    normalized = str(kind or "").strip().lower()
+    if normalized:
+        _HOST_CLIENT_KIND = normalized
 
 
 def _json_only_enabled() -> bool:
@@ -258,6 +276,8 @@ def write_host_request_journal_event(
     data.setdefault("event_type", event_type)
     data.setdefault("event_source", "host_wrapper")
     data.setdefault("client_session_id", HOST_CLIENT_SESSION_ID)
+    if str(data.get("client_session_id") or "") == HOST_CLIENT_SESSION_ID:
+        data.setdefault("client_kind", current_client_kind())
     data.setdefault("event_at_utc", time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
     data.setdefault("project_root", str(project_root))
     write_json(path, data)
@@ -269,8 +289,10 @@ def summarize_request_attribution(project_root: Path) -> dict[str, Any]:
 
     own = 0
     foreign = 0
+    cli = 0
     unattributed = 0
     last_foreign_at_utc = ""
+    last_cli_at_utc = ""
     journal_dir = request_journal_dir(project_root)
     if journal_dir.is_dir():
         for path in journal_dir.glob("*.json"):
@@ -291,22 +313,32 @@ def summarize_request_attribution(project_root: Path) -> dict[str, Any]:
             client_session_id = str(event.get("client_session_id") or "").strip()
             if not client_session_id:
                 unattributed += 1
-            elif client_session_id == HOST_CLIENT_SESSION_ID:
+                continue
+            if client_session_id == HOST_CLIENT_SESSION_ID:
                 own += 1
-            else:
-                foreign += 1
-                stamp = str(event.get("event_at_utc") or "")
-                if stamp > last_foreign_at_utc:
-                    last_foreign_at_utc = stamp
+                continue
+            stamp = str(event.get("event_at_utc") or "")
+            if str(event.get("client_kind") or "").strip().lower() == HOST_CLIENT_KIND_CLI:
+                cli += 1
+                if stamp > last_cli_at_utc:
+                    last_cli_at_utc = stamp
+                continue
+            foreign += 1
+            if stamp > last_foreign_at_utc:
+                last_foreign_at_utc = stamp
 
     return {
         "client_session_id": HOST_CLIENT_SESSION_ID,
+        "client_kind": current_client_kind(),
         "client_session_started_unix": HOST_CLIENT_SESSION_STARTED_UNIX,
         "own_requests_since_client_start": own,
         "foreign_requests_since_client_start": foreign,
+        "cli_requests_since_client_start": cli,
         "unattributed_requests_since_client_start": unattributed,
         "foreign_request_activity_detected": foreign > 0,
+        "cli_request_activity_detected": cli > 0,
         "last_foreign_request_at_utc": last_foreign_at_utc,
+        "last_cli_request_at_utc": last_cli_at_utc,
     }
 
 

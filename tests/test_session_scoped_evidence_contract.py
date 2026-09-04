@@ -35,6 +35,7 @@ import run_multi_project
 import server_batch_orchestrator
 import server_bridge_payloads
 import server_bridge_journal
+import server_bridge_paths
 import server_core
 import server_editor_host_paths  # noqa: E402
 import server_health
@@ -1117,6 +1118,101 @@ class AnchorTrustBoundaryTests(unittest.TestCase):
 
 
 class RequestAttributionTests(unittest.TestCase):
+    def test_the_operators_own_cli_run_does_not_raise_the_foreign_client_alarm(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            server_bridge_journal.write_host_request_journal_event(
+                root,
+                "request_submitted",
+                {
+                    "request_submitted_unix": time.time(),
+                    "client_session_id": "operator-cli-process",
+                    "client_kind": server_bridge_journal.HOST_CLIENT_KIND_CLI,
+                },
+            )
+            summary = server_bridge_journal.summarize_request_attribution(root)
+
+        self.assertEqual(0, summary["foreign_requests_since_client_start"])
+        self.assertFalse(summary["foreign_request_activity_detected"])
+        self.assertEqual("", summary["last_foreign_request_at_utc"])
+        self.assertEqual(1, summary["cli_requests_since_client_start"])
+        self.assertTrue(summary["cli_request_activity_detected"])
+        self.assertNotEqual("", summary["last_cli_request_at_utc"])
+
+    def test_a_second_long_lived_client_session_still_raises_the_alarm(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            server_bridge_journal.write_host_request_journal_event(
+                root,
+                "request_submitted",
+                {
+                    "request_submitted_unix": time.time(),
+                    "client_session_id": "another-agent-session",
+                    "client_kind": server_bridge_journal.HOST_CLIENT_KIND_MCP_SERVER,
+                },
+            )
+            summary = server_bridge_journal.summarize_request_attribution(root)
+
+        self.assertEqual(1, summary["foreign_requests_since_client_start"])
+        self.assertTrue(summary["foreign_request_activity_detected"])
+        self.assertNotEqual("", summary["last_foreign_request_at_utc"])
+        self.assertEqual(0, summary["cli_requests_since_client_start"])
+        self.assertFalse(summary["cli_request_activity_detected"])
+
+    def test_a_journal_row_written_before_client_kind_existed_still_classifies(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            journal_dir = server_bridge_paths.request_journal_dir(root)
+            journal_dir.mkdir(parents=True, exist_ok=True)
+            server_core.write_json(
+                journal_dir / "legacy_attributed_request_submitted.json",
+                {
+                    "event_type": "request_submitted",
+                    "event_at_utc": "2026-09-04T00:00:00Z",
+                    "request_submitted_unix": time.time(),
+                    "client_session_id": "older-host-version",
+                },
+            )
+            server_core.write_json(
+                journal_dir / "legacy_unattributed_request_submitted.json",
+                {
+                    "event_type": "request_submitted",
+                    "event_at_utc": "2026-09-04T00:00:00Z",
+                    "request_submitted_unix": time.time(),
+                },
+            )
+            summary = server_bridge_journal.summarize_request_attribution(root)
+
+        self.assertEqual(1, summary["foreign_requests_since_client_start"])
+        self.assertTrue(summary["foreign_request_activity_detected"])
+        self.assertEqual(1, summary["unattributed_requests_since_client_start"])
+        self.assertEqual(0, summary["cli_requests_since_client_start"])
+
+    def test_the_host_publishes_its_client_session_id_to_child_host_processes(self) -> None:
+        self.assertEqual(
+            server_bridge_journal.current_client_session_id(),
+            os.environ.get("XUUNITY_CLIENT_SESSION_ID"),
+        )
+
+    def test_the_cli_entrypoint_marks_its_client_kind(self) -> None:
+        previous_kind = server_bridge_journal.current_client_kind()
+        self.addCleanup(server_bridge_journal.mark_host_client_kind, previous_kind)
+        server_bridge_journal.mark_host_client_kind(server_bridge_journal.HOST_CLIENT_KIND_CLI)
+        self.assertEqual("cli", server_bridge_journal.current_client_kind())
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = server_bridge_journal.write_host_request_journal_event(
+                Path(temp_dir),
+                "request_submitted",
+                {"request_submitted_unix": time.time()},
+            )
+            self.assertEqual("cli", server_core.read_json(path)["client_kind"])
+
+        self.assertIn(
+            "mark_host_client_kind(HOST_CLIENT_KIND_CLI)",
+            (TEMPLATES_DIR / "server.py").read_text(encoding="utf-8"),
+        )
+
     def test_status_counter_distinguishes_own_foreign_and_unattributed_requests(self) -> None:
         with TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)

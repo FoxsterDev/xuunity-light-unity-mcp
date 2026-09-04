@@ -17,6 +17,9 @@ from server_core import (
 )
 from server_specs import STARTUP_POLICIES, SCENARIO_TERMINAL_STATUSES
 from server_health import (
+    EDITOR_LOG_GREP_ABS_MAX_CHARS,
+    EDITOR_LOG_GREP_MAX_CHARS,
+    EDITOR_LOG_GREP_MIN_CHARS,
     FRESH_HEARTBEAT_MAX_AGE_SECONDS,
     annotate_console_grep_false_empty,
     annotate_console_tail_payload,

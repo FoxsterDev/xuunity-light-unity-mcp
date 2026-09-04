@@ -138,11 +138,21 @@ frame sample, editor focus, `playmode_loop_liveness`, warning/remediation, and
 `result_trust_class`. `throttled` maps to `playmode_throttled`; a playing state
 without sufficient samples maps to `playmode_liveness_unproven`. Neither is
 equivalent to runtime proof even when transport and editor health are green.
+A playing state with no sample yet is not throttled: its remediation is to wait
+for the next liveness sample, not to focus the editor. The complete value set
+for every trust, warning, outcome and gap field is one table in
+`docs/reference/GLOSSARY.md`.
 
-While enabled, the bridge keeps runtime `Application.runInBackground=true`
-across domain/play-state churn without writing `PlayerSettings`. This reduces
-focus dependence but is not a liveness verdict; native autofocus stays disabled
-and point-of-use frame advancement remains authoritative.
+Background execution is opt-in and reversible. In the editor
+`Application.runInBackground` is backed by `PlayerSettings.runInBackground`, so
+assigning it writes a project setting that can be serialized into the
+consumer's `ProjectSettings.asset`. The bridge therefore applies it only when
+`background_execution_enabled: true` is set in the project's bridge config, and
+only once per domain rather than per tick. The pre-existing value is captured in
+`SessionState` and restored when the bridge is disabled or the editor quits, and
+`background_execution_mode` reports `managed` or `project_owned`. Enabling it
+reduces focus dependence but is not a liveness verdict; native autofocus stays
+disabled and point-of-use frame advancement remains authoritative.
 
 Screenshot and UI-read evidence also separates:
 
@@ -225,11 +235,27 @@ Current request journal baseline includes:
 - `request_abandoned`
 - `request_reclassified`
 
-Every host process stamps a stable `client_session_id` into submitted requests.
-Unity preserves that id across domain reloads and writes it, plus the real
-editor PID, on lifecycle journal events. Compact status counts own, foreign,
-and unattributed submissions since the current client process started so an
-operator can distinguish its work from another terminal or MCP client.
+Every host process stamps a stable `client_session_id` and a `client_kind`
+(`mcp_server` or `cli`) into the requests it submits, and publishes its
+`client_session_id` to child host processes so a delegated CLI request stays
+own work. Unity preserves the id across domain reloads and writes it, plus the
+real editor PID, on lifecycle journal events. Compact status counts own,
+foreign, CLI, and unattributed submissions since the current client process
+started.
+
+`foreign_request_activity_detected` is the alarm. It means a client session
+other than this one, and not a CLI process, submitted requests to this editor,
+so mutating work should pause until that session is identified. It does not
+mean the operator ran the wrapper CLI or a smoke suite against their own
+editor: those submissions are counted in `cli_requests_since_client_start`
+with `last_cli_request_at_utc`, and are informational. Two cases the alarm
+cannot see: a request written straight into the file-IPC inbox, which produces
+no host journal event at all, and a second client that drives the editor only
+through the wrapper CLI, which is indistinguishable from the operator doing
+the same; such a client re-arms the alarm by exporting
+`XUUNITY_CLIENT_KIND=mcp_server`. A row written by a host older than the
+`client_kind` field carries no kind and stays in the alarm bucket, so version
+skew never silences it.
 
 This is intentionally a first protocol layer, not the final reconnect model.
 
@@ -252,6 +278,10 @@ means the event reached the target; `effective=true` requires an observable
 semantic state change. A delivered no-op returns
 `status=delivered_no_observable_effect`, `success=false`, and remediation for
 raycast, log, or project-hook verification.
+The scenario step adds an `expectStateChange` opt-out the direct tool does not
+have; a waived inert click passes with outcome `delivered_no_observable_effect`
+and is surfaced as `ui_interaction_summary` on the scenario step summary, so a
+passing scenario never reads as a proven user path on its own.
 
 Known current weakness:
 

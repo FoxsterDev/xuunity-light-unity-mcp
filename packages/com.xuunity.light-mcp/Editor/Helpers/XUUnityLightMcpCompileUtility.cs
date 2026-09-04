@@ -158,15 +158,7 @@ namespace XUUnity.LightMcp.Editor.Helpers
                 }
 
                 warningCount++;
-                var identity = string.Join(
-                    "\n",
-                    diagnostic.assembly_name,
-                    diagnostic.file,
-                    diagnostic.line.ToString(),
-                    diagnostic.column.ToString(),
-                    diagnostic.code,
-                    diagnostic.message);
-                if (uniqueWarningKeys.Add(identity))
+                if (uniqueWarningKeys.Add(WarningIdentity(diagnostic)))
                 {
                     uniqueWarnings.Add(diagnostic);
                 }
@@ -178,8 +170,12 @@ namespace XUUnity.LightMcp.Editor.Helpers
             var text = message ?? "";
             for (var index = 0; index + 5 < text.Length; index++)
             {
-                if ((text[index] != 'C' && text[index] != 'c')
-                    || (text[index + 1] != 'S' && text[index + 1] != 's'))
+                if (text[index] != 'C' || text[index + 1] != 'S')
+                {
+                    continue;
+                }
+
+                if (index > 0 && (char.IsLetterOrDigit(text[index - 1]) || text[index - 1] == '_'))
                 {
                     continue;
                 }
@@ -190,13 +186,25 @@ namespace XUUnity.LightMcp.Editor.Helpers
                     end++;
                 }
 
-                if (end - index >= 6)
+                if (end - index >= 6 && (end >= text.Length || !char.IsLetter(text[end])))
                 {
-                    return text.Substring(index, end - index).ToUpperInvariant();
+                    return text.Substring(index, end - index);
                 }
             }
 
             return "";
+        }
+
+        static string WarningIdentity(XUUnityLightMcpCompileErrorItem warning)
+        {
+            return string.Join(
+                "\n",
+                warning.assembly_name,
+                warning.file,
+                warning.line.ToString(),
+                warning.column.ToString(),
+                warning.code,
+                warning.message);
         }
 
         internal static void PopulateMatrixWarningSummary(XUUnityLightMcpCompileMatrixPayload payload)
@@ -222,15 +230,7 @@ namespace XUUnity.LightMcp.Editor.Helpers
                         continue;
                     }
 
-                    var identity = string.Join(
-                        "\n",
-                        warning.assembly_name,
-                        warning.file,
-                        warning.line.ToString(),
-                        warning.column.ToString(),
-                        warning.code,
-                        warning.message);
-                    if (uniqueWarningKeys.Add(identity))
+                    if (uniqueWarningKeys.Add(WarningIdentity(warning)))
                     {
                         uniqueWarnings.Add(warning);
                     }

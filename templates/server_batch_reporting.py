@@ -8,6 +8,8 @@ import time
 from pathlib import Path
 from typing import Any, Callable
 
+from server_bridge_constants import COMPILE_WARNING_SAMPLE_LIMIT
+
 
 DEFAULT_BATCH_PROGRESS_INTERVAL_SECONDS = 30.0
 BATCH_OUTPUT_MODES = ("full", "compact")
@@ -372,7 +374,7 @@ def summarize_batch_result_payload(
             "warning_count": matrix_payload.get("warning_count"),
             "unique_warning_count": matrix_payload.get("unique_warning_count"),
             "warnings_truncated": matrix_payload.get("warnings_truncated"),
-            "warnings": list(matrix_payload.get("warnings") or [])[:20],
+            "warnings": list(matrix_payload.get("warnings") or [])[:COMPILE_WARNING_SAMPLE_LIMIT],
         }
 
     tests_payload = result_payload.get("tests") or {}

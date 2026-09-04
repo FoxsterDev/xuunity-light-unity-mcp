@@ -264,6 +264,30 @@ class CSharpAtomicWriterContractTest(unittest.TestCase):
                 offenders.append(str(source.relative_to(REPO_ROOT)))
         self.assertEqual([], offenders)
 
+    def test_only_background_execution_helper_assigns_run_in_background(self) -> None:
+        # Application.runInBackground is PlayerSettings-backed in the editor, so an
+        # assignment can land in the consumer's committed ProjectSettings.asset.
+        offenders = []
+        for source in self.csharp_files():
+            if source.name == "XUUnityLightMcpBackgroundExecution.cs":
+                continue
+            if "Application.runInBackground =" in source.read_text(encoding="utf-8"):
+                offenders.append(source.relative_to(REPO_ROOT).as_posix())
+        self.assertEqual([], offenders)
+
+    def test_background_execution_is_applied_once_per_domain_not_per_tick(self) -> None:
+        callers = {}
+        for source in self.csharp_files():
+            count = source.read_text(encoding="utf-8").count(
+                "XUUnityLightMcpBackgroundExecution.ApplyIfConfigured()"
+            )
+            if count:
+                callers[source.relative_to(REPO_ROOT).as_posix()] = count
+        self.assertEqual(
+            {"packages/com.xuunity.light-mcp/Editor/Bridge/XUUnityLightMcpBridgeBootstrap.cs": 1},
+            callers,
+        )
+
     def test_bridge_state_and_response_writers_use_atomic_publisher(self) -> None:
         for relative in (
             Path("Bridge") / "XUUnityLightMcpBridgeStateWriter.cs",

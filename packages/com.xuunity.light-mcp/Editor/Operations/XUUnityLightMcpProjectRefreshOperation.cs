@@ -21,7 +21,7 @@ namespace XUUnity.LightMcp.Editor.Operations
             try
             {
                 var requestCompletedAtUtc = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ");
-                XUUnityLightMcpBridgeRuntimeState.BeginRefreshSettleTracking(request.request_id, args.resolvePackages);
+                XUUnityLightMcpBridgeRuntimeState.BeginRefreshSettleTracking(request.request_id, args.resolvePackages, args.forceAssetRefresh);
                 XUUnityLightMcpLifecycleMonitor.MarkAssetRefreshRequested();
                 if (args.forceAssetRefresh)
                 {

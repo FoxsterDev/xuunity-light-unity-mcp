@@ -27,6 +27,7 @@ for entry in (TEMPLATES_DIR, TESTS_DIR):
         sys.path.insert(0, str(entry))
 
 import server_bridge_paths
+import server_project_actions
 import server_specs
 from server_ui_interaction import RUNTIME_PLAYMODE_STATES
 
@@ -300,6 +301,123 @@ class BuildPipelineNoisePatternTest(unittest.TestCase):
             "RewardPopup opened",
         ):
             self.assertIsNone(server_health.BUILD_PIPELINE_PROGRESS.search(real), real)
+
+
+class ProjectActionExpansionParityTest(unittest.TestCase):
+    """The project_action step expansion is written twice, in two languages.
+
+    `expand_project_action_hook_step` in Python and `XUUnityLightMcpProjectActionStepBuilder` in C#
+    both encode the step-id suffixes, the generated refresh step and the dependsOn wiring, and the
+    editor normalizer runs on every scenario a client sends straight to the bridge. A value that
+    drifts on one side changes the scenario a caller gets depending on which lane expanded it, and
+    the Unity package suite cannot run in hosted CI, so these pins are the only cross-lane guard.
+    """
+
+    def builder_source(self) -> str:
+        return (
+            EDITOR_ROOT / "Helpers" / "XUUnityLightMcpProjectActionStepBuilder.cs"
+        ).read_text(encoding="utf-8")
+
+    def test_the_generated_step_id_suffixes_match(self) -> None:
+        source = self.builder_source()
+
+        self.assertIn(
+            f'const string CurrencySuffix = "{server_project_actions.PROJECT_ACTION_CURRENCY_SUFFIX}";',
+            source,
+        )
+        self.assertIn(
+            f'const string RefreshSuffix = "{server_project_actions.PROJECT_ACTION_REFRESH_SUFFIX}";',
+            source,
+        )
+
+    def test_the_inert_input_keys_dropped_from_the_hook_step_match(self) -> None:
+        source = self.builder_source()
+        declared = source.split("ProjectActionStepKeys", 1)[1].split("};", 1)[0]
+        editor_keys = set(re.findall(r'"([A-Za-z]+)"', declared))
+
+        self.assertEqual(set(server_project_actions.PROJECT_ACTION_STEP_KEYS), editor_keys)
+
+    def test_the_generated_refresh_step_flags_match(self) -> None:
+        source = self.builder_source()
+        refresh = source.split("static LightJsonNode BuildRefreshStep", 1)[1].split("return refreshStep;", 1)[0]
+
+        self.assertIn('refreshStep.Object["kind"] = LightJsonNode.String("project_refresh")', refresh)
+        self.assertIn('"forceAssetRefresh"', refresh)
+        self.assertIn("BoolValue = true", refresh)
+        self.assertIn('"resolvePackages"', refresh)
+        self.assertIn('"rerunHealthProbe"', refresh)
+        self.assertIn('NumberValue = "180"', refresh)
+
+    def test_the_python_expansion_emits_the_shape_the_editor_emits(self) -> None:
+        raw = server_project_actions.parse_project_actions_yaml(
+            "\n".join(
+                [
+                    "schemaVersion: xuunity.project-actions.v1",
+                    "project: FakeProject",
+                    "actions:",
+                    "  localization.scan:",
+                    "    hookName: sample.localization",
+                    "    requiresFreshAssets: true",
+                ]
+            )
+        )
+        project_root = Path("/tmp/FakeProject")
+        catalog = server_project_actions.normalize_project_action_catalog(
+            raw,
+            project_root=project_root,
+            catalog_path=project_root / "project_actions.yaml",
+        )
+        steps = server_project_actions.normalize_project_action_steps(
+            catalog=catalog,
+            steps=[
+                {
+                    "stepId": "scan",
+                    "kind": "project_action",
+                    "actionId": "localization.scan",
+                    "allowMutating": True,
+                    "catalogPath": "ignored.yaml",
+                    "dependsOn": ["prepare"],
+                    "runIfStepPassed": ["prepare"],
+                    "payload": {},
+                }
+            ],
+            step_group="steps",
+        )
+        shapes = [
+            {key: value for key, value in step.items() if key != "hookPayloadJson"}
+            for step in steps
+        ]
+
+        self.assertEqual(
+            [
+                {
+                    "stepId": "scan__refresh_assets",
+                    "kind": "project_refresh",
+                    "forceAssetRefresh": True,
+                    "resolvePackages": False,
+                    "rerunHealthProbe": False,
+                    "timeoutSeconds": 180.0,
+                    "dependsOn": ["prepare"],
+                    "runIfStepPassed": ["prepare"],
+                },
+                {
+                    "stepId": "scan__currency",
+                    "kind": "project_action_currency",
+                    "actionId": "localization.scan",
+                    "requiresFreshAssets": True,
+                    "assetRefreshStepId": "scan__refresh_assets",
+                    "dependsOn": ["scan__refresh_assets"],
+                },
+                {
+                    "stepId": "scan",
+                    "kind": "project_defined_hook",
+                    "hookName": "sample.localization",
+                    "mutationSettlePolicy": "",
+                    "dependsOn": ["scan__currency"],
+                },
+            ],
+            shapes,
+        )
 
 
 if __name__ == "__main__":

@@ -51,10 +51,19 @@ namespace XUUnity.LightMcp.Editor.Bridge
             }
         }
 
+        public static void StampEditorDomainLoaded()
+        {
+            lock (XUUnityLightMcpBridgeRuntimeStorage.Gate)
+            {
+                StampEditorDomainLoadedLocked();
+            }
+        }
+
         public static void InitializeBridgeSession()
         {
             lock (XUUnityLightMcpBridgeRuntimeStorage.Gate)
             {
+                StampEditorDomainLoadedLocked();
                 XUUnityLightMcpFileIpcPaths.EnsureDirectories();
                 var nextGeneration = ResolveNextGeneration();
 
@@ -87,12 +96,21 @@ namespace XUUnity.LightMcp.Editor.Bridge
             return nextGeneration;
         }
 
+        static void StampEditorDomainLoadedLocked()
+        {
+            if (!string.IsNullOrEmpty(XUUnityLightMcpBridgeRuntimeStorage.EditorDomainLoadedUtc))
+            {
+                return;
+            }
+
+            XUUnityLightMcpBridgeRuntimeStorage.EditorDomainLoadedUtc = XUUnityLightMcpBridgeRuntimeStorage.UtcNowPrecise();
+        }
+
         static void ResetSessionFieldsLocked(int nextGeneration)
         {
             XUUnityLightMcpBridgeRuntimeStorage.BridgeGeneration = nextGeneration;
             XUUnityLightMcpBridgeRuntimeStorage.BridgeSessionId = Guid.NewGuid().ToString("N");
             XUUnityLightMcpBridgeRuntimeStorage.BridgeBootstrapAttached = true;
-            XUUnityLightMcpBridgeRuntimeStorage.EditorDomainLoadedUtc = XUUnityLightMcpBridgeRuntimeStorage.UtcNowPrecise();
             XUUnityLightMcpBridgeRuntimeStorage.DomainReloadInProgress = false;
             XUUnityLightMcpBridgeRuntimeStorage.DomainReloadStartedUtc = "";
             XUUnityLightMcpBridgeRuntimeStorage.AssetImportInProgress = false;
@@ -112,6 +130,9 @@ namespace XUUnity.LightMcp.Editor.Bridge
             XUUnityLightMcpBridgeRuntimeStorage.RefreshSettlePhase = "";
             XUUnityLightMcpBridgeRuntimeStorage.RefreshSettlePackageResolveRequested = false;
             XUUnityLightMcpBridgeRuntimeStorage.RefreshSettleStableTickCount = 0;
+            XUUnityLightMcpBridgeRuntimeStorage.RefreshSettleForcedAssetRefresh = false;
+            XUUnityLightMcpBridgeRuntimeStorage.RefreshSettleRequestedPreciseUtc = "";
+            XUUnityLightMcpBridgeRuntimeStorage.SettledForcedAssetRefreshRequestedUtc = "";
             XUUnityLightMcpBridgeRuntimeStorage.CompileSettlePending = false;
             XUUnityLightMcpBridgeRuntimeStorage.CompileSettleRequestId = "";
             XUUnityLightMcpBridgeRuntimeStorage.CompileSettleStartedUtc = "";
@@ -141,7 +162,7 @@ namespace XUUnity.LightMcp.Editor.Bridge
             {
                 bridge_generation = XUUnityLightMcpBridgeRuntimeStorage.BridgeGeneration,
                 bridge_session_id = XUUnityLightMcpBridgeRuntimeStorage.BridgeSessionId,
-                bootstrap_attached_at_utc = XUUnityLightMcpBridgeRuntimeStorage.EditorDomainLoadedUtc,
+                bootstrap_attached_at_utc = XUUnityLightMcpBridgeRuntimeStorage.UtcNow(),
                 editor_domain_loaded_utc = XUUnityLightMcpBridgeRuntimeStorage.EditorDomainLoadedUtc,
             };
 

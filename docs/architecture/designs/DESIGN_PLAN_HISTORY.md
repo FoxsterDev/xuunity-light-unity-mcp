@@ -1,7 +1,7 @@
 # XUUnity Light Unity MCP Design Plan History
 
 Date: `2026-05-26`
-Last re-review: `2026-08-29` (consumer release rollout safety helper implemented, validated, and registered for `v0.3.62`)
+Last re-review: `2026-09-04` (review findings of `v0.3.63`-`v0.3.70` triaged and fixed for `v0.3.71`)
 Status: `active design-plan history index`
 
 ## Purpose

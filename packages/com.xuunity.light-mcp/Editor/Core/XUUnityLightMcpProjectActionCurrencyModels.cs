@@ -26,12 +26,15 @@ namespace XUUnity.LightMcp.Editor.Core
         public string newest_editor_input_path = "";
         public string newest_editor_input_write_utc = "";
         public int editor_input_count;
+        public string settled_forced_asset_refresh_requested_utc = "";
+        public bool script_compilation_failed;
         public string currency_basis = "editor_domain_load_vs_newest_assets_editor_input";
         public bool safe_to_invoke;
         public string reason = "";
         public string recommended_next_action = "";
         public bool application_run_in_background;
         public bool native_autofocus_enabled;
+        public string background_execution_mode = "";
         public string validation_evidence = "unity_mcp";
     }
 }

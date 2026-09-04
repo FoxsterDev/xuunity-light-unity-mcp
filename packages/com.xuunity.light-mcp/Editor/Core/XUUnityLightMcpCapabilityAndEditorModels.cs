@@ -54,7 +54,7 @@ namespace XUUnity.LightMcp.Editor.Core
             public string playmode_loop_liveness = "";
             public string playmode_liveness_warning = "";
             public string playmode_liveness_remediation = "";
-            public string result_trust_class = "editor_truth_confirmed";
+            public string result_trust_class = "";
         }
 
         [Serializable]

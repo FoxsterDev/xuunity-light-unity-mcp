@@ -1,7 +1,7 @@
 # Glossary
 
 Date: `2026-05-23`
-Status: `current for v0.3.70`
+Status: `current for v0.3.71`
 
 ## XUUnity
 
@@ -22,7 +22,7 @@ The Unity package is `com.xuunity.light-mcp`. It contains the editor-side bridge
 Current production Git UPM path:
 
 ```text
-https://github.com/FoxsterDev/xuunity-mcp.git?path=/packages/com.xuunity.light-mcp#v0.3.70
+https://github.com/FoxsterDev/xuunity-mcp.git?path=/packages/com.xuunity.light-mcp#v0.3.71
 ```
 
 ## Git UPM
@@ -81,3 +81,69 @@ after Unity reloads, transport churn, or wrapper timeouts.
 ## Scenario
 
 A scenario is a bounded JSON workflow that asks Unity MCP to perform ordered validation steps such as refresh, compile, Play Mode, scene checks, screenshots, or project-defined hooks.
+
+## Trust, Outcome and Warning Vocabulary
+
+Every value this system publishes in a trust, outcome, warning or gap field.
+A value not in this table must not be published, and a new value is added here
+in the same change that emits it.
+
+### `result_trust_class`
+
+| Value | Produced by | Read by |
+| --- | --- | --- |
+| `editor_truth_confirmed` | the editor's point-of-use liveness sampler, mirrored by the host for lifecycle-recovered Play Mode payloads | scenario liveness summary, scenario decision verdict |
+| `playmode_advancing_confirmed` | the same pair | the same |
+| `playmode_throttled` | the same pair, plus the scenario decision verdict | the same |
+| `playmode_liveness_unproven` | the same pair, plus the scenario decision verdict | the same |
+| `authoritative`, `stale_risk` | the scenario decision verdict | scenario decision verdict |
+| `unity_completed_confirmed`, `unity_completed_filter_no_match`, `unity_failed_confirmed`, `unity_unproven`, `request_not_observed`, `wrapper_failed_unity_unproven` | the host's request final status | request final status, wrapper compact output |
+| empty | a payload that never took a sample: a scenario step still pending, a step the run never reached, or a nested payload that could not be read | never read as a confirmation |
+
+`playmode_throttled` is deliberately the same token in `result_trust_class` and
+in `playmode_liveness_warning`, and `playmode_liveness_unproven` shares its stem
+with `playmode_liveness_unproven_editor_unfocused`. Match on the field, never on
+the bare string. Unifying the two namespaces is a breaking rename and is not
+done in a patch release.
+
+### `console_error_count_trust_class`
+
+| Value | Meaning |
+| --- | --- |
+| `complete_since_request_start` | the counter session survived the whole request |
+| `lower_bound_after_domain_reload` | the baseline belongs to a previous editor domain |
+| `lower_bound_without_request_baseline` | no baseline establishes completeness |
+| empty | the payload carries no console-pressure evidence at all |
+
+### Play-mode liveness warnings and their remediation
+
+| Warning | Remediation |
+| --- | --- |
+| `playmode_throttled` | `focus_the_unity_editor_or_set_interaction_mode_to_no_throttling` |
+| `playmode_throttled_editor_unfocused` | the same |
+| `playmode_liveness_unproven_editor_unfocused` | `wait_for_playmode_liveness_sample_and_retry` |
+| empty | none |
+
+### UI interaction outcomes and gaps
+
+| Value | Meaning |
+| --- | --- |
+| `effective` | delivered and the before/after UI signature changed |
+| `delivered_no_observable_effect` | delivered, no signature change; the direct tool reports it as a failure and a scenario step reports it as a pass only when `expectStateChange` waived the change |
+| `not_delivered` | the event never reached a handler |
+| `no_state_change` | a gap raised only when the step expected a change |
+| `interaction_delivered` | the scenario step outcome for an effective click |
+
+### `background_execution_mode`
+
+| Value | Meaning |
+| --- | --- |
+| `project_owned` | the bridge does not touch `Application.runInBackground`; the project setting stands |
+| `managed` | the project opted in, the bridge enabled it, and it restores the original value on disable or editor quit |
+
+### `currency_basis`
+
+| Value | Meaning |
+| --- | --- |
+| `editor_domain_load_vs_newest_assets_editor_input` | the verdict compares the loaded editor domain against the newest editor input under `Assets` |
+| `settled_forced_asset_refresh_covers_newest_assets_editor_input` | a completed forced refresh already covered that input, and script compilation is not failing, so no reload was owed |

@@ -13,6 +13,7 @@ if str(TEMPLATES_DIR) not in sys.path:
 import server_core
 import server_editor_host
 import server_host_platform
+import server_hub_licensing
 
 
 class WindowsHostHelperTests(unittest.TestCase):
@@ -882,6 +883,124 @@ class WindowsHostHelperTests(unittest.TestCase):
             mock_run.assert_called_once()
             self.assertIn("taskkill", mock_run.call_args[0][0])
             self.assertNotIn("/T", mock_run.call_args[0][0])
+
+
+class HubLicensingTerminationRoutingTests(unittest.TestCase):
+    maxDiff = None
+
+    def _adapter(self, alive: set):
+        adapter = mock.Mock()
+        adapter.pid_is_alive.side_effect = lambda pid: int(pid) in alive
+        adapter.platform_kind = "linux"
+        return adapter
+
+    @unittest.skipIf(os.name == "nt", "POSIX kill routing; native Windows is windows-like by os.name")
+    def test_licensing_kill_uses_posix_signal_only_on_a_posix_host(self) -> None:
+        alive = {4242}
+        with (
+            mock.patch.dict(os.environ, {"OS": "", "MSYSTEM": ""}, clear=False),
+            mock.patch.object(sys, "platform", "darwin"),
+            mock.patch.object(server_hub_licensing, "is_wsl", return_value=False),
+            mock.patch.object(
+                server_hub_licensing,
+                "current_host_platform_adapter",
+                return_value=self._adapter(alive),
+            ),
+            mock.patch.object(server_hub_licensing.os, "kill") as kill_mock,
+            mock.patch.object(server_hub_licensing.subprocess, "run") as run_mock,
+        ):
+            kill_mock.side_effect = lambda pid, signal_number: alive.discard(int(pid))
+            terminated = server_hub_licensing._terminate_verified_pid(4242, 2000)
+
+        self.assertTrue(terminated)
+        kill_mock.assert_called_once_with(4242, server_hub_licensing.signal.SIGTERM)
+        run_mock.assert_not_called()
+
+    def test_licensing_kill_renders_single_pid_taskkill_on_native_windows(self) -> None:
+        alive = {4242}
+        with (
+            mock.patch.dict(os.environ, {"OS": "Windows_NT"}, clear=False),
+            mock.patch.object(sys, "platform", "win32"),
+            mock.patch.object(server_hub_licensing, "is_wsl", return_value=False),
+            mock.patch.object(
+                server_hub_licensing,
+                "current_host_platform_adapter",
+                return_value=self._adapter(alive),
+            ),
+            mock.patch.object(
+                server_hub_licensing,
+                "hidden_window_subprocess_kwargs",
+                return_value={"creationflags": 134217728},
+            ),
+            mock.patch.object(server_hub_licensing.os, "kill") as kill_mock,
+            mock.patch.object(server_hub_licensing.subprocess, "run") as run_mock,
+        ):
+            def discard_and_succeed(*args, **kwargs):
+                alive.discard(4242)
+                return mock.Mock(returncode=0, stdout="", stderr="")
+
+            run_mock.side_effect = discard_and_succeed
+            terminated = server_hub_licensing._terminate_verified_pid(4242, 2000)
+
+        self.assertTrue(terminated)
+        kill_mock.assert_not_called()
+        run_mock.assert_called_once()
+        argv = run_mock.call_args.args[0]
+        self.assertEqual(["taskkill", "/F", "/PID", "4242"], argv)
+        self.assertNotIn("/T", argv)
+        self.assertEqual(
+            server_hub_licensing.TASKKILL_TIMEOUT_SECONDS,
+            run_mock.call_args.kwargs["timeout"],
+        )
+        self.assertEqual(134217728, run_mock.call_args.kwargs["creationflags"])
+
+    def test_licensing_kill_never_signals_a_pid_read_from_the_windows_table_under_wsl(self) -> None:
+        alive = {4242}
+        with (
+            mock.patch.dict(os.environ, {"OS": "", "MSYSTEM": ""}, clear=False),
+            mock.patch.object(sys, "platform", "linux"),
+            mock.patch.object(server_hub_licensing, "is_wsl", return_value=True),
+            mock.patch.object(
+                server_hub_licensing,
+                "current_host_platform_adapter",
+                return_value=self._adapter(alive),
+            ),
+            mock.patch.object(server_hub_licensing.os, "kill") as kill_mock,
+            mock.patch.object(server_hub_licensing.subprocess, "run") as run_mock,
+        ):
+            def discard_and_succeed(*args, **kwargs):
+                alive.discard(4242)
+                return mock.Mock(returncode=0, stdout="", stderr="")
+
+            run_mock.side_effect = discard_and_succeed
+            terminated = server_hub_licensing._terminate_verified_pid(4242, 2000)
+
+        self.assertTrue(terminated)
+        kill_mock.assert_not_called()
+        self.assertEqual(["taskkill.exe", "/F", "/PID", "4242"], run_mock.call_args.args[0])
+
+    def test_licensing_kill_refuses_a_pid_it_cannot_stop(self) -> None:
+        alive = {4242}
+        with (
+            mock.patch.dict(os.environ, {"OS": "Windows_NT"}, clear=False),
+            mock.patch.object(sys, "platform", "win32"),
+            mock.patch.object(server_hub_licensing, "is_wsl", return_value=False),
+            mock.patch.object(
+                server_hub_licensing,
+                "current_host_platform_adapter",
+                return_value=self._adapter(alive),
+            ),
+            mock.patch.object(server_hub_licensing.os, "kill") as kill_mock,
+            mock.patch.object(
+                server_hub_licensing.subprocess,
+                "run",
+                return_value=mock.Mock(returncode=128, stdout="", stderr="not found"),
+            ),
+        ):
+            terminated = server_hub_licensing._terminate_verified_pid(4242, 1000)
+
+        self.assertFalse(terminated)
+        kill_mock.assert_not_called()
 
 
 if __name__ == "__main__":

@@ -1,6 +1,7 @@
 import contextlib
 import io
 import json
+import os
 import sys
 import tempfile
 import unittest
@@ -13,6 +14,7 @@ if str(TEMPLATES_DIR) not in sys.path:
 
 import server
 import server_batch_reporting
+import server_core
 import server_license
 
 
@@ -92,6 +94,69 @@ class LicenseCapabilitiesTests(unittest.TestCase):
             self.assertEqual("access_token_unavailable", payload["lane_fallback_reason"])
             self.assertFalse(payload["license_batchmode_supported"])
             self.assertEqual("access_token_unavailable", capabilities["batchmode_blocker_code"])
+
+    def _manual_action_lane(self, project_root: Path, payload: dict):
+        with (
+            mock.patch.object(server, "process_visibility_summary", return_value={"process_visibility_available": True}),
+            mock.patch.object(server, "list_live_project_editor_pids", return_value=[]),
+            mock.patch.object(
+                server,
+                "build_license_capabilities",
+                return_value={
+                    "batchmode_supported": False,
+                    "editor_ui_supported": None,
+                    "batchmode_blocker_code": "licensing_client_ipc_failure",
+                    "manual_user_action_required": True,
+                    "licensing_handoff_classification": "manual_user_action_required",
+                    "licensing_ipc_resolution": {"status": "no_hub_session"},
+                    "recommended_execution_lane": "none",
+                },
+            ),
+        ):
+            return server.batch_lane_preflight_blocker(
+                project_root=project_root,
+                unity_app=Path("/Applications/FakeUnity.app"),
+                batch_fallback_mode="auto",
+                payload=payload,
+                action_label="batch compile",
+                timeout_ms=30000,
+            )
+
+    def test_batch_lane_preflight_still_refuses_manual_action_by_default(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            project_root = Path(tmp_dir)
+            payload = {"action": "batch_compile_player_scripts"}
+            with mock.patch.dict(os.environ, {server_license.GUI_ADMISSION_OVERRIDE_ENV: ""}, clear=False):
+                with self.assertRaises(server_core.ToolInvocationError) as raised:
+                    self._manual_action_lane(project_root, payload)
+
+            self.assertEqual("manual_user_action_required", raised.exception.code)
+            self.assertEqual(
+                server_license.GUI_ADMISSION_OVERRIDE_ENV,
+                raised.exception.details["gui_admission_override_env"],
+            )
+            self.assertIn("override", raised.exception.details["gui_admission_override_hint"])
+
+    def test_batch_lane_preflight_admits_gui_under_a_recorded_override(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            project_root = Path(tmp_dir)
+            payload = {"action": "batch_compile_player_scripts"}
+            with mock.patch.dict(os.environ, {server_license.GUI_ADMISSION_OVERRIDE_ENV: "1"}, clear=False):
+                lane, capabilities = self._manual_action_lane(project_root, payload)
+
+            self.assertEqual("gui", lane)
+            self.assertEqual("gui", payload["effective_execution_lane"])
+            self.assertEqual("gui_admission_override", payload["lane_fallback_reason"])
+            self.assertTrue(payload["gui_admission_override_active"])
+            self.assertEqual(
+                "licensing_client_ipc_failure",
+                payload["gui_admission_override_waived_blocker"],
+            )
+            self.assertEqual(
+                "manual_user_action_required",
+                payload["gui_admission_override_waived_classification"],
+            )
+            self.assertFalse(capabilities["batchmode_supported"])
 
     def test_batch_lane_preflight_require_batch_fails_when_not_proven(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:

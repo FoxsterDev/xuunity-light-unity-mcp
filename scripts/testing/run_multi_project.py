@@ -245,7 +245,10 @@ def normalized_matrix(raw_matrix) -> dict:
         normalized["warnings_truncated"] = raw_matrix["warnings_truncated"]
     warnings = raw_matrix.get("warnings")
     if isinstance(warnings, list):
-        normalized["warnings"] = warnings[:20]
+        add_templates_to_path()
+        from server_bridge_constants import COMPILE_WARNING_SAMPLE_LIMIT
+
+        normalized["warnings"] = warnings[:COMPILE_WARNING_SAMPLE_LIMIT]
     return normalized
 
 
@@ -694,8 +697,8 @@ def emit_batch_final_summary(results_dir: str) -> int:
             f"passed={rendered_counter('passed')}",
             f"failed={rendered_counter('failed')}",
             f"skipped={rendered_counter('skipped')}",
-            f"warnings={rendered_counter('warning_count')}",
-            f"unique_warnings={rendered_counter('unique_warning_count')}",
+            f"warning_count={rendered_counter('warning_count')}",
+            f"unique_warning_count={rendered_counter('unique_warning_count')}",
             f"result_file={item.get('result_file', '')}",
         ]
         print("|".join(fields))
@@ -708,7 +711,7 @@ def emit_batch_final_summary(results_dir: str) -> int:
         "operator_verdict_counts": verdict_counts,
         "blocked_projects": blocked_projects,
         "results_dir": str(results_path),
-        "warning_count": (
+        "warning_count_sum": (
             sum(int(item["warning_count"]) for item in statuses if item.get("warning_count") is not None)
             if statuses and all(item.get("warning_count") is not None for item in statuses)
             else None

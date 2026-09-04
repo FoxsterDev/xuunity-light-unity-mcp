@@ -32,6 +32,9 @@ namespace XUUnity.LightMcp.Editor.Bridge
         internal static string RefreshSettlePhase = "";
         internal static bool RefreshSettlePackageResolveRequested;
         internal static int RefreshSettleStableTickCount;
+        internal static bool RefreshSettleForcedAssetRefresh;
+        internal static string RefreshSettleRequestedPreciseUtc = "";
+        internal static string SettledForcedAssetRefreshRequestedUtc = "";
         internal static bool CompileSettlePending;
         internal static string CompileSettleRequestId = "";
         internal static string CompileSettleStartedUtc = "";

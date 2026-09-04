@@ -18,6 +18,8 @@ STARTUP_MODAL_QUIESCENCE_SECONDS = 20.0
 STALE_LOG_LANE_MIN_AGE_SECONDS = 600.0
 DEFAULT_LOG_TAIL_MAX_CHARS = 40000
 EDITOR_LOG_GREP_MAX_CHARS = 500000
+EDITOR_LOG_GREP_MIN_CHARS = 4096
+EDITOR_LOG_GREP_ABS_MAX_CHARS = 10000000
 EDITOR_LOG_CONSOLE_CAVEAT = (
     "Unity Console grep can be a false negative after console clear-on-play or "
     "ring-buffer eviction; source=editor_log searches the path-backed Editor.log tail."
