@@ -146,6 +146,7 @@ HISTORICAL_VERSION_CLAIMS = (
     (Path("docs") / "reference" / "STATUS.md", "release package tests"),
     (Path("docs") / "reference" / "STATUS.md", "guarded interaction proof"),
     (Path("docs") / "reference" / "STATUS.md", "full package gate"),
+    (Path("docs") / "reference" / "STATUS.md", "compile-warning evidence"),
     (Path("docs") / "reference" / "COMPARISON.md", "superseding the"),
     (Path("docs") / "operations" / "PACKAGE_PATH_MIGRATION.md", "moved the package"),
     (Path("docs") / "architecture" / "ROADMAP.md", "adds opt-in compact batch helper CLI output"),

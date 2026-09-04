@@ -351,6 +351,40 @@ class ReleaseVersioningTests(unittest.TestCase):
 
             self.assertFalse([error for error in errors if "v0.3.29" in error], errors)
 
+    def test_a_measured_evidence_row_keeps_the_release_that_measured_it(self) -> None:
+        """A row naming a measurement must keep its own release label through later sweeps.
+
+        This exact row was relabelled twice - v0.3.70 evidence published first as v0.3.71 and then as v0.3.72 -
+        because it was not registered as history. The sweep must leave it, and the gate must accept it.
+        """
+
+        row = (
+            "| `v0.3.70` compile-warning evidence (historical, not re-measured since) | "
+            "`host validated` | Full host `1011/1011` with 14 expected platform skips. |\n"
+        )
+
+        import sys as _sys
+
+        tools_dir = REPO_ROOT / "scripts" / "tools"
+        if str(tools_dir) not in _sys.path:
+            _sys.path.insert(0, str(tools_dir))
+        import sync_release_version as sync
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self.create_minimal_release_tree(root)
+            status = root / "docs" / "reference" / "STATUS.md"
+            status.parent.mkdir(parents=True, exist_ok=True)
+            status.write_text(row, encoding="utf-8")
+
+            swept = sync.sweep_release_doc_versions(
+                Path("docs") / "reference" / "STATUS.md", row, "0.3.72"
+            )
+            self.assertEqual(row, swept)
+
+            errors = release_consistency.check_release_version_consistency(root)
+            self.assertFalse([error for error in errors if "v0.3.70" in error], errors)
+
     def test_the_sweep_never_rewrites_a_unity_editor_version(self) -> None:
         """Unity's own `6000.0.58f2` contains `0.0.58`. An unanchored sweep rewrote it to `6000.3.55f2`."""
 
