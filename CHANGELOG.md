@@ -32,12 +32,30 @@
   resolves to a *different* handler the click is refused as `ui_target_occluded` instead of
   faking reachability. New `pointer_raycast_evidence`, `pointer_raycast_target_path`,
   `pointer_raycast_hit_count` and `occluded_by_path` fields carry the evidence.
+- Follow-up to the Game View repair, found by re-auditing it: the
+  `BuildTargetGroupToGameViewSizeGroup` fallback was inoperative on every Unity 6.x, where
+  that method takes a `BuildTarget` and not the `BuildTargetGroup` the resolver passed, and
+  its failure message claimed the method was absent when it was merely a different
+  signature. The resolver now passes whichever type the method declares and says which of
+  the two resolution paths failed. `GetActiveGroupName` no longer guesses a group name from
+  the build target when resolution fails — it guessed `Standalone` for every target outside
+  Android and iOS — and reports an empty group instead of a fabricated one.
+- The capability report is cached on a key that did not include the active build target,
+  while the Game View probe verdict now depends on it. A build-target switch therefore left
+  a stale supported/unsupported verdict for `game_view_reflection`, refusing Game View
+  operations on a target where they work, or admitting them on one where they do not. The
+  cache key now carries the active build target.
 - Package self-tests left an empty `Assets/XUUnityLightMcpGenerated/` and its `.meta`
   behind in the consumer project. `templates/smoke/run_package_self_tests.sh` removes that
   root on exit, using `rmdir` so a non-empty directory is never touched.
 
 ### Added
 
+- `scripts/testing/check_release_commit_shape.py` now enforces the `## Unreleased` half of
+  its own contract: a work commit that changes shipped package or host source must add at
+  least one line under `## Unreleased`, so the release that promotes that section cannot
+  omit it. Test-, docs-, script- and skill-only commits are exempt. The rule was added after
+  a behaviour fix shipped with no changelog entry and the gate reported ok.
 - `scripts/testing/check_release_commit_shape.py` enforces the two-commit release shape.
   A `release:` commit may carry only what the version sweep writes, the changelog section
   it opens, and the release bookkeeping docs; every other commit must bump no version and

@@ -17,32 +17,27 @@ namespace XUUnity.LightMcp.Tests.EditMode
         }
 
         [Test]
-        public void EveryFallbackGroupNameExistsInTheUnityGroupEnum()
-        {
-            var groupEnumType = RequireGroupEnumType();
-            var names = Enum.GetNames(groupEnumType);
-
-            Assert.Contains(
-                XUUnityLightMcpGameViewUtility.DefaultGroupFallbackName,
-                names,
-                "Default Game View group fallback name is not a GameViewSizeGroupType member.");
-
-            foreach (var entry in XUUnityLightMcpGameViewUtility.BuildTargetGroupFallbackNames)
-            {
-                Assert.Contains(
-                    entry.GroupName,
-                    names,
-                    $"Game View group fallback name for build target {entry.Target} is not a GameViewSizeGroupType member.");
-            }
-        }
-
-        [Test]
         public void ProbeResolvesTheActiveGroupForTheCurrentBuildTarget()
         {
             var probe = XUUnityLightMcpGameViewUtility.ProbeReflectionSurface();
+
             Assert.IsTrue(
                 probe.supported,
                 $"Game View reflection probe failed for the active build target: {probe.reason}");
+        }
+
+        [Test]
+        public void UnityConverterFallbackResolvesTheActiveGroupOnThisEditor()
+        {
+            var converted = XUUnityLightMcpGameViewUtility.ConvertActiveBuildTargetToGroupType(out var reason);
+
+            Assert.IsNotNull(
+                converted,
+                $"Unity's own BuildTargetGroupToGameViewSizeGroup must stay callable as the resolver fallback: {reason}");
+            Assert.That(reason, Is.Empty);
+            Assert.IsTrue(
+                RequireGroupEnumType().IsInstanceOfType(converted),
+                "the fallback must return a GameViewSizeGroupType value");
         }
 
         [Test]
@@ -59,11 +54,24 @@ namespace XUUnity.LightMcp.Tests.EditMode
         public void DescribeGroupTypeReportsTheUnityEnumMemberName()
         {
             var groupEnumType = RequireGroupEnumType();
+
             foreach (var name in Enum.GetNames(groupEnumType))
             {
                 var value = Enum.Parse(groupEnumType, name);
                 Assert.AreEqual(name, XUUnityLightMcpGameViewUtility.DescribeGroupType(value));
             }
+        }
+
+        [Test]
+        public void FixedResolutionIsAGameViewSizeTypeMemberOnThisEditor()
+        {
+            var sizeTypeEnum = Type.GetType("UnityEditor.GameViewSizeType,UnityEditor");
+            Assert.IsNotNull(sizeTypeEnum, "UnityEditor.GameViewSizeType is not available in this editor version.");
+
+            Assert.Contains(
+                XUUnityLightMcpGameViewUtility.FixedResolutionSizeTypeName,
+                Enum.GetNames(sizeTypeEnum),
+                "custom Game View size creation parses this member name, so it must exist");
         }
     }
 }

@@ -88,6 +88,7 @@ namespace XUUnity.LightMcp.Editor.Helpers
                 probe_version = ProbeVersion,
                 project_root = XUUnityLightMcpFileIpcPaths.ProjectRootPath,
                 unity_version = Application.unityVersion,
+                active_build_target = EditorUserBuildSettings.activeBuildTarget.ToString(),
                 checked_at_utc = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ"),
                 status = ResolveReportStatus(capabilities),
                 supported_operations = supportedOperations,
@@ -165,6 +166,10 @@ namespace XUUnity.LightMcp.Editor.Helpers
                    report.probe_version == ProbeVersion &&
                    string.Equals(report.unity_version, Application.unityVersion, StringComparison.Ordinal) &&
                    string.Equals(report.project_root, XUUnityLightMcpFileIpcPaths.ProjectRootPath, StringComparison.Ordinal) &&
+                   string.Equals(
+                       report.active_build_target,
+                       EditorUserBuildSettings.activeBuildTarget.ToString(),
+                       StringComparison.Ordinal) &&
                    TestFrameworkDependencyStateMatches(report) &&
                    SdkAndroidResolverDependencyStateMatches(report) &&
                    UiReadBackendStateMatches(report);

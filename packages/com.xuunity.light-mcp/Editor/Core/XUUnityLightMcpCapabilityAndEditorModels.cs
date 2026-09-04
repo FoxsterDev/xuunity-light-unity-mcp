@@ -27,6 +27,7 @@ namespace XUUnity.LightMcp.Editor.Core
             public int probe_version = 1;
             public string project_root = "";
             public string unity_version = "";
+            public string active_build_target = "";
             public string checked_at_utc = "";
             public string status = "unknown";
             public List<string> supported_operations = new();

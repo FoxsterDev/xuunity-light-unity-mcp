@@ -12,6 +12,7 @@ namespace XUUnity.LightMcp.Editor.Helpers
     internal static class XUUnityLightMcpGameViewUtility
     {
         const int RepaintSettlingDelayMs = 100;
+        internal const string FixedResolutionSizeTypeName = "FixedResolution";
         static readonly BindingFlags AllBindings = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static;
 
         public static XUUnityLightMcpGameViewProbeResult ProbeReflectionSurface()
@@ -362,29 +363,7 @@ namespace XUUnity.LightMcp.Editor.Helpers
         {
             return TryResolveActiveGroupType(out var groupType, out _)
                 ? DescribeGroupType(groupType)
-                : GetBuildTargetGroupFallbackName();
-        }
-
-        internal const string DefaultGroupFallbackName = "Standalone";
-
-        internal static readonly (BuildTarget Target, string GroupName)[] BuildTargetGroupFallbackNames =
-        {
-            (BuildTarget.Android, "Android"),
-            (BuildTarget.iOS, "iOS")
-        };
-
-        static string GetBuildTargetGroupFallbackName()
-        {
-            var activeTarget = EditorUserBuildSettings.activeBuildTarget;
-            foreach (var entry in BuildTargetGroupFallbackNames)
-            {
-                if (entry.Target == activeTarget)
-                {
-                    return entry.GroupName;
-                }
-            }
-
-            return DefaultGroupFallbackName;
+                : "";
         }
 
         internal static bool GroupNameMatches(string requestedGroup, string activeGroupName)
@@ -440,15 +419,15 @@ namespace XUUnity.LightMcp.Editor.Helpers
                     return true;
                 }
 
-                groupType = ConvertActiveBuildTargetToGroupType();
+                groupType = ConvertActiveBuildTargetToGroupType(out var converterReason);
                 if (groupType != null)
                 {
                     return true;
                 }
 
                 failureReason =
-                    "Unable to resolve the active Unity Game View size group: this editor version exposes neither " +
-                    "GameViewSizes.currentGroupType nor GameViewSizes.BuildTargetGroupToGameViewSizeGroup.";
+                    "Unable to resolve the active Unity Game View size group: GameViewSizes.currentGroupType is " +
+                    "unavailable and " + converterReason;
                 return false;
             }
             catch (Exception ex)
@@ -459,23 +438,42 @@ namespace XUUnity.LightMcp.Editor.Helpers
             }
         }
 
-        static object ConvertActiveBuildTargetToGroupType()
+        internal static object ConvertActiveBuildTargetToGroupType(out string failureReason)
         {
+            failureReason = "";
             var gameViewSizesType = RequireType("UnityEditor.GameViewSizes,UnityEditor");
             var converter = gameViewSizesType.GetMethod("BuildTargetGroupToGameViewSizeGroup", AllBindings);
             var parameters = converter?.GetParameters();
             if (converter == null || parameters == null || parameters.Length != 1)
             {
+                failureReason = "GameViewSizes.BuildTargetGroupToGameViewSizeGroup is not present with a single parameter.";
                 return null;
             }
 
-            object buildTargetGroup = BuildPipeline.GetBuildTargetGroup(EditorUserBuildSettings.activeBuildTarget);
-            if (!parameters[0].ParameterType.IsInstanceOfType(buildTargetGroup))
+            var activeTarget = EditorUserBuildSettings.activeBuildTarget;
+            var parameterType = parameters[0].ParameterType;
+            object argument;
+            if (parameterType == typeof(BuildTarget))
             {
+                argument = activeTarget;
+            }
+            else if (parameterType == typeof(BuildTargetGroup))
+            {
+                argument = BuildPipeline.GetBuildTargetGroup(activeTarget);
+            }
+            else
+            {
+                failureReason =
+                    $"GameViewSizes.BuildTargetGroupToGameViewSizeGroup takes an unexpected '{parameterType.FullName}'.";
                 return null;
             }
 
-            return converter.Invoke(null, new[] { buildTargetGroup });
+            var converted = converter.Invoke(null, new[] { argument });
+            if (converted == null)
+            {
+                failureReason = "GameViewSizes.BuildTargetGroupToGameViewSizeGroup returned null.";
+            }
+            return converted;
         }
 
         static object GetGameViewGroup(object groupType)
@@ -534,7 +532,7 @@ namespace XUUnity.LightMcp.Editor.Helpers
         {
             var gameViewSizeType = RequireType("UnityEditor.GameViewSize,UnityEditor");
             var sizeTypeEnum = RequireType("UnityEditor.GameViewSizeType,UnityEditor");
-            var fixedResolution = Enum.Parse(sizeTypeEnum, "FixedResolution");
+            var fixedResolution = Enum.Parse(sizeTypeEnum, FixedResolutionSizeTypeName, true);
             var constructor = gameViewSizeType.GetConstructor(AllBindings, null,
                 new[] { sizeTypeEnum, typeof(int), typeof(int), typeof(string) }, null);
             if (constructor == null)

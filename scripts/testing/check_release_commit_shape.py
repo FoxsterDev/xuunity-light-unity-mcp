@@ -66,6 +66,27 @@ def is_release_subject(subject: str) -> bool:
     return str(subject or "").strip().startswith(RELEASE_SUBJECT_PREFIXES)
 
 
+SHIPPED_SOURCE_PREFIXES = ("packages/", "templates/")
+SHIPPED_SOURCE_EXEMPT_MARKERS = ("/Tests/", "/Samples~/")
+SHIPPED_SOURCE_SUFFIXES = (".cs", ".py", ".sh", ".cmd", ".ps1")
+
+
+def changes_shipped_behaviour(paths: list[str]) -> list[str]:
+    """Paths in this commit that ship to a consumer as runtime or host behaviour."""
+
+    hits = []
+    for path in paths:
+        text = str(path)
+        if not text.startswith(SHIPPED_SOURCE_PREFIXES):
+            continue
+        if any(marker in text for marker in SHIPPED_SOURCE_EXEMPT_MARKERS):
+            continue
+        if not text.endswith(SHIPPED_SOURCE_SUFFIXES):
+            continue
+        hits.append(text)
+    return sorted(hits)
+
+
 def added_changelog_release_heading(changelog_added_lines: list[str]) -> str:
     for line in changelog_added_lines:
         text = line.strip()
@@ -83,6 +104,7 @@ def classify_commit(
     changed_paths: list[str],
     server_info_changed_lines: dict[str, list[str]],
     changelog_added_lines: list[str],
+    changelog_unreleased_added_lines: list[str] | None = None,
 ) -> list[str]:
     """Return the contract violations for one commit. Empty means the shape is fine."""
 
@@ -134,6 +156,19 @@ def classify_commit(
             f"changelog_release_section_outside_release_commit: this commit opens `## {heading}`. "
             "Describe work under `## Unreleased`; the release commit promotes it."
         )
+    shipped = changes_shipped_behaviour(paths)
+    if shipped:
+        described = [
+            line
+            for line in (changelog_unreleased_added_lines or [])
+            if line.strip() and not line.strip().startswith("#")
+        ]
+        if not described:
+            errors.append(
+                "undescribed_work_commit: this commit changes shipped behaviour but adds nothing "
+                "under `## Unreleased`, so the release that promotes that section will omit it. "
+                "Describe the change there. Shipped paths: " + ", ".join(shipped[:5])
+            )
     return errors
 
 
@@ -172,6 +207,53 @@ def commit_added_lines(repo_root: Path, rev: str, path: str) -> list[str]:
     return [line[1:] for line in output.splitlines() if line.startswith("+") and not line.startswith("+++")]
 
 
+def unreleased_section_span(changelog_text: str) -> tuple[int, int]:
+    """1-based [start, end] line span of the `## Unreleased` body, or (0, -1) when absent."""
+
+    lines = changelog_text.splitlines()
+    start = 0
+    for index, line in enumerate(lines, start=1):
+        if line.strip().lower() == "## unreleased":
+            start = index + 1
+            break
+    if not start:
+        return 0, -1
+    for index in range(start, len(lines) + 1):
+        if lines[index - 1].startswith("## "):
+            return start, index - 1
+    return start, len(lines)
+
+
+def commit_added_lines_in_span(
+    repo_root: Path, rev: str, path: str, span: tuple[int, int]
+) -> list[str]:
+    """Added lines whose post-commit line number falls inside `span`."""
+
+    start, end = span
+    if start <= 0 or end < start:
+        return []
+    output = run_git(["show", "--format=", "--unified=0", rev, "--", path], repo_root)
+    added: list[str] = []
+    cursor = 0
+    for line in output.splitlines():
+        if line.startswith("@@"):
+            marker = line.split("+", 1)
+            if len(marker) < 2:
+                continue
+            head = marker[1].split(" ", 1)[0]
+            cursor = int(head.split(",", 1)[0])
+            continue
+        if line.startswith("+++"):
+            continue
+        if line.startswith("+"):
+            if start <= cursor <= end:
+                added.append(line[1:])
+            cursor += 1
+        elif not line.startswith("-"):
+            cursor += 1
+    return added
+
+
 def commit_changed_lines(repo_root: Path, rev: str, path: str) -> list[str]:
     output = run_git(["show", "--format=", "--unified=0", rev, "--", path], repo_root)
     changed: list[str] = []
@@ -198,11 +280,24 @@ def check_commit(repo_root: Path, rev: str) -> tuple[str, list[str]]:
         if CHANGELOG.as_posix() in paths
         else []
     )
+    changelog_unreleased_added_lines = (
+        commit_added_lines_in_span(
+            repo_root,
+            rev,
+            CHANGELOG.as_posix(),
+            unreleased_section_span(
+                run_git(["show", f"{rev}:{CHANGELOG.as_posix()}"], repo_root)
+            ),
+        )
+        if CHANGELOG.as_posix() in paths
+        else []
+    )
     return subject, classify_commit(
         subject=subject,
         changed_paths=paths,
         server_info_changed_lines=server_info_changed_lines,
         changelog_added_lines=changelog_added_lines,
+        changelog_unreleased_added_lines=changelog_unreleased_added_lines,
     )
 
 

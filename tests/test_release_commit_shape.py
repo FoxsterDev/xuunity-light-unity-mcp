@@ -26,6 +26,9 @@ def classify(subject: str, paths: list[str], **kwargs) -> list[str]:
         changed_paths=paths,
         server_info_changed_lines=kwargs.get("server_info_changed_lines", {}),
         changelog_added_lines=kwargs.get("changelog_added_lines", []),
+        changelog_unreleased_added_lines=kwargs.get(
+            "changelog_unreleased_added_lines", kwargs.get("changelog_added_lines", [])
+        ),
     )
 
 
@@ -130,6 +133,109 @@ class WorkCommitShapeTests(unittest.TestCase):
 
         self.assertEqual([], errors)
 
+    def test_a_work_commit_changing_shipped_code_must_describe_itself(self) -> None:
+        errors = classify(
+            "fix(game-view): resolve the size group from Unity",
+            [
+                "packages/com.xuunity.light-mcp/Editor/Helpers/XUUnityLightMcpGameViewUtility.cs",
+                "packages/com.xuunity.light-mcp/Tests/EditMode/XUUnityLightMcpGameViewGroupEditModeTests.cs",
+            ],
+        )
+
+        self.assertEqual(1, len(errors), errors)
+        self.assertIn("undescribed_work_commit", errors[0])
+        self.assertIn("XUUnityLightMcpGameViewUtility.cs", errors[0])
+
+    def test_a_work_commit_touching_only_tests_docs_or_scripts_needs_no_notes(self) -> None:
+        errors = classify(
+            "test(currency): pin the settled forced refresh basis",
+            [
+                "packages/com.xuunity.light-mcp/Tests/EditMode/XUUnityLightMcpEditModeSelfTests.cs",
+                "tests/test_release_commit_shape.py",
+                "scripts/testing/check_release_commit_shape.py",
+                "docs/reference/STATUS.md",
+                "skills/release_ci_guardrails/SKILL.md",
+            ],
+        )
+
+        self.assertEqual([], errors)
+
+    def test_changelog_lines_added_outside_the_unreleased_section_do_not_count(self) -> None:
+        errors = classify(
+            "fix(ui-click): carry a real pointerCurrentRaycast",
+            [
+                "packages/com.xuunity.light-mcp/Editor/Ugui/XUUnityLightMcpUiClickOperation.cs",
+                "CHANGELOG.md",
+            ],
+            changelog_added_lines=["- A typo repair inside the 0.3.70 section."],
+            changelog_unreleased_added_lines=[],
+        )
+
+        self.assertEqual(1, len(errors), errors)
+        self.assertIn("undescribed_work_commit", errors[0])
+
+    def test_a_heading_alone_does_not_describe_the_work(self) -> None:
+        errors = classify(
+            "fix(ui-click): carry a real pointerCurrentRaycast",
+            [
+                "packages/com.xuunity.light-mcp/Editor/Ugui/XUUnityLightMcpUiClickOperation.cs",
+                "CHANGELOG.md",
+            ],
+            changelog_unreleased_added_lines=["### Fixed", "", "   "],
+        )
+
+        self.assertEqual(1, len(errors), errors)
+        self.assertIn("undescribed_work_commit", errors[0])
+
+    def test_shipped_behaviour_detection_covers_the_package_and_the_host(self) -> None:
+        self.assertEqual(
+            [
+                "packages/com.xuunity.light-mcp/Editor/Bridge/Anything.cs",
+                "templates/server.py",
+                "templates/smoke/run_package_self_tests.sh",
+            ],
+            shape.changes_shipped_behaviour(
+                [
+                    "templates/server.py",
+                    "templates/smoke/run_package_self_tests.sh",
+                    "packages/com.xuunity.light-mcp/Editor/Bridge/Anything.cs",
+                    "packages/com.xuunity.light-mcp/Tests/EditMode/Anything.cs",
+                    "packages/com.xuunity.light-mcp/Samples~/Anything.cs",
+                    "packages/com.xuunity.light-mcp/package.json",
+                    "docs/reference/STATUS.md",
+                    "tests/test_anything.py",
+                ]
+            ),
+        )
+
+    def test_the_unreleased_span_ends_at_the_next_release_heading(self) -> None:
+        changelog = "\n".join(
+            [
+                "# Changelog",
+                "",
+                "## Unreleased",
+                "",
+                "### Fixed",
+                "",
+                "- A shipped repair.",
+                "",
+                "## 0.3.71",
+                "",
+                "- An older line.",
+            ]
+        )
+
+        start, end = shape.unreleased_section_span(changelog)
+
+        self.assertEqual(4, start)
+        self.assertEqual(8, end)
+        body = changelog.splitlines()[start - 1 : end]
+        self.assertIn("- A shipped repair.", body)
+        self.assertNotIn("- An older line.", body)
+
+    def test_a_changelog_with_no_unreleased_section_has_an_empty_span(self) -> None:
+        self.assertEqual((0, -1), shape.unreleased_section_span("# Changelog\n\n## 0.3.71\n"))
+
     def test_a_work_commit_may_not_bump_package_metadata(self) -> None:
         errors = classify(
             "feat: something",
@@ -142,8 +248,9 @@ class WorkCommitShapeTests(unittest.TestCase):
     def test_a_work_commit_may_not_bump_the_server_info_version(self) -> None:
         errors = classify(
             "feat: something",
-            ["templates/server.py"],
+            ["templates/server.py", "CHANGELOG.md"],
             server_info_changed_lines={"templates/server.py": ['    "version": "0.3.72",']},
+            changelog_added_lines=["- Something."],
         )
 
         self.assertEqual(1, len(errors), errors)
@@ -152,8 +259,9 @@ class WorkCommitShapeTests(unittest.TestCase):
     def test_a_work_commit_may_edit_server_logic_freely(self) -> None:
         errors = classify(
             "feat: something",
-            ["templates/server.py"],
+            ["templates/server.py", "CHANGELOG.md"],
             server_info_changed_lines={"templates/server.py": ["    mark_host_client_kind(HOST_CLIENT_KIND_CLI)"]},
+            changelog_added_lines=["- The CLI lane marks its client kind."],
         )
 
         self.assertEqual([], errors)
