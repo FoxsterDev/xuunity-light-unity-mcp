@@ -325,6 +325,10 @@ namespace XUUnity.LightMcp.Editor.Core
         public bool delivered;
         public string delivered_to_path = "";
         public string delivery_mechanism = "";
+        public string pointer_raycast_evidence = "";
+        public string pointer_raycast_target_path = "";
+        public int pointer_raycast_hit_count;
+        public string occluded_by_path = "";
         public bool effective;
         public bool no_observable_effect;
         public bool state_changed;

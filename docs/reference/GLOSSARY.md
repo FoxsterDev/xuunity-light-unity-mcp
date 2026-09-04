@@ -133,6 +133,23 @@ done in a patch release.
 | `not_delivered` | the event never reached a handler |
 | `no_state_change` | a gap raised only when the step expected a change |
 | `interaction_delivered` | the scenario step outcome for an effective click |
+| `ui_target_occluded` | refused: a live event-system raycast at the target's centre resolved to a different click handler, so a real pointer would never reach the target |
+
+### `pointer_raycast_evidence`
+
+Where the `pointerCurrentRaycast` carried by a delivered click came from. A handler that
+validates raycast identity (`eventData.pointerCurrentRaycast.gameObject == gameObject`) is
+satisfied in every case below; the value says whether occlusion was actually ruled out.
+
+| Value | Meaning |
+| --- | --- |
+| `event_system_raycast_resolves_to_handler` | a live `EventSystem.RaycastAll` at the target's centre hit a node resolving to the same handler, and that observed result was carried verbatim; occlusion is ruled out |
+| `event_system_raycast_hit_other_handler` | the raycast resolved to a different handler; the click is refused as `ui_target_occluded` and never delivered |
+| `synthesized_no_raycast_hit` | the raycast produced no hit, so the event carries a synthesized result naming the resolved handler; delivery is real, occlusion is unproven |
+| `synthesized_no_event_system` | no `EventSystem.current` existed (typically Edit Mode), same synthesis and the same unproven occlusion |
+
+A synthesized value always comes with the `ui_click_pointer_raycast_synthesized` warning; an
+observed one never does.
 
 ### `background_execution_mode`
 

@@ -9,6 +9,33 @@
   description of the change, made a revert of the release also revert the product, and let
   a version bump ride inside a feature commit unnoticed.
 
+### Fixed
+
+- `unity.game_view.configure` failed on every iOS-targeted project with
+  `Requested value 'iPhone' was not found`. The resolver mapped `BuildTarget.iOS` to the
+  string `"iPhone"` and parsed it against `GameViewSizeGroupType`, whose member is `iOS`;
+  `BuildTargetGroup` still reports the obsolete `iPhone` alias, which is where the wrong
+  name came from. The active group now comes from Unity's own
+  `GameViewSizes.currentGroupType`, falling back to
+  `BuildTargetGroupToGameViewSizeGroup`, and the enum value goes straight to `GetGroup`
+  with no name round-trip. A caller-supplied `group` still has to match the active one,
+  with `iOS` and `iPhone` accepted as aliases of each other. The reflection probe resolves
+  the active group too, so the capability report no longer claims
+  `game_view_reflection` works on a project where `configure` cannot.
+- `unity.ui.click` left `pointerCurrentRaycast` unset, so any handler that validates
+  raycast identity — the common `eventData.pointerCurrentRaycast.gameObject == gameObject`
+  guard in hand-written button components — silently dropped the click while the operation
+  reported `delivered: true` with no state change. The click now runs a live
+  `EventSystem.RaycastAll` at the target's centre and carries the observed result, so such
+  handlers run their production path. Where the raycast produces no hit the event carries a
+  synthesized result naming the resolved handler and the payload says so, and where it
+  resolves to a *different* handler the click is refused as `ui_target_occluded` instead of
+  faking reachability. New `pointer_raycast_evidence`, `pointer_raycast_target_path`,
+  `pointer_raycast_hit_count` and `occluded_by_path` fields carry the evidence.
+- Package self-tests left an empty `Assets/XUUnityLightMcpGenerated/` and its `.meta`
+  behind in the consumer project. `templates/smoke/run_package_self_tests.sh` removes that
+  root on exit, using `rmdir` so a non-empty directory is never touched.
+
 ### Added
 
 - `scripts/testing/check_release_commit_shape.py` enforces the two-commit release shape.

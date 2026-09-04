@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
@@ -188,17 +189,6 @@ namespace XUUnity.LightMcp.Editor.Ugui
                     "The target Selectable is not interactable at delivery time.");
             }
 
-            var eventSystem = EventSystem.current;
-            payload.event_system_present = eventSystem != null;
-            payload.event_system_scope = "eventsystem_current_at_delivery";
-            var pointer = new PointerEventData(eventSystem)
-            {
-                button = PointerEventData.InputButton.Left,
-                position = new Vector2(
-                    node.bounds.x + node.bounds.width / 2f,
-                    node.bounds.y + node.bounds.height / 2f)
-            };
-
             var handler = ExecuteEvents.GetEventHandler<IPointerClickHandler>(targetObject);
             if (handler == null)
             {
@@ -208,6 +198,56 @@ namespace XUUnity.LightMcp.Editor.Ugui
                     "ui_target_has_no_click_handler",
                     "No IPointerClickHandler is present on the target or its ancestors.");
             }
+
+            var eventSystem = EventSystem.current;
+            payload.event_system_present = eventSystem != null;
+            payload.event_system_scope = "eventsystem_current_at_delivery";
+
+            var pointerPosition = new Vector2(
+                node.bounds.x + node.bounds.width / 2f,
+                node.bounds.y + node.bounds.height / 2f);
+            var pointer = BuildClickPointer(eventSystem, pointerPosition);
+
+            var observed = ResolvePointerRaycast(eventSystem, pointer, handler, out var hitCount, out var occluder);
+            payload.pointer_raycast_hit_count = hitCount;
+            if (occluder != null)
+            {
+                payload.occluded_by_path = XUUnityLightMcpUiTreeBuilder.BuildPath(occluder.transform);
+                payload.pointer_raycast_evidence = "event_system_raycast_hit_other_handler";
+                return Refuse(
+                    request,
+                    payload,
+                    "ui_target_occluded",
+                    $"A live event-system raycast at the target's centre hit '{payload.occluded_by_path}', which resolves to a "
+                    + "different click handler, so a real pointer would never reach this target. "
+                    + "Dismiss or disable the occluding element and retry.");
+            }
+
+            if (observed.HasValue)
+            {
+                pointer.pointerCurrentRaycast = observed.Value;
+                payload.pointer_raycast_evidence = "event_system_raycast_resolves_to_handler";
+            }
+            else
+            {
+                pointer.pointerCurrentRaycast = SynthesizeRaycast(handler.gameObject, pointerPosition);
+                payload.pointer_raycast_evidence = eventSystem == null
+                    ? "synthesized_no_event_system"
+                    : "synthesized_no_raycast_hit";
+                payload.warnings.Add(XUUnityLightMcpUiTreeBuilder.Diagnostic(
+                    "ui_click_pointer_raycast_synthesized",
+                    "No live event-system raycast hit was available at the target's centre, so the pointer event carries a "
+                    + "synthesized raycast naming the resolved handler. The click is delivered and handlers that validate "
+                    + "pointerCurrentRaycast identity accept it, but occlusion by another element was not ruled out."));
+            }
+
+            pointer.pointerPressRaycast = pointer.pointerCurrentRaycast;
+            pointer.pointerEnter = pointer.pointerCurrentRaycast.gameObject;
+            pointer.pointerPress = pointer.pointerCurrentRaycast.gameObject;
+            pointer.rawPointerPress = pointer.pointerCurrentRaycast.gameObject;
+            payload.pointer_raycast_target_path = pointer.pointerCurrentRaycast.gameObject != null
+                ? XUUnityLightMcpUiTreeBuilder.BuildPath(pointer.pointerCurrentRaycast.gameObject.transform)
+                : "";
 
             payload.delivered_to_path = XUUnityLightMcpUiTreeBuilder.BuildPath(handler.transform);
             payload.delivered = ExecuteEvents.Execute(handler, pointer, ExecuteEvents.pointerClickHandler);
@@ -252,13 +292,98 @@ namespace XUUnity.LightMcp.Editor.Ugui
             {
                 payload.warnings.Add(XUUnityLightMcpUiTreeBuilder.Diagnostic(
                     "ui_click_no_state_change",
-                    "The handler consumed the synthetic pointer event, but the UI tree did not change. "
-                    + "A handler may reject synthetic input when it validates pointerCurrentRaycast identity, "
-                    + "or the effect may only be visible in logs or non-UI state. Verify with a UI query, "
-                    + "an anchored log assertion, or a project-defined hook that calls the production API."));
+                    "The handler consumed the pointer event, but the UI tree did not change. "
+                    + "The event carries a pointerCurrentRaycast naming "
+                    + $"'{payload.pointer_raycast_target_path}' ({payload.pointer_raycast_evidence}), so a handler that "
+                    + "validates raycast identity was satisfied; the effect may only be visible in logs or non-UI state. "
+                    + "Verify with a UI query, an anchored log assertion, or a project-defined hook that calls the "
+                    + "production API."));
             }
 
             return Respond(request, payload);
+        }
+
+        static PointerEventData BuildClickPointer(EventSystem eventSystem, Vector2 position)
+        {
+            return new PointerEventData(eventSystem)
+            {
+                pointerId = -1,
+                button = PointerEventData.InputButton.Left,
+                position = position,
+                pressPosition = position,
+                clickCount = 1,
+                clickTime = Time.unscaledTime,
+                eligibleForClick = true,
+                useDragThreshold = true,
+                dragging = false
+            };
+        }
+
+        static RaycastResult? ResolvePointerRaycast(
+            EventSystem eventSystem,
+            PointerEventData pointer,
+            GameObject handler,
+            out int hitCount,
+            out GameObject occluder)
+        {
+            hitCount = 0;
+            occluder = null;
+            if (eventSystem == null)
+            {
+                return null;
+            }
+
+            var hits = new List<RaycastResult>();
+            try
+            {
+                eventSystem.RaycastAll(pointer, hits);
+            }
+            catch (Exception)
+            {
+                return null;
+            }
+
+            RaycastResult? top = null;
+            for (var i = 0; i < hits.Count; i++)
+            {
+                if (hits[i].gameObject == null)
+                {
+                    continue;
+                }
+                hitCount++;
+                if (top == null)
+                {
+                    top = hits[i];
+                }
+            }
+
+            if (top == null)
+            {
+                return null;
+            }
+
+            if (ExecuteEvents.GetEventHandler<IPointerClickHandler>(top.Value.gameObject) == handler)
+            {
+                return top;
+            }
+
+            occluder = top.Value.gameObject;
+            return null;
+        }
+
+        static RaycastResult SynthesizeRaycast(GameObject target, Vector2 position)
+        {
+            return new RaycastResult
+            {
+                gameObject = target,
+                module = target != null ? target.GetComponentInParent<BaseRaycaster>() : null,
+                screenPosition = position,
+                worldPosition = target != null ? target.transform.position : Vector3.zero,
+                worldNormal = -Vector3.forward,
+                distance = 0f,
+                index = 0f,
+                depth = 0
+            };
         }
 
         static void CopyRenderEvidence(XUUnityLightMcpUiClickPayload payload, XUUnityLightMcpUiTargetInfo target)
