@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+### Why
+
+- A release landed as one commit carrying the product change, its tests, the whole
+  documentation sweep and the version bump. That left the changelog as the only
+  description of the change, made a revert of the release also revert the product, and let
+  a version bump ride inside a feature commit unnoticed.
+
+### Added
+
+- `scripts/testing/check_release_commit_shape.py` enforces the two-commit release shape.
+  A `release:` commit may carry only what the version sweep writes, the changelog section
+  it opens, and the release bookkeeping docs; every other commit must bump no version and
+  must describe itself under `## Unreleased`. The check names the exact files to move, runs
+  over a single commit or a range, and derives its allowlist from
+  `scripts/tools/sync_release_version.py` so a newly swept document does not need a second
+  edit to stay releasable. The release checklist and publishing checklist now require it.
+
 ## 0.3.71
 
 Release tag: `v0.3.71`

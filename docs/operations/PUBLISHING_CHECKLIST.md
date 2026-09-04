@@ -16,6 +16,11 @@ Release is blocked until all of the following are true:
 
 - `python3 scripts/tools/sync_release_version.py --version <next-version>` has
   been run
+- the work and the release are separate commits, and
+  `python3 scripts/testing/check_release_commit_shape.py --range origin/master..HEAD`
+  passes: work commits carry the product change, its tests and its docs and bump no
+  version, and one `release:` commit carries only the version sweep, the changelog
+  section it opens and the release bookkeeping docs
 - `python3 scripts/testing/check_release_version_consistency.py` passes
 - `python3 scripts/testing/check_release_docs_freshness.py` passes
 - `python3 scripts/testing/check_public_release_safety.py` passes, with any
