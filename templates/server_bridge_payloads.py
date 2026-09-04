@@ -646,9 +646,11 @@ def _compact_compile_payload(payload: dict[str, Any], operation: str) -> dict[st
         "payload_mode": "compact_operation",
         "operation": operation,
     }
+    result = payload.get("result")
+    decision_source = result if isinstance(result, dict) else payload
     _copy_if_present(
         compact,
-        payload,
+        decision_source,
         (
             "name",
             "target",
@@ -656,6 +658,9 @@ def _compact_compile_payload(payload: dict[str, Any], operation: str) -> dict[st
             "outcome",
             "error_count",
             "warning_count",
+            "unique_warning_count",
+            "warning_sample_limit",
+            "warnings_truncated",
             "compiled_assembly_count",
             "duration_seconds",
             "total",
@@ -666,10 +671,13 @@ def _compact_compile_payload(payload: dict[str, Any], operation: str) -> dict[st
             "settle_request_id",
         ),
     )
-    errors = payload.get("errors")
+    warnings = decision_source.get("warnings")
+    if isinstance(warnings, list) and warnings:
+        compact["warnings"] = warnings[:20]
+    errors = decision_source.get("errors")
     if isinstance(errors, list) and errors:
         compact["errors"] = errors[:3]
-    configurations = payload.get("configurations")
+    configurations = payload.get("results") or payload.get("configurations")
     if isinstance(configurations, list):
         compact["configuration_count"] = len(configurations)
         failed_rows = [
@@ -678,6 +686,27 @@ def _compact_compile_payload(payload: dict[str, Any], operation: str) -> dict[st
         ]
         if failed_rows:
             compact["first_failed_configurations"] = failed_rows[:3]
+        warning_rows = [
+            item for item in configurations
+            if isinstance(item, dict) and _int_or_zero(item.get("warning_count")) > 0
+        ]
+        if warning_rows:
+            compact["first_warning_configurations"] = [
+                {
+                    key: item.get(key)
+                    for key in (
+                        "name",
+                        "target",
+                        "status",
+                        "warning_count",
+                        "unique_warning_count",
+                        "warnings_truncated",
+                        "warnings",
+                    )
+                    if key in item
+                }
+                for item in warning_rows[:3]
+            ]
     compact.update(_compact_post_settle_fields(payload))
     compact.update(_artifact_ref(payload))
     return compact

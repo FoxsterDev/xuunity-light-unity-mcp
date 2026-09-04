@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using UnityEditor;
 using UnityEditor.SceneManagement;
+using UnityEditor.Compilation;
 using NUnit.Framework;
 using UnityEditor.TestTools.TestRunner.Api;
 using UnityEngine;
@@ -39,6 +40,74 @@ namespace XUUnity.LightMcp.Tests.EditMode
                 new[] { "", "  alpha  ", "alpha", "beta", "  " });
 
             CollectionAssert.AreEqual(new[] { "alpha", "beta" }, values);
+        }
+
+        [Test]
+        public void CompileWarnings_CountEveryOccurrenceAndBoundUniqueEvidence()
+        {
+            var errors = new List<XUUnityLightMcpCompileErrorItem>();
+            var warnings = new List<XUUnityLightMcpCompileErrorItem>();
+            var warningKeys = new HashSet<string>(StringComparer.Ordinal);
+            var warningCount = 0;
+            var messages = new[]
+            {
+                new CompilerMessage { type = CompilerMessageType.Warning, message = "warning CS0618: old API", file = "Assets/A.cs", line = 10, column = 4 },
+                new CompilerMessage { type = CompilerMessageType.Warning, message = "warning CS0618: old API", file = "Assets/A.cs", line = 10, column = 4 },
+                new CompilerMessage { type = CompilerMessageType.Warning, message = "warning CS0108: hides member", file = "Assets/B.cs", line = 20, column = 2 },
+                new CompilerMessage { type = CompilerMessageType.Error, message = "error CS1002: ; expected", file = "Assets/C.cs", line = 30, column = 1 },
+            };
+
+            XUUnityLightMcpCompileUtility.CollectCompilerMessages(
+                "Game.dll", messages, errors, warnings, warningKeys, ref warningCount);
+
+            Assert.That(warningCount, Is.EqualTo(3));
+            Assert.That(warnings.Count, Is.EqualTo(2));
+            Assert.That(warnings[0].code, Is.EqualTo("CS0618"));
+            Assert.That(warnings[0].severity, Is.EqualTo("warning"));
+            Assert.That(errors.Count, Is.EqualTo(1));
+            Assert.That(errors[0].code, Is.EqualTo("CS1002"));
+            Assert.That(errors[0].severity, Is.EqualTo("error"));
+        }
+
+        [Test]
+        public void CompileMatrixWarnings_AggregateUniqueEvidenceAcrossConfigurations()
+        {
+            var shared = new XUUnityLightMcpCompileErrorItem
+            {
+                assembly_name = "Game.dll",
+                code = "CS0618",
+                severity = "warning",
+                message = "warning CS0618: old API",
+                file = "Assets/A.cs",
+                line = 10,
+                column = 4,
+            };
+            var distinct = new XUUnityLightMcpCompileErrorItem
+            {
+                assembly_name = "Game.Editor.dll",
+                code = "CS0108",
+                severity = "warning",
+                message = "warning CS0108: hides member",
+                file = "Assets/B.cs",
+                line = 20,
+                column = 2,
+            };
+            var payload = new XUUnityLightMcpCompileMatrixPayload
+            {
+                results = new List<XUUnityLightMcpCompileConfigPayload>
+                {
+                    new() { warning_count = 2, all_unique_warnings = new List<XUUnityLightMcpCompileErrorItem> { shared } },
+                    new() { warning_count = 2, all_unique_warnings = new List<XUUnityLightMcpCompileErrorItem> { shared, distinct } },
+                },
+            };
+
+            XUUnityLightMcpCompileUtility.PopulateMatrixWarningSummary(payload);
+
+            Assert.That(payload.warning_count, Is.EqualTo(4));
+            Assert.That(payload.unique_warning_count, Is.EqualTo(2));
+            Assert.That(payload.warnings.Count, Is.EqualTo(2));
+            Assert.That(payload.warning_sample_limit, Is.EqualTo(XUUnityLightMcpCompileUtility.WarningSampleLimit));
+            Assert.That(payload.warnings_truncated, Is.False);
         }
 
         [Test]

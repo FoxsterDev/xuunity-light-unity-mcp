@@ -1,7 +1,7 @@
 # XUUnity Light Unity MCP Smoke Tests
 
 Date: `2026-07-15`
-Status: `current source after v0.3.69`
+Status: `current source after v0.3.70`
 
 This file defines the public reusable smoke-test contract for the lightweight
 Unity MCP lane.
@@ -91,6 +91,11 @@ Pass criteria:
   `includeFullPayload=true`; ordinary pass/fail gates should stay on the compact
   default and read `status`, counts, `post_settle_compile`, `settle_phase`, and
   `completion_basis`.
+- The `v0.3.70` compile summaries also expose `warning_count`,
+  `unique_warning_count`, and a bounded `warnings` sample. A warning-cleanup
+  smoke must assert those fields explicitly; `status: passed` alone proves only
+  that no compile error occurred. `warnings_truncated: true` means the counts
+  remain authoritative while the sample is incomplete.
 - If new `.cs` files were created outside the Unity editor and direct compile
   reports missing namespaces or types, run `request-project-refresh` once and
   retry before treating the result as a code failure.
@@ -231,6 +236,10 @@ Compile gate scope limit (green compile is not "editor clean"):
   buffer can be evicted — see Log-presence checks; on `editor_log` prefer
   error-anchored patterns over entity names). Do not treat a green batchmode
   compile as "editor clean."
+- A zero warning count now proves no warnings were observed by the Unity
+  compilation callback for the requested lanes. It still does not prove that
+  every relevant assembly rebuilt rather than coming from cache; use a clean
+  consumer or separate rebuild evidence when that distinction matters.
 
 ### 3. Interactive Acceptance Scenario
 

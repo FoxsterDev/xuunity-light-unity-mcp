@@ -534,6 +534,33 @@ class BatchOperatorErgonomicsTests(unittest.TestCase):
         parsed = parser.parse_args(["batch-compile", "--project-root", "/tmp/FakeProject", "--target", "Android"])
         self.assertEqual("compact", parsed.output)
 
+    def test_compile_matrix_batch_summary_keeps_bounded_warning_evidence(self) -> None:
+        warning = {"code": "CS0618", "file": "Assets/A.cs", "line": 10, "message": "old API"}
+        summary = server_batch_reporting.summarize_batch_result_payload(
+            {
+                "operation": "compile-matrix",
+                "matrix": {
+                    "status": "passed",
+                    "total": 2,
+                    "passed": 2,
+                    "failed": 0,
+                    "skipped": 0,
+                    "warning_count": 3,
+                    "unique_warning_count": 1,
+                    "warnings_truncated": False,
+                    "warnings": [warning],
+                },
+            },
+            truncate_text=lambda value, limit: str(value)[:limit],
+        )
+        compact = server_batch_reporting.build_compact_batch_cli_output(
+            {"action": "batch_compile_matrix", "succeeded": True, "result_summary": summary}
+        )
+
+        self.assertEqual(3, summary["matrix"]["warning_count"])
+        self.assertEqual(1, summary["matrix"]["unique_warning_count"])
+        self.assertEqual([warning], compact["matrix"]["warnings"])
+
 
 if __name__ == "__main__":
     unittest.main()

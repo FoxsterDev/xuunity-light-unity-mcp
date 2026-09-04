@@ -1465,6 +1465,69 @@ class CompactEnvelopeTests(unittest.TestCase):
             with self.subTest(operation=operation):
                 self.assertIn(operation, server_bridge_payloads.COMPACT_OPERATION_PAYLOADS)
 
+    def test_compact_compile_warning_evidence_handles_nested_and_matrix_payloads(self) -> None:
+        warning = {
+            "assembly_name": "Game.dll",
+            "code": "CS0618",
+            "severity": "warning",
+            "message": "old API",
+            "file": "Assets/A.cs",
+            "line": 10,
+            "column": 4,
+        }
+        direct = server_bridge_payloads.compact_operation_payload(
+            {
+                "result": {
+                    "status": "passed",
+                    "warning_count": 2,
+                    "unique_warning_count": 1,
+                    "warning_sample_limit": 20,
+                    "warnings_truncated": False,
+                    "warnings": [warning],
+                    "output_directory": "/tmp/bulk",
+                },
+                "post_settle_compile": "passed",
+            },
+            "unity.compile.player_scripts",
+        )
+        matrix = server_bridge_payloads.compact_operation_payload(
+            {
+                "status": "passed",
+                "total": 2,
+                "passed": 2,
+                "failed": 0,
+                "skipped": 0,
+                "warning_count": 2,
+                "unique_warning_count": 1,
+                "warning_sample_limit": 20,
+                "warnings_truncated": False,
+                "warnings": [warning],
+                "results": [
+                    {
+                        "name": "Android",
+                        "target": "Android",
+                        "status": "passed",
+                        "warning_count": 2,
+                        "unique_warning_count": 1,
+                        "warnings_truncated": False,
+                        "warnings": [warning],
+                        "output_directory": "/tmp/bulk",
+                    },
+                    {"name": "iOS", "target": "iOS", "status": "passed", "warning_count": 0},
+                ],
+            },
+            "unity.compile.matrix",
+        )
+
+        self.assertEqual(2, direct["warning_count"])
+        self.assertEqual("CS0618", direct["warnings"][0]["code"])
+        self.assertNotIn("output_directory", direct)
+        self.assertEqual(2, matrix["warning_count"])
+        self.assertEqual(1, matrix["unique_warning_count"])
+        self.assertEqual(2, matrix["configuration_count"])
+        self.assertEqual("Android", matrix["first_warning_configurations"][0]["name"])
+        self.assertNotIn("output_directory", matrix["first_warning_configurations"][0])
+
     def test_compact_screenshot_keeps_the_decision_fields_and_drops_the_bulk(self) -> None:
         payload = {
             "capture_source": "game_view",

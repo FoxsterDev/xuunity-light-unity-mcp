@@ -2,6 +2,68 @@
 
 ## Unreleased
 
+## 0.3.70
+
+Release tag: `v0.3.70`
+
+Current Git UPM install URL:
+
+```text
+https://github.com/FoxsterDev/xuunity-mcp.git?path=/packages/com.xuunity.light-mcp#v0.3.70
+```
+
+### Changed
+
+- Released `v0.3.70` package metadata, server metadata, package manifests, and Git UPM examples.
+
+### Why
+
+- A passing compile matrix proved the absence of compiler errors but could not
+  answer whether a warning-cleanup change actually removed warnings. Operators
+  had to grep large raw Unity logs, and a newly introduced warning could hide
+  behind an otherwise green compile verdict.
+
+### Added
+
+- Direct and matrix player-script compile results now report every warning
+  occurrence through `warning_count`, deduplicate warning identities through
+  `unique_warning_count`, and retain a deterministic bounded `warnings` sample
+  with file, line, code, severity, and message evidence.
+- Compact bridge, batch, and multi-project summaries preserve the warning
+  counts and bounded evidence instead of discarding them.
+
+### Benefits
+
+- Warning-cleanup work can distinguish “compiled without errors” from
+  “compiled without warnings” without scraping raw logs.
+- The existing error-only compile verdict remains backward compatible: warnings
+  are evidence and do not convert a successful compile into a failure.
+
+### Validation
+
+- Focused host regression coverage passes `211` tests; full host discovery
+  passes `1011` tests with `14` expected platform skips, including live
+  localhost TCP framing coverage.
+- A clean Unity `2022.3.62f3` current-source consumer passes package EditMode
+  `104/104`, PlayMode `5/5`, interactive acceptance `9/9`, compile contract
+  `2/2`, and verified editor closeout.
+- A clean Unity `6000.0.58f2` current-source consumer passes package EditMode
+  `104/104`, PlayMode `5/5`, interactive acceptance `9/9`, compile contract
+  `2/2`, and verified editor closeout.
+- Public site UI/accessibility coverage passes `42/42`; Python syntax and
+  `git diff --check` pass.
+
+### Known limitations
+
+- Warning evidence does not yet distinguish rebuilt assemblies from cache hits;
+  that separate P1 finding remains open.
+- Hosted `Unity Package CI` remains waived because the repository does not
+  provide Unity license secrets; local licensed Unity `2022.3.62f3` and
+  `6000.0.58f2` package lanes provide the release evidence instead.
+- Live Unity validation for this release was performed on macOS; Linux and
+  Windows host behavior remains covered by the existing portable and CI-backed
+  host contracts rather than a live editor run.
+
 ## 0.3.69
 
 Release tag: `v0.3.69`

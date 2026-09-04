@@ -1,8 +1,8 @@
 # XUUnity Light Unity MCP Public Retro Registry
 
 Status: active public registry
-Last triage: 2026-09-03 (greenfield hardening currency P1s released in v0.3.69)
-Current release: `v0.3.69`
+Last triage: 2026-09-04 (compile-warning evidence released in v0.3.70)
+Current release: `v0.3.70`
 
 Update this file whenever a public-safe MCP retro is added, moved, renamed, or
 deleted. Host-private and project-specific retros belong in the host's single
@@ -25,6 +25,28 @@ host-local registry.
 - `Completed Public History` is the place to find reusable lessons already
   implemented, applied, superseded, or retained only for history.
 - Prompt templates are listed separately and are not backlog items.
+
+## Re-Evaluation 2026-09-04 (compile-warning evidence)
+
+- Freshness review covered the exact latest 30 commits, latest 25 local tags,
+  all 59 remote tags, release/version surfaces, both retro registries, and the
+  current status/roadmap/design records. `master`, `origin/master`, and fetched
+  `master` aligned at `4fa8dad`; `v0.3.69` was the released baseline.
+- The P1 warning-evidence finding in
+  `2026-09-02_batch_summary_shape_and_compile_evidence_retro.md` is implemented
+  in `v0.3.70`. Direct and matrix results count warning
+  occurrences, deduplicate exact identities, retain bounded diagnostic rows,
+  and preserve them through compact batch and multi-project summaries.
+- The decision-verdict envelope, authoritative post-settle verdict, UI
+  semantic/path proof, and infrastructure-versus-product failure clusters
+  remain implemented. Rebuild-versus-cache-hit evidence, the dead batch
+  `--output` flag, compact build/EDM4U envelopes, and mutation-advisory
+  de-duplication remain separate open candidates.
+- Current validation is green across focused host `211/211`, full host
+  `1011/1011` with 14 expected skips, site UI `42/42`, and clean Unity
+  `2022.3.62f3` and `6000.0.58f2` package EditMode `104/104` plus PlayMode
+  `5/5`; each Unity lane also passed acceptance `9/9`, compile contract `2/2`,
+  and verified closeout. Release metadata advanced to `v0.3.70`.
 
 ## Re-Evaluation 2026-09-03 (greenfield authoring)
 
@@ -483,7 +505,7 @@ the entire Windows install root-cause set (python3 delegation, UTF-8 BOM,
 
 | Date | File | Scope | Registry Status | Why It Is Not Completed History |
 | --- | --- | --- | --- | --- |
-| 2026-09-02 | `2026-09-02_batch_summary_shape_and_compile_evidence_retro.md` | Sweep-runner verdict versus the wrapper's default compact batch payload shape, plus the missing compile-warning and rebuilt-versus-cached evidence surfaces | **P0 and summary-artifact P2 implemented for `v0.3.67`; two P1 gaps and one P2 candidate remain** | Current source reads outcome and matrix evidence from nested summary, compact top level, named summary file, then a Unity-confirmed result file. Passing compact GUI-fallback results stay `passed_via_gui_fallback`, evidence sources are recorded, and absent counters print `unavailable` instead of zero. Regression tests cover all four cases. Still open: warning aggregation, rebuilt-versus-cache-hit counts, and the parsed-but-unused `--output` selector/full-shape pin. |
+| 2026-09-02 | `2026-09-02_batch_summary_shape_and_compile_evidence_retro.md` | Sweep-runner verdict versus the wrapper's default compact batch payload shape, plus the missing compile-warning and rebuilt-versus-cached evidence surfaces | **P0 and summary-artifact P2 released in `v0.3.67`; warning-evidence P1 released in `v0.3.70`; one P1 gap and one P2 candidate remain** | `v0.3.70` counts warning occurrences, deduplicates warning identities, and preserves bounded diagnostic rows through direct, matrix, compact batch, and multi-project summaries. Still open: rebuilt-versus-cache-hit counts and the parsed-but-unused `--output` selector/full-shape pin. |
 | 2026-08-26 | `2026-08-26_import_worker_bridge_ownership_retro.md` | Import-worker ownership plus UI selector, click-causality, readiness-log, package-removal, and contention follow-ups | **P0 released in `v0.3.60`; selector-truncation P1 implemented in current source; other follow-ups open** | Import-worker bridge ownership and provenance are released. The two-sighting capped-selector false negative now has a typed inconclusive result with scope/budget evidence and bounded recovery; a partial match is also refused because uniqueness is unproven. Non-causal `state_changed`, readiness-log attribution, package-removal verification, and operator-contention follow-ups remain separate work. |
 | 2026-08-20 | `2026-08-20_readiness_verdict_false_positive_retro.md` | Readiness gate: `interactive_compile_block_detected` asserted a compile fact nothing measured, represented several unrelated transient states, contradicted its own `host_prerequisites` block, and recommended destructive recovery | **P0 + both P1 items implemented and live-validated in current source; two P2 residuals open** | Current source uses condition-specific readiness codes, stamps `compile_state=unmeasured`, keeps polling transient attach/import/identity conditions, maps recovery to non-destructive status polling, and aligns the blocking prerequisite with the top-level result. Focused host tests cover every condition plus the stale-log/next-poll bridge-attach race. Unity 2022 package EditMode/PlayMode and Unity 6000 compile/scenario/contract/lifecycle/churn/project-action regression pass; the Unity 6000 lane reproduced and cleared the race. Remaining P2: mark log diagnoses as heuristic/suppress the `-accept-apiupdate` inversion, and echo batch editor-close side effects. |
 | 2026-08-19 | `2026-08-19_anchored_scope_truncation_and_verdict_field_ranking_retro.md` | Console-lane verdict ranking: a truncated search scope that reports zero matches as a negative, and an anchored scope whose fixed cut kept the tail rather than the anchor-adjacent head | **both P1 items implemented in current source; P2/P3 residuals open** | Current source keeps anchored grep windows beside the anchor, exposes `search_verdict`/reason, direction and truncation at the top level, and makes partial zero-matches explicitly inconclusive with a recovery action and partial-scope trust class. Complete anchored zero-matches remain `not_matched`; console tail keeps recent-tail behavior. Focused regression owns early-boot recovery, boundary safety, absolute numbering, negative/inconclusive ranking, and tail compatibility. Remaining: P2 user-controlled window/import-freshness hints and P3 benign settle-warning downgrade. **Second sighting 2026-09-02**: ranking behaved correctly on an anchored 2.16 MB scope with 1.66 MB unsearched, and the answer still required a shell fallback, so the P2 window residual is proposed for P1. |

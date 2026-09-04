@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using UnityEditor;
 using UnityEditor.Build.Player;
@@ -13,6 +14,7 @@ namespace XUUnity.LightMcp.Editor.Helpers
     internal static class XUUnityLightMcpCompileUtility
     {
         const BindingFlags StaticBindings = BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Static;
+        internal const int WarningSampleLimit = 20;
 
         public static XUUnityLightMcpCompileConfigPayload Compile(XUUnityLightMcpCompilePlayerScriptsArgs args)
         {
@@ -76,30 +78,19 @@ namespace XUUnity.LightMcp.Editor.Helpers
 
             var stopwatch = Stopwatch.StartNew();
             var errors = new List<XUUnityLightMcpCompileErrorItem>();
+            var uniqueWarnings = new List<XUUnityLightMcpCompileErrorItem>();
+            var uniqueWarningKeys = new HashSet<string>(StringComparer.Ordinal);
+            var warningCount = 0;
 
             void HandleAssemblyCompilationFinished(string assemblyName, CompilerMessage[] compilerMessages)
             {
-                if (compilerMessages == null)
-                {
-                    return;
-                }
-
-                foreach (var message in compilerMessages)
-                {
-                    if (message.type != CompilerMessageType.Error)
-                    {
-                        continue;
-                    }
-
-                    errors.Add(new XUUnityLightMcpCompileErrorItem
-                    {
-                        assembly_name = assemblyName ?? "",
-                        message = message.message ?? "",
-                        file = message.file ?? "",
-                        line = message.line,
-                        column = message.column
-                    });
-                }
+                CollectCompilerMessages(
+                    assemblyName,
+                    compilerMessages,
+                    errors,
+                    uniqueWarnings,
+                    uniqueWarningKeys,
+                    ref warningCount);
             }
 
             try
@@ -119,8 +110,137 @@ namespace XUUnity.LightMcp.Editor.Helpers
             payload.duration_seconds = Math.Round(stopwatch.Elapsed.TotalSeconds, 6);
             payload.errors = errors;
             payload.error_count = errors.Count;
+            payload.all_unique_warnings = uniqueWarnings;
+            payload.warnings = uniqueWarnings.Take(WarningSampleLimit).ToList();
+            payload.warning_count = warningCount;
+            payload.unique_warning_count = uniqueWarnings.Count;
+            payload.warning_sample_limit = WarningSampleLimit;
+            payload.warnings_truncated = uniqueWarnings.Count > payload.warnings.Count;
             payload.status = errors.Count > 0 ? "failed" : "passed";
             return payload;
+        }
+
+        internal static void CollectCompilerMessages(
+            string assemblyName,
+            CompilerMessage[] compilerMessages,
+            List<XUUnityLightMcpCompileErrorItem> errors,
+            List<XUUnityLightMcpCompileErrorItem> uniqueWarnings,
+            HashSet<string> uniqueWarningKeys,
+            ref int warningCount)
+        {
+            if (compilerMessages == null)
+            {
+                return;
+            }
+
+            foreach (var message in compilerMessages)
+            {
+                var diagnostic = new XUUnityLightMcpCompileErrorItem
+                {
+                    assembly_name = assemblyName ?? "",
+                    code = ExtractCompilerDiagnosticCode(message.message),
+                    severity = message.type == CompilerMessageType.Warning ? "warning" : "error",
+                    message = message.message ?? "",
+                    file = message.file ?? "",
+                    line = message.line,
+                    column = message.column
+                };
+
+                if (message.type == CompilerMessageType.Error)
+                {
+                    errors.Add(diagnostic);
+                    continue;
+                }
+
+                if (message.type != CompilerMessageType.Warning)
+                {
+                    continue;
+                }
+
+                warningCount++;
+                var identity = string.Join(
+                    "\n",
+                    diagnostic.assembly_name,
+                    diagnostic.file,
+                    diagnostic.line.ToString(),
+                    diagnostic.column.ToString(),
+                    diagnostic.code,
+                    diagnostic.message);
+                if (uniqueWarningKeys.Add(identity))
+                {
+                    uniqueWarnings.Add(diagnostic);
+                }
+            }
+        }
+
+        internal static string ExtractCompilerDiagnosticCode(string message)
+        {
+            var text = message ?? "";
+            for (var index = 0; index + 5 < text.Length; index++)
+            {
+                if ((text[index] != 'C' && text[index] != 'c')
+                    || (text[index + 1] != 'S' && text[index + 1] != 's'))
+                {
+                    continue;
+                }
+
+                var end = index + 2;
+                while (end < text.Length && char.IsDigit(text[end]))
+                {
+                    end++;
+                }
+
+                if (end - index >= 6)
+                {
+                    return text.Substring(index, end - index).ToUpperInvariant();
+                }
+            }
+
+            return "";
+        }
+
+        internal static void PopulateMatrixWarningSummary(XUUnityLightMcpCompileMatrixPayload payload)
+        {
+            var uniqueWarnings = new List<XUUnityLightMcpCompileErrorItem>();
+            var uniqueWarningKeys = new HashSet<string>(StringComparer.Ordinal);
+            payload.warning_count = 0;
+            foreach (var result in payload.results ?? new List<XUUnityLightMcpCompileConfigPayload>())
+            {
+                if (result == null)
+                {
+                    continue;
+                }
+
+                payload.warning_count += result.warning_count;
+                var warnings = result.all_unique_warnings != null && result.all_unique_warnings.Count > 0
+                    ? result.all_unique_warnings
+                    : result.warnings;
+                foreach (var warning in warnings ?? new List<XUUnityLightMcpCompileErrorItem>())
+                {
+                    if (warning == null)
+                    {
+                        continue;
+                    }
+
+                    var identity = string.Join(
+                        "\n",
+                        warning.assembly_name,
+                        warning.file,
+                        warning.line.ToString(),
+                        warning.column.ToString(),
+                        warning.code,
+                        warning.message);
+                    if (uniqueWarningKeys.Add(identity))
+                    {
+                        uniqueWarnings.Add(warning);
+                    }
+                }
+            }
+
+            payload.unique_warning_count = uniqueWarnings.Count;
+            payload.warning_sample_limit = WarningSampleLimit;
+            payload.warnings = uniqueWarnings.Take(WarningSampleLimit).ToList();
+            payload.warnings_truncated = uniqueWarnings.Count > payload.warnings.Count;
         }
 
         static List<string> NormalizeStrings(string[] values)

@@ -231,7 +231,22 @@ def normalized_matrix(raw_matrix) -> dict:
         return {}
     if any(value < 0 for value in counters.values()):
         return {}
-    return {"status": status, **counters}
+    normalized = {"status": status, **counters}
+    for key in ("warning_count", "unique_warning_count"):
+        if key not in raw_matrix:
+            continue
+        try:
+            value = int(raw_matrix[key])
+        except (TypeError, ValueError):
+            continue
+        if value >= 0:
+            normalized[key] = value
+    if isinstance(raw_matrix.get("warnings_truncated"), bool):
+        normalized["warnings_truncated"] = raw_matrix["warnings_truncated"]
+    warnings = raw_matrix.get("warnings")
+    if isinstance(warnings, list):
+        normalized["warnings"] = warnings[:20]
+    return normalized
 
 
 def decoded_json_mapping(value) -> dict:
@@ -552,6 +567,8 @@ def build_batch_status(
         "passed": int(matrix["passed"]) if matrix else None,
         "failed": int(matrix["failed"]) if matrix else None,
         "skipped": int(matrix["skipped"]) if matrix else None,
+        "warning_count": int(matrix["warning_count"]) if "warning_count" in matrix else None,
+        "unique_warning_count": int(matrix["unique_warning_count"]) if "unique_warning_count" in matrix else None,
         "summary_file": str(payload.get("summary_file", "")) if isinstance(payload, dict) else "",
         "summary_file_loaded": bool(summary_artifact),
         "result_file": str(payload.get("result_file", "")) if isinstance(payload, dict) else "",
@@ -677,6 +694,8 @@ def emit_batch_final_summary(results_dir: str) -> int:
             f"passed={rendered_counter('passed')}",
             f"failed={rendered_counter('failed')}",
             f"skipped={rendered_counter('skipped')}",
+            f"warnings={rendered_counter('warning_count')}",
+            f"unique_warnings={rendered_counter('unique_warning_count')}",
             f"result_file={item.get('result_file', '')}",
         ]
         print("|".join(fields))
@@ -689,6 +708,16 @@ def emit_batch_final_summary(results_dir: str) -> int:
         "operator_verdict_counts": verdict_counts,
         "blocked_projects": blocked_projects,
         "results_dir": str(results_path),
+        "warning_count": (
+            sum(int(item["warning_count"]) for item in statuses if item.get("warning_count") is not None)
+            if statuses and all(item.get("warning_count") is not None for item in statuses)
+            else None
+        ),
+        "unique_warning_count_sum": (
+            sum(int(item["unique_warning_count"]) for item in statuses if item.get("unique_warning_count") is not None)
+            if statuses and all(item.get("unique_warning_count") is not None for item in statuses)
+            else None
+        ),
     }
     if blocked_projects:
         names = ", ".join(str(entry.get("project") or "") for entry in blocked_projects)

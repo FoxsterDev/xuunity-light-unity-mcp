@@ -1,7 +1,7 @@
 # XUUnity Light Unity MCP Chat Retro — Batch Summary Shape and Compile-Warning Evidence
 
 Date: `2026-09-02`
-Status: `P0 and summary-artifact P2 implemented for v0.3.67; two P1 evidence gaps and one P2 dead-flag candidate remain`
+Status: `P0 and summary-artifact P2 released in v0.3.67; warning-evidence P1 released in v0.3.70; rebuild/cache P1 and dead-flag P2 remain`
 Lane: `batch-build-config-compile-matrix` via the multi-project sweep runner, GUI fallback throughout
 Server metadata observed in session: `xuunity-mcp 0.3.65`
 
@@ -16,7 +16,7 @@ batch **summary** layer rather than the compile lane.
 | Finding | Attribution | One-line basis |
 | --- | --- | --- |
 | P0-1 the sweep runner reports `failed_wrapper_unity_unproven` / `total=0` on the wrapper's **default** output shape | **implemented for v0.3.67** | The runner now resolves nested, compact top-level, named summary-file, and confirmed result-file evidence in order. Four regression cases cover compact GUI success, both artifact fallbacks, and `unavailable` rather than false-zero counters. |
-| P1-1 no warning surface anywhere in the batch compile artifacts | **product gap** | Per-config result keys are `status`, `error_count`, `errors`, `compiled_assembly_count`, `duration_seconds`, plus target/define metadata. Zero occurrences of `warn` in either the result JSON or the summary JSON. A warning-cleanup task therefore cannot be answered from any compact surface. |
+| P1-1 no warning surface anywhere in the batch compile artifacts | **released in v0.3.70** | Per-config results now count every warning occurrence, deduplicate warning identity, retain bounded diagnostic rows, and carry that evidence through matrix, compact batch, and multi-project summaries. |
 | P1-2 `compiled_assembly_count` cannot distinguish a real compile from a cache hit | **product gap** | One project's run reported `compiled_assembly_count` 85 (Android) / 82 (iOS) per config while the raw log held **374** real `Csc` invocations and **330** `[CacheHit …]` invocations. Another project in the same sweep: 73 real, 0 cache hits, count 66/63. Nothing in the artifacts expresses that ratio. |
 | P2-1 the runner never loads the `summary_file` it is handed | **implemented for v0.3.67** | The runner reads the named summary artifact as the third precedence source and records `summary_file_loaded` plus the selected evidence source. |
 | P2-2 `--output` is parsed but never consumed | **product defect, dead flag** | `add_batch_operator_arguments` registers `--output` on the batch subcommands, but `grep` for `args.output` across `templates/*.py` yields only `args.output_path` / `args.output_dir`. Operators cannot select the shape the runner needs. |
@@ -171,9 +171,10 @@ left open. This is stated as a hypothesis, not a finding.
 
 ### P1
 
-- Add `warning_count`, `unique_warning_count`, and a bounded `warnings[]` to each compile-matrix
-  config result and to the summary artifact, alongside the existing error fields. Aggregate a
-  portfolio warning total in the sweep summary line.
+- **Released in `v0.3.70`:** add `warning_count`,
+  `unique_warning_count`, and a bounded `warnings[]` to each compile-matrix
+  config result and to the summary artifact, alongside the existing error
+  fields. Compact batch and multi-project summaries retain the same evidence.
 - Add `rebuilt_assembly_count` and `cached_assembly_count` per config, derived from the
   `Csc … [CacheHit …]` marker, and keep `compiled_assembly_count` as compile-set size with that
   meaning documented.
@@ -220,3 +221,28 @@ The two evidence gaps matter more over time than the false negative. A compile m
 only errors, and cannot say whether it recompiled the code under test, is not a sufficient proof
 surface for diagnostic-cleanup work — and diagnostic cleanup is exactly the kind of portfolio task
 this lane exists to serve.
+
+## Re-Evaluation 2026-09-04
+
+- Freshness review covered the exact latest 30 commits, latest 25 local tags,
+  all 59 remote tags, current release/version surfaces, both retro registries,
+  and current status/roadmap/design records. `v0.3.69` was the released
+  baseline; local `master`, `origin/master`, and fetched `master` aligned at
+  `4fa8dad33b7caf89b57cdc99ee820da8b2b30fcd`.
+- P1-1 was selected as the highest-ROI coherent slice because the missing
+  evidence let a passing error-only compile be misread as proof that a warning
+  cleanup succeeded. It outranked compact build/EDM4U payload work because it
+  closes an observed false-positive conclusion, not only a token-cost issue.
+- Release `v0.3.70` counts warning occurrences, deduplicates exact
+  warning identities, preserves a bounded 20-row diagnostic sample, and carries
+  those fields through direct, matrix, compact batch, and multi-project output.
+  Compile success remains error-only and backward compatible.
+- Validation passes focused host `211/211`, full host `1011/1011` with 14
+  expected platform skips, public site `42/42`, and a clean Unity
+  `2022.3.62f3` current-source consumer (EditMode `104/104`, PlayMode `5/5`,
+  interactive acceptance `9/9`, compile contract `2/2`, verified closeout).
+  A clean Unity `6000.0.58f2` consumer also passes EditMode `104/104`, PlayMode
+  `5/5`, interactive acceptance `9/9`, compile contract `2/2`, and verified
+  closeout.
+- P1-2 rebuilt-versus-cache-hit evidence and P2-2's dead `--output` flag remain
+  open. This retro is therefore still active.

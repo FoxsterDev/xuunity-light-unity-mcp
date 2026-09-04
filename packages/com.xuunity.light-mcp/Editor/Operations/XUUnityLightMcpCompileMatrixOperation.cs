@@ -80,6 +80,7 @@ namespace XUUnity.LightMcp.Editor.Operations
                     duration_seconds = Math.Round(stopwatch.Elapsed.TotalSeconds, 6),
                     results = results
                 };
+                XUUnityLightMcpCompileUtility.PopulateMatrixWarningSummary(payload);
 
                 return XUUnityLightMcpResponseWriter.Success(
                     request.request_id,

@@ -23,6 +23,8 @@ namespace XUUnity.LightMcp.Editor.Core
         internal sealed class XUUnityLightMcpCompileErrorItem
         {
             public string assembly_name = "";
+            public string code = "";
+            public string severity = "";
             public string message = "";
             public string file = "";
             public int line;
@@ -44,6 +46,13 @@ namespace XUUnity.LightMcp.Editor.Core
             public int compiled_assembly_count;
             public List<XUUnityLightMcpCompileErrorItem> errors = new();
             public int error_count;
+            public List<XUUnityLightMcpCompileErrorItem> warnings = new();
+            public int warning_count;
+            public int unique_warning_count;
+            public int warning_sample_limit;
+            public bool warnings_truncated;
+            [NonSerialized]
+            public List<XUUnityLightMcpCompileErrorItem> all_unique_warnings = new();
         }
 
         [Serializable]
@@ -86,6 +95,11 @@ namespace XUUnity.LightMcp.Editor.Core
             public int passed;
             public int failed;
             public int skipped;
+            public int warning_count;
+            public int unique_warning_count;
+            public int warning_sample_limit;
+            public bool warnings_truncated;
+            public List<XUUnityLightMcpCompileErrorItem> warnings = new();
             public double duration_seconds;
             public List<XUUnityLightMcpCompileConfigPayload> results = new();
             public string validation_evidence = "unity_mcp";

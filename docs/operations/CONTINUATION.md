@@ -495,6 +495,24 @@ For shared protocol integration work:
   render lane alone, and the surface refuses to call that acceptance while fixture
   and interaction evidence are absent
 
+## Compile Warning Evidence
+
+The `v0.3.70` direct and matrix compile results preserve warnings without
+changing the error-only compile verdict:
+
+- `warning_count` counts every callback occurrence.
+- `unique_warning_count` deduplicates file, line, code, and message identity.
+- `warnings` retains a deterministic sample of at most 20 rows with
+  file/line/code/severity/message fields.
+- `warnings_truncated: true` means the aggregate counts are complete but the
+  diagnostic sample is not; inspect the full artifact or Unity log for the
+  omitted rows.
+
+Compact bridge, batch, and multi-project summaries carry these fields forward.
+Do not read `status: passed` as warning-free, and do not read a zero warning
+count as proof that assemblies rebuilt rather than hitting cache; rebuild/cache
+evidence is a separate open contract.
+
 ## Structural Compile Errors
 
 Unity can stop before `csc.exe` runs when an assembly definition has duplicate

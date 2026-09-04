@@ -1,6 +1,6 @@
 # XUUnity Light Unity MCP Roadmap
 
-Date: `2026-09-03`
+Date: `2026-09-04`
 Status: `active public roadmap`
 
 ## North Star
@@ -67,7 +67,7 @@ survival and more about:
 
 Already implemented:
 
-- standalone public repository and current `v0.3.69` Git UPM package path under
+- standalone public repository and current `v0.3.70` Git UPM package path under
   `packages/com.xuunity.light-mcp`
 - bridge enable/disable lifecycle
 - status and capability probing
@@ -85,6 +85,9 @@ Already implemented:
 - deterministic Edit Mode scene open for boot-flow and scenario setup
 - edit-mode tests
 - compile validation without active platform switch
+- `v0.3.70` compiler-warning evidence across direct, matrix, batch, and
+  multi-project compact summaries, with occurrence counts, deduplicated counts,
+  and bounded diagnostic rows; rebuilt-versus-cache-hit evidence remains open
 - authoritative post-settle refresh, compile, and test verdict fields in
   compact MCP operation summaries
 - condition-specific readiness failures that keep log observations separate
@@ -175,7 +178,7 @@ This is enough for:
 - controlled screenshot capture
 - early automation experiments
 - repeatable same-host multi-project routing and recovery
-- production Git UPM consumption through `v0.3.69`
+- production Git UPM consumption through `v0.3.70`
 
 This is not yet enough for:
 
@@ -259,7 +262,7 @@ Most valuable next milestone:
 
 Why this is next:
 
-- `v0.3.12` moved the package to the registry-native path and `v0.3.69` is the
+- `v0.3.12` moved the package to the registry-native path and `v0.3.70` is the
   current public Git UPM line
 - macOS validation is strong enough for current same-host use
 - Linux and Windows claims should remain conservative until executed on those hosts
@@ -366,7 +369,7 @@ Current progress:
   `operator_verdict` final-status wording
 - `v0.3.39` adds opt-in compact batch helper CLI output through
   `--output compact`, preserving full output as the default compatibility mode
-- `v0.3.69` keeps compact batch output bounded to whitelisted decision fields
+- `v0.3.70` keeps compact batch output bounded to whitelisted decision fields
   plus artifact pointers and makes the multi-project runner consume nested,
   compact, summary-file, and confirmed result-file evidence without a false
   failure or false-zero matrix counters
