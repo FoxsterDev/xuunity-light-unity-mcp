@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+## 0.3.72
+
+Release tag: `v0.3.72`
+
+Current Git UPM install URL:
+
+```text
+https://github.com/FoxsterDev/xuunity-mcp.git?path=/packages/com.xuunity.light-mcp#v0.3.72
+```
+
+### Changed
+
+- Released `v0.3.72` package metadata, server metadata, package manifests, and Git UPM examples.
+
 ### Why
 
 - Two capabilities were broken in a way that reported success. `unity.game_view.configure`
@@ -57,6 +71,11 @@
 
 ### Added
 
+- `scripts/tools/sync_release_version.py` now records the compile-warning evidence row in
+  `HISTORICAL_VERSION_CLAIMS`. That row holds a measurement taken for `v0.3.70` and the
+  sweep had relabelled it twice, publishing the same untouched numbers first as `v0.3.71`
+  evidence and then as `v0.3.72` evidence. A version printed beside a measured result is
+  evidence, not a version reference, and the sweep now leaves it alone.
 - `scripts/testing/check_release_commit_shape.py` enforces the two-commit release shape,
   so a release can be reverted without reverting the product change it published. A
   `release:` commit may carry only what the version sweep writes, the changelog section it
@@ -68,6 +87,39 @@
   single commit or a range, and derives its allowlist from
   `scripts/tools/sync_release_version.py` so a newly swept document does not need a second
   edit to stay releasable. The release checklist and publishing checklist now require it.
+
+### Validation
+
+- Host Python suite via `scripts/testing/run_host_python_tests.sh`: 1057 tests, 0 failures,
+  14 skipped.
+- Unity package self-tests on Unity 6000.0.58f2 in a consumer project whose active build
+  target is iOS — the configuration the Game View defect needed: EditMode 159/159 passed;
+  PlayMode 23 total, 21 passed, 2 conditional skips, 0 failed.
+- Game View repair proven live, not only by unit test: a six-resolution sweep scenario ran
+  19/19 steps on that iOS-targeted project, each capture's PNG header matching the
+  requested size exactly (1080x1920, 1170x2532, 1284x2778, 1440x3200, 1536x2048,
+  1080x2400), with the group reported as `iOS`. A caller-supplied `group` of `iPhone` was
+  accepted and a `group` of `Android` was still refused against the active iOS group.
+- Click repair proven live against a real identity-guarding button component in Play Mode:
+  `pointer_raycast_evidence: event_system_raycast_resolves_to_handler`, `status: effective`,
+  and the editor log shows the component's own click handler running its production path
+  through to the network call it triggers. Before this change the same click reported
+  `delivered: true` with no state change.
+- Release gates green for this SHA: version consistency, release-docs freshness,
+  public-release safety, and release-commit shape.
+
+### Known limitations
+
+- `Unity Package CI` remains waived: the runners have no Unity license, so the shipped
+  package carries no CI-recorded EditMode/PlayMode proof for this release SHA. Every Unity
+  result above was produced on a maintainer workstation, not by CI.
+- The `ui_target_occluded` refusal engages only when the event-system raycast actually
+  returns a hit. Where it returns none — Edit Mode, or a canvas the raycaster cannot reach —
+  the click is still delivered with a synthesized raycast and occlusion is left unproven;
+  the payload reports which case applied and warns on the synthesized one.
+- That occlusion refusal has no automated coverage: the isolated self-test scene produces no
+  event-system raycast hit, so the occlusion test skips itself rather than asserting a pass.
+  It is proven only by the live run described above.
 
 ## 0.3.71
 

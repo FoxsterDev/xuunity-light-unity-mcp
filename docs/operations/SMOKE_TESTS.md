@@ -1,7 +1,7 @@
 # XUUnity Light Unity MCP Smoke Tests
 
 Date: `2026-07-15`
-Status: `current source after v0.3.71`
+Status: `current source after v0.3.72`
 
 This file defines the public reusable smoke-test contract for the lightweight
 Unity MCP lane.
@@ -91,7 +91,7 @@ Pass criteria:
   `includeFullPayload=true`; ordinary pass/fail gates should stay on the compact
   default and read `status`, counts, `post_settle_compile`, `settle_phase`, and
   `completion_basis`.
-- The `v0.3.71` compile summaries also expose `warning_count`,
+- The `v0.3.72` compile summaries also expose `warning_count`,
   `unique_warning_count`, and a bounded `warnings` sample. A warning-cleanup
   smoke must assert those fields explicitly; `status: passed` alone proves only
   that no compile error occurred. `warnings_truncated: true` means the counts

@@ -10,7 +10,7 @@ from typing import Any
 
 SERVER_INFO = {
     "name": "xuunity-mcp",
-    "version": "0.3.71",
+    "version": "0.3.72",
 }
 PROTOCOL_VERSION = "2025-06-18"
 
