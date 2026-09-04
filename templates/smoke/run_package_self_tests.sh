@@ -84,7 +84,15 @@ MANIFEST_PATH="$PROJECT_ROOT/Packages/manifest.json"
 MANIFEST_BACKUP="$TMP_DIR/manifest.json"
 ASSEMBLY_PLAN_PATH="$TMP_DIR/assembly_plan.tsv"
 
+remove_generated_test_root() {
+  local generated_root="$PROJECT_ROOT/Assets/XUUnityLightMcpGenerated"
+  [[ -d "$generated_root" ]] || return 0
+  rmdir "$generated_root" 2>/dev/null || return 0
+  rm -f "$generated_root.meta"
+}
+
 cleanup() {
+  remove_generated_test_root
   if [[ "$MANIFEST_WAS_PATCHED" == "true" && -f "$MANIFEST_BACKUP" ]]; then
     cp "$MANIFEST_BACKUP" "$MANIFEST_PATH"
     "$WRAPPER" request-project-refresh --project-root "$PROJECT_ROOT" --timeout-ms 180000 >/dev/null 2>&1 || true

@@ -34,9 +34,16 @@ namespace XUUnity.LightMcp.Editor.Helpers
                 RequireProperty(sizeType, "baseText");
                 RequireConstructor(sizeType, new[] { sizeTypeEnum, typeof(int), typeof(int), typeof(string) });
 
-                var groupEnumValue = Enum.Parse(groupEnumType, "Standalone", true);
-                var scriptableSingletonType = RequireType("UnityEditor.ScriptableSingleton`1,UnityEditor").MakeGenericType(gameViewSizesType);
-                var instance = scriptableSingletonType.GetProperty("instance", AllBindings)?.GetValue(null, null);
+                var instance = GetGameViewSizesInstance();
+                if (!TryResolveActiveGroupType(out var groupEnumValue, out var groupResolutionFailure))
+                {
+                    throw new InvalidOperationException(groupResolutionFailure);
+                }
+                if (!groupEnumType.IsInstanceOfType(groupEnumValue))
+                {
+                    throw new InvalidOperationException(
+                        $"Active Unity Game View size group resolved to '{groupEnumValue.GetType().FullName}' instead of {groupEnumType.FullName}.");
+                }
                 var groupObject = gameViewSizesType.GetMethod("GetGroup", AllBindings)?.Invoke(instance, new[] { groupEnumValue });
                 if (groupObject == null)
                 {
@@ -195,9 +202,13 @@ namespace XUUnity.LightMcp.Editor.Helpers
                 throw new InvalidOperationException("Game View width and height must both be greater than zero.");
             }
 
-            var activeGroupName = GetActiveGroupName();
-            if (!string.IsNullOrWhiteSpace(requestedGroup) &&
-                !string.Equals(requestedGroup, activeGroupName, StringComparison.OrdinalIgnoreCase))
+            if (!TryResolveActiveGroupType(out var activeGroupType, out var groupResolutionFailure))
+            {
+                throw new InvalidOperationException(groupResolutionFailure);
+            }
+
+            var activeGroupName = DescribeGroupType(activeGroupType);
+            if (!string.IsNullOrWhiteSpace(requestedGroup) && !GroupNameMatches(requestedGroup, activeGroupName))
             {
                 throw new InvalidOperationException(
                     $"Requested Game View group '{requestedGroup}' does not match the active build group '{activeGroupName}'.");
@@ -207,7 +218,7 @@ namespace XUUnity.LightMcp.Editor.Helpers
                 ? $"XUUnity {width}x{height}"
                 : requestedLabel.Trim();
 
-            var groupObject = GetGameViewGroup(activeGroupName);
+            var groupObject = GetGameViewGroup(activeGroupType);
             var matchIndex = FindSizeIndex(groupObject, width, height);
             var createdCustom = false;
             if (matchIndex < 0)
@@ -349,15 +360,61 @@ namespace XUUnity.LightMcp.Editor.Helpers
 
         static string GetActiveGroupName()
         {
-            return EditorUserBuildSettings.activeBuildTarget switch
-            {
-                BuildTarget.Android => "Android",
-                BuildTarget.iOS => "iPhone",
-                _ => "Standalone"
-            };
+            return TryResolveActiveGroupType(out var groupType, out _)
+                ? DescribeGroupType(groupType)
+                : GetBuildTargetGroupFallbackName();
         }
 
-        static object GetGameViewGroup(string groupName)
+        internal const string DefaultGroupFallbackName = "Standalone";
+
+        internal static readonly (BuildTarget Target, string GroupName)[] BuildTargetGroupFallbackNames =
+        {
+            (BuildTarget.Android, "Android"),
+            (BuildTarget.iOS, "iOS")
+        };
+
+        static string GetBuildTargetGroupFallbackName()
+        {
+            var activeTarget = EditorUserBuildSettings.activeBuildTarget;
+            foreach (var entry in BuildTargetGroupFallbackNames)
+            {
+                if (entry.Target == activeTarget)
+                {
+                    return entry.GroupName;
+                }
+            }
+
+            return DefaultGroupFallbackName;
+        }
+
+        internal static bool GroupNameMatches(string requestedGroup, string activeGroupName)
+        {
+            if (string.Equals(requestedGroup, activeGroupName, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            return IsLegacyIosGroupAlias(requestedGroup) && IsLegacyIosGroupAlias(activeGroupName);
+        }
+
+        static bool IsLegacyIosGroupAlias(string groupName)
+        {
+            return string.Equals(groupName, "iOS", StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(groupName, "iPhone", StringComparison.OrdinalIgnoreCase);
+        }
+
+        internal static string DescribeGroupType(object groupType)
+        {
+            if (groupType == null)
+            {
+                return "";
+            }
+
+            var name = Enum.GetName(groupType.GetType(), groupType);
+            return string.IsNullOrEmpty(name) ? Convert.ToString(groupType) : name;
+        }
+
+        static object GetGameViewSizesInstance()
         {
             var gameViewSizesType = RequireType("UnityEditor.GameViewSizes,UnityEditor");
             var scriptableSingletonType = RequireType("UnityEditor.ScriptableSingleton`1,UnityEditor").MakeGenericType(gameViewSizesType);
@@ -367,13 +424,75 @@ namespace XUUnity.LightMcp.Editor.Helpers
                 throw new InvalidOperationException("Unable to access Unity GameViewSizes singleton.");
             }
 
-            var groupEnumType = RequireType("UnityEditor.GameViewSizeGroupType,UnityEditor");
-            var groupEnum = Enum.Parse(groupEnumType, groupName, true);
+            return instance;
+        }
+
+        static bool TryResolveActiveGroupType(out object groupType, out string failureReason)
+        {
+            groupType = null;
+            failureReason = "";
+            try
+            {
+                var instance = GetGameViewSizesInstance();
+                groupType = instance.GetType().GetProperty("currentGroupType", AllBindings)?.GetValue(instance, null);
+                if (groupType != null)
+                {
+                    return true;
+                }
+
+                groupType = ConvertActiveBuildTargetToGroupType();
+                if (groupType != null)
+                {
+                    return true;
+                }
+
+                failureReason =
+                    "Unable to resolve the active Unity Game View size group: this editor version exposes neither " +
+                    "GameViewSizes.currentGroupType nor GameViewSizes.BuildTargetGroupToGameViewSizeGroup.";
+                return false;
+            }
+            catch (Exception ex)
+            {
+                groupType = null;
+                failureReason = $"Unable to resolve the active Unity Game View size group: {ex.Message}";
+                return false;
+            }
+        }
+
+        static object ConvertActiveBuildTargetToGroupType()
+        {
+            var gameViewSizesType = RequireType("UnityEditor.GameViewSizes,UnityEditor");
+            var converter = gameViewSizesType.GetMethod("BuildTargetGroupToGameViewSizeGroup", AllBindings);
+            var parameters = converter?.GetParameters();
+            if (converter == null || parameters == null || parameters.Length != 1)
+            {
+                return null;
+            }
+
+            object buildTargetGroup = BuildPipeline.GetBuildTargetGroup(EditorUserBuildSettings.activeBuildTarget);
+            if (!parameters[0].ParameterType.IsInstanceOfType(buildTargetGroup))
+            {
+                return null;
+            }
+
+            return converter.Invoke(null, new[] { buildTargetGroup });
+        }
+
+        static object GetGameViewGroup(object groupType)
+        {
+            if (groupType == null)
+            {
+                throw new InvalidOperationException("Unable to access Unity Game View size group: no active group resolved.");
+            }
+
+            var gameViewSizesType = RequireType("UnityEditor.GameViewSizes,UnityEditor");
+            var instance = GetGameViewSizesInstance();
             var getGroup = gameViewSizesType.GetMethod("GetGroup", AllBindings);
-            var groupObject = getGroup?.Invoke(instance, new[] { groupEnum });
+            var groupObject = getGroup?.Invoke(instance, new[] { groupType });
             if (groupObject == null)
             {
-                throw new InvalidOperationException($"Unable to access Unity Game View size group '{groupName}'.");
+                throw new InvalidOperationException(
+                    $"Unable to access Unity Game View size group '{DescribeGroupType(groupType)}'.");
             }
 
             return groupObject;
